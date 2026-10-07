@@ -2,7 +2,7 @@
 # Set `TEST_NAME` to a case file relative to this directory (for example
 # `sphere/baroclinic_wave_rhoe`); the driver includes it, builds the spaces and
 # initial state it declares, and runs it. See `sphere/README.md` for the other
-# environment variables it reads.
+# environment variables it reads, `DISCRETIZATION` among them.
 #
 # The defaults below are overwritten by each case file.
 # TODO: Allow some of these to be environment variables or CLI arguments
@@ -24,6 +24,9 @@ additional_solver_kwargs = (;) # e.g., abstol and reltol
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 additional_tendency!(Yₜ, Y, p, t) = nothing
+# `lim!(Y, p, t, Y_ref)` applied to every stage of the explicit tendency, or
+# `nothing` for none
+stage_limiter = nothing
 center_initial_condition(local_geometry) = (;)
 face_initial_condition(local_geometry) = (;)
 postprocessing(sol, output_dir) = nothing
@@ -59,6 +62,33 @@ const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../common_spaces.jl")
 
+# The Galerkin form of the horizontal space. It reaches the case files through
+# the space alone: the tendency, the initial condition and the diagnostics all
+# dispatch on `Spaces.discretization`, so nothing else here has to branch.
+const discretization_name = get(ENV, "DISCRETIZATION", "CG")
+const discretization = if discretization_name == "CG"
+    Grids.CG()
+elseif discretization_name == "DG"
+    Grids.DG()
+else
+    error("DISCRETIZATION must be \"CG\" or \"DG\", got \
+           $(repr(discretization_name))")
+end
+
+# The form of the horizontal momentum equation, which the initial condition
+# fixes by its prognostic variable: `vector_invariant` carries velocity `uₕ`,
+# `flux` carries momentum `ρuₕ` and needs a DG space.
+const momentum_form_name = get(
+    ENV,
+    "MOMENTUM_FORM",
+    discretization isa Grids.DG ? "flux" : "vector_invariant",
+)
+momentum_form_name in ("flux", "vector_invariant") ||
+    error("MOMENTUM_FORM must be \"flux\" or \"vector_invariant\", got \
+           $(repr(momentum_form_name))")
+discretization isa Grids.CG && momentum_form_name == "flux" &&
+    error("MOMENTUM_FORM=flux needs DISCRETIZATION=DG")
+
 if get(ENV, "Z_STRETCH", "false") == "true"
     z_stretch_scale = FT(7e3)
     z_stretch = Meshes.ExponentialStretching(z_stretch_scale)
@@ -77,6 +107,11 @@ include(joinpath(test_dir, "$test_file_name.jl"))
 
 if z_stretch_string == "stretched"
     test_file_name = "$(z_stretch_string)_$(test_file_name)"
+end
+if discretization isa Grids.DG
+    test_file_name = "$(test_file_name)_dg"
+    momentum_form_name == "vector_invariant" &&
+        (test_file_name = "$(test_file_name)_vi")
 end
 
 if haskey(ENV, "RESTART_FILE")
@@ -102,7 +137,8 @@ else
         horizontal_mesh,
         npoly,
         comms_ctx,
-        VIJH,
+        VIJH;
+        discretization,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
@@ -167,7 +203,12 @@ problem = CTS.ODEProblem(
             implicit_tendency!;
             jac_kwargs(ode_algo, Y, jacobian_flags)...,
         ),
-        T_exp! = remaining_tendency!,
+        # ClimaTimeSteppers calls `lim!` only for a tendency passed as `T_lim!`,
+        # which it otherwise treats exactly as `T_exp!`.
+        (
+            isnothing(stage_limiter) ? (; T_exp! = remaining_tendency!) :
+            (; T_lim! = remaining_tendency!, lim! = stage_limiter)
+        )...,
         dss!,
     ),
     Y,
@@ -191,6 +232,10 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
+@info "with a $discretization_name horizontal discretization, \
+       $momentum_form_name momentum" *
+      (discretization isa Grids.DG && momentum_form_name == "flux" ?
+       ", $dg_flux_name fluxes" : "")
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = CTS.solve!(integrator)
@@ -205,7 +250,8 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         global_h_space = make_horizontal_space(
             horizontal_mesh,
             npoly,
-            ClimaComms.SingletonCommsContext(),
+            ClimaComms.SingletonCommsContext();
+            discretization,
         )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)

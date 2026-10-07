@@ -25,6 +25,12 @@ steps:
       - "julia --project=.buildkite -e 'using Pkg; Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
+      # The examples environment adds the moisture packages that ClimaCore
+      # does not depend on. It checks in no manifest, so it resolves here
+      # against the checked-out ClimaCore.
+      - echo "--- Instantiate examples env"
+      - "julia --project=examples -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'"
+
     agents:
       slurm_mem: 80G
       slurm_gpus: 1
@@ -1221,6 +1227,40 @@ steps:
           - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
+
+      - label: ":computer: 3D sphere baroclinic wave (ρe) DG"
+        key: "cpu_baroclinic_wave_rho_e_dg"
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_dg/Float32/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe"
+          DISCRETIZATION: "DG"
+
+      - label: ":computer: 3D sphere baroclinic wave (ρe) DG vector-invariant"
+        key: "cpu_baroclinic_wave_rho_e_dg_vi"
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_dg_vi/Float32/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe"
+          DISCRETIZATION: "DG"
+          MOMENTUM_FORM: "vector_invariant"
+
+      - label: ":computer: 3D sphere moist baroclinic wave (ρe, 0M) DG"
+        key: "cpu_moist_baroclinic_wave_rho_e_dg"
+        retry: *retry_policy
+        command:
+          - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/moist_baroclinic_wave_rhoe_dg/Float32/*"
+        env:
+          TEST_NAME: "sphere/moist_baroclinic_wave_rhoe"
+          DISCRETIZATION: "DG"
 
       - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
         key: "cpu_mpi_baroclinic_wave_rho_e"

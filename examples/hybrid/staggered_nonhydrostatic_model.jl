@@ -4,6 +4,16 @@
 # for the vertical acoustic terms, and the Jacobian that the IMEX schemes solve
 # against. Including this file requires the constants listed below to already be
 # defined, which each case file does before the `include`.
+#
+# The horizontal discretization of the space and the prognostic momentum
+# variable together select the form of the explicit tendency. A continuous (CG)
+# space carries velocity `uₕ` in the vector-invariant form below. A
+# discontinuous (DG) one carries either momentum `ρuₕ` in the flux form of
+# `dg_tendency.jl`, or `uₕ` in the vector-invariant form of
+# `dg_vector_invariant_tendency.jl`. Everything else — the vertical finite
+# differences, the implicit split, the Jacobian, the time stepping — is shared.
+# A state with total water `ρq_tot` advects it as a tracer under the flux form;
+# its pressure comes from the `moisture` cache entry (see `thermo_pressure!`).
 using LinearAlgebra: ×, norm, norm_sqr, dot
 using ClimaCore: Operators, Fields
 
@@ -87,6 +97,54 @@ const ᶠno_flux_row3 = Operators.SetBoundaryOperator(
 
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 
+# The pressure of the center state. `moisture` is the cache entry of that name:
+# `nothing` for dry air, and a case with moisture adds a method for its own.
+thermo_pressure!(ᶜp, Yc, ᶜK, ᶜΦ, ::Nothing) =
+    @. ᶜp = pressure_ρe(Yc.ρe, ᶜK, ᶜΦ, Yc.ρ)
+
+# Whether the state carries total water `ρq_tot`, which is advected as a
+# tracer and otherwise left to the case file.
+has_moisture(Yc) = hasfield(eltype(Yc), :ρq_tot)
+
+##
+## The horizontal momentum variable
+##
+# Velocity `uₕ` in the vector-invariant form, momentum `ρuₕ` in the flux form.
+# The prognostic variable fixes the form, so it is read off the state rather
+# than the space: CG runs the vector-invariant form, and DG runs either.
+
+struct VectorInvariantForm end
+struct FluxForm end
+momentum_form(Yc) =
+    hasfield(eltype(Yc), :ρuₕ) ? FluxForm() : VectorInvariantForm()
+
+horizontal_momentum(Yc) = horizontal_momentum(momentum_form(Yc), Yc)
+horizontal_momentum(::VectorInvariantForm, Yc) = Yc.uₕ
+horizontal_momentum(::FluxForm, Yc) = Yc.ρuₕ
+
+# The velocity itself. Under the flux form this is a derived quantity, written
+# into cache scratch, so the result is valid until the next call.
+horizontal_velocity(Y, p) = horizontal_velocity(momentum_form(Y.c), Y, p)
+horizontal_velocity(::VectorInvariantForm, Y, p) = Y.c.uₕ
+function horizontal_velocity(::FluxForm, Y, p)
+    @. p.ᶜuₕ = Y.c.ρuₕ / Y.c.ρ
+    return p.ᶜuₕ
+end
+
+include("dg_tendency.jl")
+include("dg_vector_invariant_tendency.jl")
+
+# The Coriolis parameter, from the coordinates on a sphere and from the
+# constant `f` on a plane.
+function coriolis_parameter(ᶜlocal_geometry)
+    ᶜcoord = ᶜlocal_geometry.coordinates
+    if eltype(ᶜcoord) <: Geometry.LatLongZPoint
+        return @. 2 * Ω * sind(ᶜcoord.lat)
+    else
+        return map(_ -> f, ᶜlocal_geometry)
+    end
+end
+
 get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
     default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
@@ -94,12 +152,8 @@ get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
 
 function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
     ᶜcoord = ᶜlocal_geometry.coordinates
-    if eltype(ᶜcoord) <: Geometry.LatLongZPoint
-        ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
-    else
-        ᶜf = map(_ -> f, ᶜlocal_geometry)
-    end
-    ᶜf = @. CT3(Geometry.WVector(ᶜf))
+    ᶜfscalar = coriolis_parameter(ᶜlocal_geometry)
+    ᶜf = @. CT3(Geometry.WVector(ᶜfscalar))
     ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row =
         if upwinding_mode == :first_order
             ᶠupwind_product1, ᶠupwind_product1_matrix, ᶠno_flux_row1
@@ -109,6 +163,8 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             nothing, nothing, nothing
         end
     return (;
+        dg_cache(ᶜlocal_geometry, ᶠlocal_geometry, ᶜfscalar, Y)...,
+        moisture = nothing,
         ᶜuvw = similar(ᶜlocal_geometry, C123{FT}),
         ᶜK = similar(ᶜlocal_geometry, FT),
         ᶜΦ = grav .* ᶜcoord.z,
@@ -130,7 +186,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             f = Spaces.create_dss_buffer(Y.f),
             χ = Spaces.create_dss_buffer(Y.c.ρ), # for hyperdiffusion
             χw = Spaces.create_dss_buffer(Y.f.w.components.data.:1), # for hyperdiffusion
-            χuₕ = Spaces.create_dss_buffer(Y.c.uₕ), # for hyperdiffusion
+            χuₕ = Spaces.create_dss_buffer(horizontal_momentum(Y.c)), # for hyperdiffusion
         ),
     )
 end
@@ -139,7 +195,7 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
+    ᶜuₕ = horizontal_velocity(Y, p)
     ᶠw = Y.f.w
     (; ᶜK, ᶜΦ, ᶜp, ᶠupwind_product) = p
 
@@ -148,7 +204,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
     @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw))
 
     ᶜρe = Y.c.ρe
-    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+    thermo_pressure!(ᶜp, Y.c, ᶜK, ᶜΦ, p.moisture)
     if isnothing(ᶠupwind_product)
         @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
     else
@@ -157,7 +213,10 @@ function implicit_tendency!(Yₜ, Y, p, t)
         ))
     end
 
-    Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
+    ᶜmₜ = horizontal_momentum(Yₜ.c)
+    ᶜmₜ .= (zero(eltype(ᶜmₜ)),)
+    # Water is transported explicitly, so the Jacobian needs no block for it.
+    has_moisture(Y.c) && (Yₜ.c.ρq_tot .= zero(FT))
 
     @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
 
@@ -177,7 +236,33 @@ function remaining_tendency!(Yₜ, Y, p, t)
     return Yₜ
 end
 
-function default_remaining_tendency!(Yₜ, Y, p, t)
+# The vector-invariant form on a continuous space; on a discontinuous one, the
+# flux form of `dg_tendency.jl` or the vector-invariant form of
+# `dg_vector_invariant_tendency.jl`.
+default_remaining_tendency!(Yₜ, Y, p, t) = default_remaining_tendency!(
+    Spaces.discretization(axes(Y.c)),
+    momentum_form(Y.c),
+    Yₜ,
+    Y,
+    p,
+    t,
+)
+
+default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t) =
+    dg_remaining_tendency!(Yₜ, Y, p, t)
+default_remaining_tendency!(::Grids.DG, ::VectorInvariantForm, Yₜ, Y, p, t) =
+    dg_vi_remaining_tendency!(Yₜ, Y, p, t)
+default_remaining_tendency!(::Grids.CG, ::FluxForm, Yₜ, Y, p, t) =
+    error("the flux form needs a discontinuous (DG) horizontal space")
+
+function default_remaining_tendency!(
+    ::Grids.CG,
+    ::VectorInvariantForm,
+    Yₜ,
+    Y,
+    p,
+    t,
+)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -194,7 +279,7 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
     # Energy conservation
 
     ᶜρe = Y.c.ρe
-    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+    thermo_pressure!(ᶜp, Y.c, ᶜK, ᶜΦ, p.moisture)
     @. Yₜ.c.ρe -= split_divₕ(ᶜρ * ᶜuvw, (ᶜρe + ᶜp) / ᶜρ)
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
 
@@ -228,7 +313,7 @@ additional_tendency!(Yₜ, Y, p, t) = nothing
 function implicit_equation_jacobian!(j, Y, p, δtγ, t)
     (; ∂Yₜ∂Y, ∂R∂Y, flags) = j
     ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
+    ᶜuₕ = horizontal_velocity(Y, p)
     ᶠw = Y.f.w
     (; ᶜK, ᶜΦ, ᶜp, ∂ᶜK∂ᶠw) = p
     (; ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row) = p
@@ -275,7 +360,7 @@ function implicit_equation_jacobian!(j, Y, p, δtγ, t)
 
     ᶜρe = Y.c.ρe
     @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
-    @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+    thermo_pressure!(ᶜp, Y.c, ᶜK, ᶜΦ, p.moisture)
 
     if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
         if isnothing(ᶠupwind_product)

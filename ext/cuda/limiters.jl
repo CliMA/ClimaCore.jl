@@ -4,6 +4,10 @@ import ClimaCore.Limiters:
     compute_neighbor_bounds_local!,
     apply_limiter!,
     apply_limit_slab!,
+    PositivityLimiter,
+    apply_positivity_limiter!,
+    apply_positivity_slab!,
+    _positivity_slab,
     VerticalMassBorrowingLimiter,
     column_massborrow!
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
@@ -159,6 +163,59 @@ function apply_limiter_kernel!(limiter::QuasiMonotoneLimiter, ρq_data, ρ_data,
             slab(WJ_data, v, h),
             slab(q_bounds_nbr, v, h),
             rtol,
+        )
+    end
+    return nothing
+end
+
+function apply_positivity_limiter!(
+    lim::PositivityLimiter,
+    gfn::F,
+    states::Tuple,
+    floors::Tuple,
+    off,
+    ::ClimaComms.CUDADevice,
+) where {F}
+    dstates = map(Fields.field_values, states)
+    (Nv, _, _, Nh) = size(first(dstates))
+    nthreads, nblocks = config_threadblock(Nv, Nh)
+    args = (
+        lim,
+        gfn,
+        dstates,
+        floors,
+        off === nothing ? nothing : Fields.field_values(off),
+        Spaces.local_geometry_data(axes(first(states))).WJ,
+    )
+    auto_launch!(
+        apply_positivity_limiter_kernel!,
+        args;
+        threads_s = nthreads,
+        blocks_s = nblocks,
+    )
+    return nothing
+end
+
+function apply_positivity_limiter_kernel!(
+    lim::PositivityLimiter,
+    gfn::F,
+    dstates,
+    floors,
+    doff,
+    dWJ,
+) where {F}
+    (Nv, _, _, Nh) = size(first(dstates))
+    n = (Nv, Nh)
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
+        apply_positivity_slab!(
+            lim,
+            gfn,
+            map(d -> slab(d, v, h), dstates),
+            floors,
+            _positivity_slab(doff, v, h),
+            slab(dWJ, v, h),
         )
     end
     return nothing
