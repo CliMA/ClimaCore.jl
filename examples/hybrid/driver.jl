@@ -38,6 +38,7 @@ using ClimaComms
 ClimaComms.@import_required_backends
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
+import ClimaCore
 using ClimaCore: DataLayouts
 
 using Logging
@@ -287,6 +288,9 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
 end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
+    # `postprocessing` reduces and plots the saved states, which indexes them
+    # elementwise, so it gets them on the CPU (a no-op copy on a CPU run).
+    sol = CTS.ODESolution(sol.t, ClimaCore.to_cpu.(sol.u), sol.prob, sol.alg)
     ENV["GKSwstype"] = "nul" # avoid displaying plots
     # TODO: split `postprocessing` into an assertion hook and a plotting hook,
     # then delete this skip. Every `@test` a case declares lives inside
