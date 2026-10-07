@@ -4,7 +4,8 @@ import ClimaComms
 using CUDA: i32
 import ClimaCore.Utilities: half
 import ClimaCore.Operators
-import ClimaCore.Operators: AbstractStencilStyle, strip_space
+import ClimaCore.Operators: AbstractStencilStyle
+import ClimaCore.Grids: toggle_placeholder_grid
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 
@@ -26,12 +27,9 @@ function Base.copyto!(
     },
     mask::DataLayouts.DataMask = Spaces.get_mask(axes(out)),
 )
-    space = axes(out)
-    bounds = Operators.window_bounds(space, bc)
+    bounds = Operators.window_bounds(bc)
     out_fv = Fields.field_values(out)
-
-    fspace = Spaces.face_space(space)
-    n_face_levels = Spaces.nlevels(fspace)
+    n_face_levels = Spaces.nlevels(Spaces.face_space(axes(out)))
     high_resolution = !(n_face_levels ≤ 256)
     max_shmem = device_attributes().max_shmem_per_block
 
@@ -52,7 +50,7 @@ function Base.copyto!(
     # lazy kernel below, since `calc_level_val`'s space gate would misread its
     # fields as level fields and evaluate them entirely at level 1. Keep this
     # gate and that space gate in sync.
-    eager_supported = space isa Operators.AllFiniteDifferenceSpace
+    eager_supported = axes(out) isa Operators.AllFiniteDifferenceSpace
     if !high_resolution && eager_supported
         # Size the dynamic shared memory to fit the largest single expression result
         # in the broadcasted tree; `nothing` means an expression's cached entry type
@@ -81,19 +79,7 @@ function Base.copyto!(
         # use fallback lazy evaluation if the eager kernel would exceed the
         # device's per-block shared memory
         if !isnothing(eager_shmem) && eager_shmem ≤ max_shmem
-            # `axes(out)` is passed as the space the kernel evaluates `bc` on, since
-            # `out` and `bc` are space-stripped. The kernel recovers the output
-            # layout's horizontal extents from the type parameters of
-            # `field_values(out)` (see `vijh_params`), so the `CartesianIndices` it
-            # builds from them divides by compile-time constants, keeping the
-            # per-thread `divrem` cheap.
-            args = (
-                strip_space(out, space),
-                strip_space(bc, space),
-                mask,
-                axes(out),
-            )
-
+            args = Grids.toggle_compact_args(out, bc, mask)
             auto_launch!(
                 eager_copyto_stencil_kernel!,
                 args;
@@ -111,15 +97,7 @@ function Base.copyto!(
         cartesian_indices_mask(out_fv, mask)
     end
 
-    args = cudaconvert((
-        strip_space(out, space),
-        strip_space(bc, space),
-        axes(out),
-        bounds,
-        mask,
-        cart_inds,
-    ))
-
+    args = cudaconvert(Grids.toggle_compact_args(out, bc, bounds, mask, cart_inds))
     threads = threads_via_occupancy(copyto_stencil_kernel!, args)
     n_max_threads = min(threads, length(out_fv))
     p = if mask isa NoMask
@@ -139,11 +117,10 @@ end
 
 function copyto_stencil_kernel!(
     out,
-    bc::Union{
+    bc′::Union{
         StencilBroadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
     },
-    space,
     bds,
     mask,
     cart_inds,
@@ -161,8 +138,9 @@ function copyto_stencil_kernel!(
             (v, i, j, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
-            val = Operators.getidx(space, bc, idx, hidx)
-            setidx!(space, out, idx, hidx, val)
+            bc = toggle_placeholder_grid(bc′, axes(out))
+            val = Operators.getidx(bc, idx, hidx)
+            setidx!(out, idx, hidx, val)
         end
     end
     return nothing

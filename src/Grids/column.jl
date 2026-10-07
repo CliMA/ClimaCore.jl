@@ -28,7 +28,7 @@ end
 View of the column at `indices` of the extruded grid `full_grid`.
 """
 struct ColumnGrid{
-    G <: AbstractExtrudedFiniteDifferenceGrid,
+    G <: Union{AbstractExtrudedFiniteDifferenceGrid, PlaceholderGrid},
     I <: Tuple{Vararg{Integer}},
 } <: AbstractFiniteDifferenceGrid
     full_grid::G
