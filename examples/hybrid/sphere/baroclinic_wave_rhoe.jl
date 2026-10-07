@@ -113,4 +113,5 @@ function postprocessing(sol, output_dir)
         Plots.plot(ᶜv, level = 3, clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
+    temperature_animation(sol, output_dir, center_temperature)
 end

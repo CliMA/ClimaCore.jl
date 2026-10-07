@@ -125,6 +125,32 @@ center_velocity(Yc) = center_velocity(momentum_form(Yc), Yc)
 center_velocity(::VectorInvariantForm, Yc) = @. Geometry.UVVector(Yc.uₕ)
 center_velocity(::FluxForm, Yc) = @. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)
 
+# The specific kinetic energy of a saved state, `w` included.
+function center_kinetic_energy(Y)
+    ᶜuₕ = center_velocity(Y.c)
+    ᶜw = @. Geometry.WVector(ᶜinterp(Y.f.w))
+    return @. (norm_sqr(ᶜuₕ) + norm_sqr(ᶜw)) / 2
+end
+
+# The dry temperature diagnosed from the total energy of a saved state.
+function center_temperature(Y)
+    ᶜΦ = grav .* Fields.coordinate_field(Y.c).z
+    ᶜK = center_kinetic_energy(Y)
+    return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
+end
+
+# An animation of `temperature(Y)` on one level, on a color scale fixed over
+# all frames.
+function temperature_animation(sol, output_dir, temperature; level = 1)
+    ᶜTs = map(temperature, sol.u)
+    T_min = minimum(T -> minimum(Fields.level(T, level)), ᶜTs)
+    T_max = maximum(T -> maximum(Fields.level(T, level)), ᶜTs)
+    anim = Plots.@animate for ᶜT in ᶜTs
+        Plots.plot(ᶜT; level, clim = (T_min, T_max))
+    end
+    Plots.mp4(anim, joinpath(output_dir, "T.mp4"), fps = 5)
+end
+
 function face_initial_condition(local_geometry)
     (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
