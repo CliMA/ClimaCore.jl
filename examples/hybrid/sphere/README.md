@@ -49,8 +49,9 @@ Environment variables read by the driver:
   `examples/hybrid/dg_tendency.jl`.
 * `MOMENTUM_FORM`: `flux` (default on DG) or `vector_invariant` (the only
   form on CG). `DISCRETIZATION=DG MOMENTUM_FORM=vector_invariant` keeps the
-  velocity equation of the CG form on a DG space, completed by face lifts and
-  a velocity-jump penalty (`examples/hybrid/dg_vector_invariant_tendency.jl`);
+  velocity equation of the CG form on a DG space, its weak-form derivatives
+  completed by `Operators.complete_tendency!` with central fluxes and a
+  velocity-jump penalty (`examples/hybrid/dg_vector_invariant_tendency.jl`);
   output goes to a `_dg_vi`-suffixed directory.
 * `T_END`, `DT`, `ODE_ALGORITHM`: override the baroclinic waves' run length,
   timestep and ClimaTimeSteppers scheme (`SSP333`, IMEX, by default; an

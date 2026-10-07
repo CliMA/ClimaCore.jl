@@ -10,8 +10,8 @@
 # element coupling is an interface numerical flux instead of a DSS. `DG_FLUX`
 # selects that assembly; the default pairs the Kennedy-Gruber two-point volume
 # flux with a Roe interface flux. Adding `MOMENTUM_FORM=vector_invariant` keeps
-# the CG form's velocity equation on the DG space instead, completed by face
-# lifts (`dg_vector_invariant_tendency.jl`).
+# the CG form's velocity equation on the DG space instead, its derivatives
+# completed by interface fluxes (`dg_vector_invariant_tendency.jl`).
 #
 # `T_END` and `DT` override the run length and the timestep, and
 # `ODE_ALGORITHM` the ClimaTimeSteppers scheme: the default IMEX `SSP333`

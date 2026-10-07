@@ -23,8 +23,8 @@ main
 
   `MOMENTUM_FORM=vector_invariant` runs the vector-invariant velocity equation
   on the DG space instead (`examples/hybrid/dg_vector_invariant_tendency.jl`),
-  with face lifts completing its strong-form derivatives and a velocity-jump
-  penalty. The new `sphere/moist_baroclinic_wave_rhoe` case adds total water
+  with its weak-form derivatives completed by `Operators.complete_tendency!`
+  (central fluxes and a velocity-jump penalty). The new `sphere/moist_baroclinic_wave_rhoe` case adds total water
   `ρq_tot` and 0-moment microphysics to the DG flux form; it runs from a new
   `examples` environment that carries Thermodynamics.jl and
   CloudMicrophysics.jl, which ClimaCore does not depend on, and keeps water

@@ -11,6 +11,7 @@
 import LinearAlgebra
 import ClimaCore: Fields, Geometry, Grids, Operators, Spaces
 import ClimaCore.Geometry: ⊗
+import LazyBroadcast: lazy
 
 ##
 ## Physical fluxes
@@ -355,10 +356,11 @@ function dg_remaining_tendency!(Yₜ, Y, p, t)
 
     dg_horizontal_tendency!(p.volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
 
-    # Vertical transport by `uₕ` (the `w` part of mass and energy is implicit).
+    # Vertical transport by `uₕ`, then by `w`.
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    has_moisture(Y.c) && dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ, p.dt)
+    has_moisture(Y.c) && (@. Yₜ.c.ρq_tot -= ᶜdivᵥ(ᶠinterp(Y.c.ρq_tot * ᶜuₕ)))
+    dg_vertical_monotone_tendency!(Yₜ, Y, p)
     # Vertical momentum flux, rotated to Cartesian and back like the horizontal.
     @. ᶠu = Geometry.UVWVector(C123(ᶠinterp(ᶜuₕ)) + C123(ᶠw))
     @. ᶠTc = Geometry.CartesianTensor(
@@ -379,18 +381,30 @@ function dg_remaining_tendency!(Yₜ, Y, p, t)
     return Yₜ
 end
 
-# Explicit vertical water transport: by `uₕ` as for mass, and by `w` as the
-# implicit mass flux times a monotone (Lin-van Leer) face `q`, which keeps
-# element means of `ρq_tot` non-negative, as the positivity limiter requires.
+# Monotone vertical transport by `w`. The implicit mass and energy fluxes are
+# central, `ᶠinterp(χ) * w` (which keeps the Jacobian exact); adding the
+# Lin-van Leer flux minus the central one here makes the total flux monotone,
+# which damps the near-lid computational modes a central flux leaves. Water,
+# fully explicit, takes the monotone flux directly. The limited reconstruction
+# is positively homogeneous, so a uniform `q` stays uniform, and its
+# non-negative face values keep the element means of `ρq_tot` non-negative.
 const ᶠmonotone_product = Operators.LinVanLeerC2F(
     constraint = Operators.MonotoneLocalExtrema(),
 )
-function dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ, dt)
+function dg_vertical_monotone_tendency!(Yₜ, Y, p)
+    (; ᶜp, dt, ᶠupwind_product) = p
+    isnothing(ᶠupwind_product) ||
+        error("the DG forms assume central implicit vertical fluxes \
+               (upwinding_mode = :none)")
+    ᶠw = Y.f.w
     ᶜρ = Y.c.ρ
-    ᶜρq = Y.c.ρq_tot
-    @. Yₜ.c.ρq_tot -= ᶜdivᵥ(ᶠinterp(ᶜρq * ᶜuₕ))
-    @. Yₜ.c.ρq_tot -=
-        ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠmonotone_product(Y.f.w, ᶜρq / ᶜρ, dt))
+    ᶜρh = lazy.(Y.c.ρe .+ ᶜp)
+    @. Yₜ.c.ρ -=
+        ᶜdivᵥ(ᶠmonotone_product(ᶠw, ᶜρ, dt)) - ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw)
+    @. Yₜ.c.ρe -=
+        ᶜdivᵥ(ᶠmonotone_product(ᶠw, ᶜρh, dt)) - ᶜdivᵥ(ᶠinterp(ᶜρh) * ᶠw)
+    has_moisture(Y.c) &&
+        (@. Yₜ.c.ρq_tot -= ᶜdivᵥ(ᶠmonotone_product(ᶠw, Y.c.ρq_tot, dt)))
     return Yₜ
 end
 
