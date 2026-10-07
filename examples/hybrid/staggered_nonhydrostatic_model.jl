@@ -147,6 +147,7 @@ end
 
 get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
     default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
+    (; dt),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
 )
 

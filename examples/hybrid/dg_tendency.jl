@@ -358,7 +358,7 @@ function dg_remaining_tendency!(Yₜ, Y, p, t)
     # Vertical transport by `uₕ` (the `w` part of mass and energy is implicit).
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    has_moisture(Y.c) && dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ)
+    has_moisture(Y.c) && dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ, p.dt)
     # Vertical momentum flux, rotated to Cartesian and back like the horizontal.
     @. ᶠu = Geometry.UVWVector(C123(ᶠinterp(ᶜuₕ)) + C123(ᶠw))
     @. ᶠTc = Geometry.CartesianTensor(
@@ -380,13 +380,17 @@ function dg_remaining_tendency!(Yₜ, Y, p, t)
 end
 
 # Explicit vertical water transport: by `uₕ` as for mass, and by `w` as the
-# implicit mass flux times an upwinded `q`.
-function dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ)
+# implicit mass flux times a monotone (Lin-van Leer) face `q`, which keeps
+# element means of `ρq_tot` non-negative, as the positivity limiter requires.
+const ᶠmonotone_product = Operators.LinVanLeerC2F(
+    constraint = Operators.MonotoneLocalExtrema(),
+)
+function dg_vertical_water_tendency!(Yₜ, Y, ᶜuₕ, dt)
     ᶜρ = Y.c.ρ
     ᶜρq = Y.c.ρq_tot
     @. Yₜ.c.ρq_tot -= ᶜdivᵥ(ᶠinterp(ᶜρq * ᶜuₕ))
     @. Yₜ.c.ρq_tot -=
-        ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product3(Y.f.w, ᶜρq / ᶜρ))
+        ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠmonotone_product(Y.f.w, ᶜρq / ᶜρ, dt))
     return Yₜ
 end
 
