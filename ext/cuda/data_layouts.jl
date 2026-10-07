@@ -225,6 +225,22 @@ Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLayout) =
         compact_device_view(Adapt.adapt(to, parent(data)), data),
     )
 
+# A mask backed by CuArrays computes its kernel form once, at construction, and
+# every kernel launch reads it back instead of converting six arrays again (see
+# DataLayouts.kernel_mask_form). The fields are converted one by one here rather
+# than through Adapt.adapt on the whole mask, which would return the kernel form
+# that is being computed.
+DataLayouts.kernel_mask_form(mask::IJHMask{<:Any, <:CUDA.CuArray}) = IJHMask(
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.is_active),
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.N),
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.i_map),
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.j_map),
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.h_map),
+    Adapt.adapt(CUDA.KernelAdaptor(), mask.column_map),
+)
+Adapt.adapt_structure(::CUDA.KernelAdaptor, mask::IJHMask{<:Any, <:CUDA.CuArray}) =
+    mask.kernel_form
+
 @inline DataLayouts.field_offset(
     array::CompactDeviceView,
     ::Val{F},

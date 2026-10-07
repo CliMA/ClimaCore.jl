@@ -29,17 +29,60 @@ active; modify `is_active` and call [`set_mask_maps!`](@ref) to change the mask.
   - `h_map`: An array that holds the `h`-index of each active column.
   - `column_map`: An array that holds the linear `(i, j, h)` index of each active
     column, so that a point loop can locate an active point with one lookup.
+  - `kernel_form`: The mask as kernels launched from this device receive it (see
+    [`kernel_mask_form`](@ref)), or `nothing` when no conversion is needed.
 """
-struct IJHMask{D, A} <: DataMask
+struct IJHMask{D, A, K} <: DataMask
     is_active::D
     N::A
     i_map::A
     j_map::A
     h_map::A
     column_map::A
+    kernel_form::K
 end
 
-Adapt.@adapt_structure IJHMask
+function IJHMask(
+    is_active::D,
+    N::A,
+    i_map::A,
+    j_map::A,
+    h_map::A,
+    column_map::A,
+) where {D, A}
+    mask = IJHMask{D, A, Nothing}(is_active, N, i_map, j_map, h_map, column_map, nothing)
+    kernel_form = kernel_mask_form(mask)
+    return IJHMask{D, A, typeof(kernel_form)}(
+        is_active, N, i_map, j_map, h_map, column_map, kernel_form,
+    )
+end
+
+"""
+    kernel_mask_form(mask::IJHMask)
+
+Return the form of `mask` that is passed to kernels launched from the device its
+arrays live on, or `nothing` when the arrays are already in that form (CPU
+masks, and the kernel forms themselves). Device extensions add methods for their
+array types.
+
+Converting a mask for a kernel launch means converting six device arrays, and
+each conversion checks the array's stream ordering, which costs as much as
+converting all of a small broadcast's arguments. A mask's arrays are allocated
+once and only ever updated in place by [`set_mask_maps!`](@ref), so the result is
+computed once here, at construction, and reused by every launch.
+"""
+kernel_mask_form(::IJHMask) = nothing
+
+# The kernel form is derived from the other fields, so it is rebuilt (through the
+# outer constructor) rather than adapted along with them.
+Adapt.adapt_structure(to, mask::IJHMask) = IJHMask(
+    Adapt.adapt(to, mask.is_active),
+    Adapt.adapt(to, mask.N),
+    Adapt.adapt(to, mask.i_map),
+    Adapt.adapt(to, mask.j_map),
+    Adapt.adapt(to, mask.h_map),
+    Adapt.adapt(to, mask.column_map),
+)
 
 """
     is_active(mask::IJHMask)

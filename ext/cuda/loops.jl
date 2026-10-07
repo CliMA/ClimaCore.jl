@@ -5,6 +5,26 @@ has_inferred_slice_size(op::O, arg) where {O} =
         Val(DataLayouts.has_inferred_size(slice))
     end
 
+# The kernel of a slice loop. This is a top-level function with op, f, mask and
+# enumerate as leading arguments rather than a closure over them: a kernel
+# function object with captured fields becomes a non-empty kernel argument,
+# which CUDA.jl's launch path handles far less cheaply than an ordinary
+# argument. On an A100, a closure over an IJHMask cost ~1.4 kB of allocation
+# and ~0.5 us more per launch than the same mask passed as an argument.
+function slice_loop_kernel(op::O, f::F, mask, enumerate, compact_args...) where {O, F}
+    kernel_args = Grids.toggle_compact_args(compact_args...)
+    DataLayouts.scoped_slice_loop(
+        DataLayouts.slice_subscope(ThisKernel(), op, kernel_args...),
+        ThisKernel(),
+        op,
+        f,
+        mask,
+        enumerate,
+        kernel_args...,
+    )
+    return nothing
+end
+
 DataLayouts.needs_loop_setup(::ThisHost) = true
 DataLayouts._foreach_slice(
     scope::ThisHost,
@@ -18,31 +38,17 @@ DataLayouts._foreach_slice(
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
     else
         check_device_assumptions()
-        function kernel_function(compact_kernel_args...)
-            kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
-            DataLayouts.scoped_slice_loop(
-                DataLayouts.slice_subscope(ThisKernel(), op, kernel_args...),
-                ThisKernel(),
-                op,
-                f,
-                mask,
-                enumerate,
-                kernel_args...,
-            )
-        end
 
         # A rank can own no elements; there are then no slices to launch
         # over, and num_slice_points cannot slice an empty layout.
         isempty(DataLayouts.each_slice_index(op, first(args))) && return
 
-        # Adapt the closure and the arguments to their device forms once, for
-        # both the launch configuration and the launch; going through @cuda for
-        # each would adapt them twice, which is a measurable share of the host
-        # time of a small pointwise kernel. (This binding must not share a name
-        # with any local of kernel_function, or Julia would turn that local
-        # into a captured variable of the closure.)
-        compact_args = Grids.toggle_compact_args(args...)
-        (kernel, device_args) = compile_kernel(kernel_function, compact_args)
+        # Adapt the arguments to their device forms once, for both the launch
+        # configuration and the launch; going through @cuda for each would
+        # adapt them twice, which is a measurable share of the host time of a
+        # small pointwise kernel.
+        kernel_args = (op, f, mask, enumerate, Grids.toggle_compact_args(args...)...)
+        (kernel, device_args) = compile_kernel(slice_loop_kernel, kernel_args)
 
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
@@ -71,7 +77,7 @@ DataLayouts._foreach_slice(
                 compiled_launch_configuration(kernel.fun, max_points; strict = false)
         end
         launch_compiled!(
-            kernel, device_args, kernel_function, compact_args; threads, blocks,
+            kernel, device_args, slice_loop_kernel, kernel_args; threads, blocks,
         )
     end
 
