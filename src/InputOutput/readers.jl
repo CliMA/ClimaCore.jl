@@ -105,7 +105,9 @@ function resolve_type_name(s::Symbol)
     error("cannot resolve name `$s` while reading a type")
 end
 
-"Expand `@NamedTuple{a::T, b::U}` without invoking macro expansion."
+"""
+Expand `@NamedTuple{a::T, b::U}` without invoking macro expansion.
+"""
 function resolve_named_tuple(body)
     names = Symbol[]
     types = Any[]
