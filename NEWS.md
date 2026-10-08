@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🚀performance] Compiling a pointwise `Field` broadcast is about
+  twice as fast. The pointwise `copyto!` indexes its arguments directly at
+  every point (`DataLayouts.IndexOnly`) instead of building a single-point
+  view of every argument, which was the costliest part of compiling it.
+
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of
   GPU kernels launched from the host and is swapped out at the start of each

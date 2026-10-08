@@ -117,6 +117,18 @@ end
     (mask, enumerate)
 
 """
+    IndexOnly()
+
+Internal value of the `enumerate` flag of `_foreach_slice` that makes the loop
+call `f(index, args...)` with the slice index and the (scope-reassigned) arguments
+themselves, without slicing them. Point loops that only read and write one point
+of every argument, like the pointwise `copyto!`, index the arguments directly:
+constructing a single-point view of every argument is the costliest part of
+compiling such a loop, and the views are never needed.
+"""
+struct IndexOnly end
+
+"""
     foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false))
     foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false))
 
@@ -282,8 +294,12 @@ end
     scoped_args = unrolled_map(Base.Fix2(reassign, subscope), args)
     @simd_if (op == view && simd_over_indices(indices)) for i in 1:length(indices)
         index = @inbounds indices[i]
-        slices = @inbounds slice_every_arg(op, index, scoped_args...)
-        @inline enumerate isa Val{true} ? f(index, slices...) : f(slices...)
+        if enumerate isa IndexOnly
+            @inline f(index, scoped_args...)
+        else
+            slices = @inbounds slice_every_arg(op, index, scoped_args...)
+            @inline enumerate isa Val{true} ? f(index, slices...) : f(slices...)
+        end
     end
 end
 
@@ -304,8 +320,12 @@ end
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
     (mask, enumerate) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
-        slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
-        enumerate isa Val{true} ? f(index, slices...) : f(slices...)
+        if enumerate isa IndexOnly
+            f(index, args...)
+        else
+            slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
+            enumerate isa Val{true} ? f(index, slices...) : f(slices...)
+        end
     end
 end
 
@@ -532,24 +552,34 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+@inline Base.copyto!(
     dest::DataLayout,
     arg::MaybeLazyDataLayout,
     mask::DataMask = NoMask(),
-)
+) = pointwise_copyto!(dest, arg, mask)
+
+# Body of the pointwise copyto! loop (see IndexOnly): the single argument is the
+# tuple broadcast of the destination and the source, whose size check lets the
+# source have singleton dimensions that the destination does not.
+@inline point_value(arg, index) = @inbounds arg[index]
+@inline function copy_index!(index, dest_and_arg)
+    @inbounds (dest, arg) = dest_and_arg.args
+    @inbounds dest[index] = point_value(arg, index)
+    return nothing
+end
+
+"""
+    pointwise_copyto!(dest, arg, mask)
+
+Body of `copyto!(dest::DataLayout, arg, mask)`, also used by the `Field`
+`materialize!`. Indexes `dest` and `arg` directly at every point (see
+[`IndexOnly`](@ref)).
+"""
+@inline function pointwise_copyto!(dest::DataLayout, arg::MaybeLazyDataLayout, mask)
     dest_and_arg = Broadcast.broadcasted(tuple, dest, arg)
     size(dest) == size(dest_and_arg) ||
         throw(DimensionMismatch("DataLayout broadcast result exceeds destination size"))
-    _foreach_slice(
-        view,
-        dest_and_arg_point -> begin
-            @inbounds (dest_point, arg_point) = dest_and_arg_point.args
-            @inbounds dest_point[] = arg_point[]
-        end,
-        mask,
-        Val(false),
-        dest_and_arg,
-    )
+    _foreach_slice(view, copy_index!, mask, IndexOnly(), dest_and_arg)
     call_post_op_callback() && post_op_callback(dest, dest, arg; mask)
     return dest
 end
