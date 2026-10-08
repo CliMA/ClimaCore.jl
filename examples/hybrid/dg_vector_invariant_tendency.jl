@@ -1,13 +1,8 @@
-# Vector-invariant horizontal tendency for the DG form of the staggered
-# nonhydrostatic model (`MOMENTUM_FORM=vector_invariant` on a DG space):
-#
-#     ∂ₜuₕ = -(f + ω³) × uₕ - ω¹² × w - ∇ₕp / ρ - ∇ₕ(K + Φ),
-#
-# with mass and energy in flux form. Every horizontal derivative is a weak-form
-# operator completed by `Operators.complete_tendency!`: Rusanov fluxes for mass
-# and energy, central fluxes for `∇ₕp`, `∇ₕK` and `ω³`, plus a velocity-jump
-# penalty at `λ = |u| + c`. The vertical terms, the `w` equation and the
-# implicit split are shared with the flux form.
+# DG vector-invariant explicit tendency (`MOMENTUM_FORM=vector_invariant`):
+# mass and energy in flux form, `∂ₜuₕ = -(f + ω³) × uₕ - ω¹² × w - ∇ₕp / ρ -
+# ∇ₕ(K + Φ)`. Horizontal derivatives are weak-form operators completed by
+# `Operators.complete_tendency!`; vertical terms and the implicit split are the
+# CG form's.
 
 function dg_cache(
     ::Grids.DG,
@@ -41,9 +36,8 @@ function dg_cache(
     )
 end
 
-# Interface fluxes completing the weak `∇ₕp`, `∇ₕK` and `ω³` (central), and
-# the velocity-jump penalty (no volume term). Orthonormal components are
-# single-valued across panel edges.
+# Central fluxes for the weak `∇ₕp`, `∇ₕK`, `ω³`, and a velocity-jump penalty
+# at `λ = |u| + c`, on orthonormal components (single-valued at panel edges).
 function dg_vi_numflux(normal, (p⁻, K⁻, u⁻, v⁻, λ⁻), (p⁺, K⁺, u⁺, v⁺, λ⁺))
     nu = normal.components.data.:1
     nv = normal.components.data.:2
@@ -56,8 +50,6 @@ function dg_vi_numflux(normal, (p⁻, K⁻, u⁻, v⁻, λ⁻), (p⁺, K⁺, u�
         v = λ / 2 * (v⁻ - v⁺),
     )
 end
-
-@inline vertical_component(w) = w.components.data.:1
 
 function dg_vi_remaining_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
@@ -105,7 +97,7 @@ function dg_vi_remaining_tendency!(Yₜ, Y, p, t)
     @. ᶜω³ = CT3(Geometry.WVector(ᶜdYt_uₕ.ω³))
     @. ᶠu³ = CT3(ᶠw)
     @. Yₜ.c.uₕ -= ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × CT12(ᶜuₕ)
-    # `Φ` is continuous, so its strong gradient needs no flux.
+    # `Φ` is continuous: no face flux needed.
     @. Yₜ.c.uₕ -=
         C12(ᶜdYt_uₕ.∇p / ᶜρ + ᶜdYt_uₕ.∇K) + gradₕ(ᶜΦ)
     @. Yₜ.c.uₕ += C12(Geometry.UVVector(ᶜdYt_uₕ.u, ᶜdYt_uₕ.v))

@@ -1,12 +1,6 @@
-# Flux-form horizontal tendency for the DG form of the staggered nonhydrostatic
-# model: prognostic momentum `ρuₕ`, coupled across element faces by an
-# interface numerical flux. The vertical terms, the implicit split and the
-# vector-invariant `w` equation are shared with the CG form.
-#
-# Momentum is carried in global Cartesian components, where the Christoffel
-# terms of `∇·(ρu⊗u)` vanish. `DG_FLUX` selects the horizontal assembly (see
-# `dg_flux_scheme`). Total water `ρq_tot`, when present, moves with the mass
-# flux; its sources and its pressure are the case file's.
+# DG flux-form explicit tendency: `ρuₕ` at centers (in Cartesian components,
+# so `∇·(ρu⊗u)` has no Christoffel terms) and `ρw` at faces. `DG_FLUX` selects
+# the horizontal fluxes; optional `ρq_tot` moves with the mass flux.
 
 import LinearAlgebra
 import ClimaCore: Fields, Geometry, Grids, Operators, Spaces
@@ -22,8 +16,7 @@ dg_thermo_flux(ρ, ρe, u, pres) = (; ρ = ρ * u, ρe = (ρe + pres) * u)
 # `ρu⊗u + p𝟙`, transport axis first.
 dg_momentum_flux(ρ, u, pres) = (ρ * u) ⊗ u + pres * LinearAlgebra.I
 
-# Without pressure, for the vertical divergence (the vertical pressure
-# gradient is in the implicit `w` equation).
+# Without pressure, for the vertical divergence.
 dg_momentum_transport(ρ, u) = (ρ * u) ⊗ u
 
 # Fastest signal speed, `c + |u|`.
@@ -50,15 +43,19 @@ function dg_thermo_numflux(normal, (y⁻, u⁻, p⁻, λ⁻), (y⁺, u⁺, p⁺,
     )
 end
 
-# Rusanov flux for momentum, on the Cartesian-rotated flux tensor that
-# `cartesian_tensor_divergence!` passes.
-dg_momentum_numflux(normal, (T⁻, ρ⁻, uc⁻, λ⁻), (T⁺, ρ⁺, uc⁺, λ⁺)) =
+# Rusanov flux for momentum (Cartesian-rotated flux tensor).
+dg_momentum_numflux(normal, (T⁻, ρ⁻, u_cart⁻, λ⁻), (T⁺, ρ⁺, u_cart⁺, λ⁺)) =
     ((T⁻ + T⁺) / 2)' * normal +
-    (max(λ⁻, λ⁺) / 2) * (ρ⁻ * uc⁻ - ρ⁺ * uc⁺)
+    (max(λ⁻, λ⁺) / 2) * (ρ⁻ * u_cart⁻ - ρ⁺ * u_cart⁺)
 
 ##
 ## The vertical momentum equation
 ##
+
+# Kennedy-Gruber flux for horizontal `ρw` advection, advective-speed penalty.
+dg_vertical_momentum_numflux(normal, (m⁻, u⁻, λ⁻), (m⁺, u⁺, λ⁺)) =
+    ((m⁻ + m⁺) / 2) * (((u⁻ + u⁺) / 2)' * normal) +
+    max(λ⁻, λ⁺) / 2 * (m⁻ - m⁺)
 
 # Central face lift completing `curlₕ(ᶠw)`: `n̂ × ê₃ = (n_v, -n_u)`.
 dg_w_curl_lift(normal, (w⁻,), (w⁺,)) =
@@ -78,28 +75,29 @@ Kennedy-Gruber two-point flux for `(ρ, ρe, ρu⃗)` with Cartesian momentum
 """
 function dg_kennedy_gruber_flux(nvec_a, nvec_b, y_a, y_b)
     ρ̄ = (y_a.ρ + y_b.ρ) / 2
-    ē = (y_a.e + y_b.e) / 2
+    ē_tot = (y_a.e_tot + y_b.e_tot) / 2
     p̄ = (y_a.p + y_b.p) / 2
-    ūn = (y_a.uv' * nvec_a + y_b.uv' * nvec_b) / 2
-    ū1 = (y_a.u1 + y_b.u1) / 2
-    ū2 = (y_a.u2 + y_b.u2) / 2
-    ū3 = (y_a.u3 + y_b.u3) / 2
-    Ē1n = (y_a.E1' * nvec_a + y_b.E1' * nvec_b) / 2
-    Ē2n = (y_a.E2' * nvec_a + y_b.E2' * nvec_b) / 2
-    Ē3n = (y_a.E3' * nvec_a + y_b.E3' * nvec_b) / 2
+    ū_n = (y_a.uₕ' * nvec_a + y_b.uₕ' * nvec_b) / 2
+    ū_x = (y_a.u_x + y_b.u_x) / 2
+    ū_y = (y_a.u_y + y_b.u_y) / 2
+    ū_z = (y_a.u_z + y_b.u_z) / 2
+    n̄_x = (y_a.x̂' * nvec_a + y_b.x̂' * nvec_b) / 2
+    n̄_y = (y_a.ŷ' * nvec_a + y_b.ŷ' * nvec_b) / 2
+    n̄_z = (y_a.ẑ' * nvec_a + y_b.ẑ' * nvec_b) / 2
     F = (;
-        ρ = ρ̄ * ūn,
-        ρe = (ρ̄ * ē + p̄) * ūn,
-        ρu1 = ρ̄ * ū1 * ūn + p̄ * Ē1n,
-        ρu2 = ρ̄ * ū2 * ūn + p̄ * Ē2n,
-        ρu3 = ρ̄ * ū3 * ūn + p̄ * Ē3n,
+        ρ = ρ̄ * ū_n,
+        ρe = (ρ̄ * ē_tot + p̄) * ū_n,
+        ρu_x = ρ̄ * ū_x * ū_n + p̄ * n̄_x,
+        ρu_y = ρ̄ * ū_y * ū_n + p̄ * n̄_y,
+        ρu_z = ρ̄ * ū_z * ū_n + p̄ * n̄_z,
     )
-    return dg_with_tracer(F, y_a, y_b)
+    return dg_with_water(F, y_a, y_b)
 end
 
 # Water moves with the mass flux at the mean specific humidity.
-@inline dg_with_tracer(F, y_a, y_b) =
-    haskey(y_a, :q) ? (; F..., ρq_tot = F.ρ * (y_a.q + y_b.q) / 2) : F
+@inline dg_with_water(F, y_a, y_b) =
+    haskey(y_a, :q_tot) ?
+    (; F..., ρq_tot = F.ρ * (y_a.q_tot + y_b.q_tot) / 2) : F
 
 ##
 ## Interface fluxes for the flux-differencing assembly
@@ -116,11 +114,13 @@ function dg_rusanov(normal, (y⁻,), (y⁺,))
     Δ = (;
         ρ = y⁺.ρ - y⁻.ρ,
         ρe = y⁺.ρe - y⁻.ρe,
-        ρu1 = y⁺.ρ * y⁺.u1 - y⁻.ρ * y⁻.u1,
-        ρu2 = y⁺.ρ * y⁺.u2 - y⁻.ρ * y⁻.u2,
-        ρu3 = y⁺.ρ * y⁺.u3 - y⁻.ρ * y⁻.u3,
+        ρu_x = y⁺.ρ * y⁺.u_x - y⁻.ρ * y⁻.u_x,
+        ρu_y = y⁺.ρ * y⁺.u_y - y⁻.ρ * y⁻.u_y,
+        ρu_z = y⁺.ρ * y⁺.u_z - y⁻.ρ * y⁻.u_z,
     )
-    Δ = haskey(y⁻, :q) ? (; Δ..., ρq_tot = y⁺.ρ * y⁺.q - y⁻.ρ * y⁻.q) : Δ
+    if haskey(y⁻, :q_tot)
+        Δ = (; Δ..., ρq_tot = y⁺.ρ * y⁺.q_tot - y⁻.ρ * y⁻.q_tot)
+    end
     return map((f, δ) -> f - λ / 2 * δ, F, Δ)
 end
 
@@ -135,57 +135,58 @@ function dg_roe(normal, (y⁻,), (y⁺,))
     F = dg_kennedy_gruber_flux(normal, normal, y⁻, y⁺)
     γd = oftype(y⁻.ρ, γ)
     # face normal in Cartesian components
-    n1 = y⁻.E1' * normal
-    n2 = y⁻.E2' * normal
-    n3 = y⁻.E3' * normal
+    n_x = y⁻.x̂' * normal
+    n_y = y⁻.ŷ' * normal
+    n_z = y⁻.ẑ' * normal
     # Roe-averaged state
     s⁻ = sqrt(y⁻.ρ)
     s⁺ = sqrt(y⁺.ρ)
     ρ̂ = s⁻ * s⁺
     a⁻ = s⁻ / (s⁻ + s⁺)
     a⁺ = 1 - a⁻
-    û1 = a⁻ * y⁻.u1 + a⁺ * y⁺.u1
-    û2 = a⁻ * y⁻.u2 + a⁺ * y⁺.u2
-    û3 = a⁻ * y⁻.u3 + a⁺ * y⁺.u3
-    Ĥ = a⁻ * (y⁻.e + y⁻.p / y⁻.ρ) + a⁺ * (y⁺.e + y⁺.p / y⁺.ρ)
+    û_x = a⁻ * y⁻.u_x + a⁺ * y⁺.u_x
+    û_y = a⁻ * y⁻.u_y + a⁺ * y⁺.u_y
+    û_z = a⁻ * y⁻.u_z + a⁺ * y⁺.u_z
+    Ĥ = a⁻ * (y⁻.e_tot + y⁻.p / y⁻.ρ) + a⁺ * (y⁺.e_tot + y⁺.p / y⁺.ρ)
     ĉ = a⁻ * sqrt(γd * y⁻.p / y⁻.ρ) + a⁺ * sqrt(γd * y⁺.p / y⁺.ρ)
-    ûn = û1 * n1 + û2 * n2 + û3 * n3
+    û_n = û_x * n_x + û_y * n_y + û_z * n_z
     # jumps and wave amplitudes
     Δρ = y⁺.ρ - y⁻.ρ
     Δp = y⁺.p - y⁻.p
-    Δu1 = y⁺.u1 - y⁻.u1
-    Δu2 = y⁺.u2 - y⁻.u2
-    Δu3 = y⁺.u3 - y⁻.u3
-    Δun = Δu1 * n1 + Δu2 * n2 + Δu3 * n3
-    α₊ = (Δp + ρ̂ * ĉ * Δun) / (2 * ĉ^2)
-    α₋ = (Δp - ρ̂ * ĉ * Δun) / (2 * ĉ^2)
+    Δu_x = y⁺.u_x - y⁻.u_x
+    Δu_y = y⁺.u_y - y⁻.u_y
+    Δu_z = y⁺.u_z - y⁻.u_z
+    Δu_n = Δu_x * n_x + Δu_y * n_y + Δu_z * n_z
+    α₊ = (Δp + ρ̂ * ĉ * Δu_n) / (2 * ĉ^2)
+    α₋ = (Δp - ρ̂ * ĉ * Δu_n) / (2 * ĉ^2)
     α₀ = Δρ - Δp / ĉ^2
-    s₊ = abs(ûn + ĉ)
-    s₋ = abs(ûn - ĉ)
-    s₀ = max(abs(ûn), ĉ / 20)
-    Δut1 = Δu1 - Δun * n1
-    Δut2 = Δu2 - Δun * n2
-    Δut3 = Δu3 - Δun * n3
+    s₊ = abs(û_n + ĉ)
+    s₋ = abs(û_n - ĉ)
+    s₀ = max(abs(û_n), ĉ / 20)
+    Δu_tan_x = Δu_x - Δu_n * n_x
+    Δu_tan_y = Δu_y - Δu_n * n_y
+    Δu_tan_z = Δu_z - Δu_n * n_z
     # `B` absorbs the geopotential and vertical kinetic parts of `ρe`
     B = Ĥ - ĉ^2 / (γd - 1)
     Dρ = s₊ * α₊ + s₋ * α₋ + s₀ * α₀
-    Dρu1 =
-        s₊ * α₊ * (û1 + ĉ * n1) + s₋ * α₋ * (û1 - ĉ * n1) +
-        s₀ * (α₀ * û1 + ρ̂ * Δut1)
-    Dρu2 =
-        s₊ * α₊ * (û2 + ĉ * n2) + s₋ * α₋ * (û2 - ĉ * n2) +
-        s₀ * (α₀ * û2 + ρ̂ * Δut2)
-    Dρu3 =
-        s₊ * α₊ * (û3 + ĉ * n3) + s₋ * α₋ * (û3 - ĉ * n3) +
-        s₀ * (α₀ * û3 + ρ̂ * Δut3)
+    Dρu_x =
+        s₊ * α₊ * (û_x + ĉ * n_x) + s₋ * α₋ * (û_x - ĉ * n_x) +
+        s₀ * (α₀ * û_x + ρ̂ * Δu_tan_x)
+    Dρu_y =
+        s₊ * α₊ * (û_y + ĉ * n_y) + s₋ * α₋ * (û_y - ĉ * n_y) +
+        s₀ * (α₀ * û_y + ρ̂ * Δu_tan_y)
+    Dρu_z =
+        s₊ * α₊ * (û_z + ĉ * n_z) + s₋ * α₋ * (û_z - ĉ * n_z) +
+        s₀ * (α₀ * û_z + ρ̂ * Δu_tan_z)
     Dρe =
-        s₊ * α₊ * (Ĥ + ĉ * ûn) + s₋ * α₋ * (Ĥ - ĉ * ûn) +
-        s₀ * (α₀ * B + ρ̂ * (û1 * Δut1 + û2 * Δut2 + û3 * Δut3))
-    D = (; ρ = Dρ, ρe = Dρe, ρu1 = Dρu1, ρu2 = Dρu2, ρu3 = Dρu3)
+        s₊ * α₊ * (Ĥ + ĉ * û_n) + s₋ * α₋ * (Ĥ - ĉ * û_n) +
+        s₀ *
+        (α₀ * B + ρ̂ * (û_x * Δu_tan_x + û_y * Δu_tan_y + û_z * Δu_tan_z))
+    D = (; ρ = Dρ, ρe = Dρe, ρu_x = Dρu_x, ρu_y = Dρu_y, ρu_z = Dρu_z)
     # water rides every wave at its Roe average; its own jump is a contact
-    D = if haskey(y⁻, :q)
-        q̂ = a⁻ * y⁻.q + a⁺ * y⁺.q
-        (; D..., ρq_tot = q̂ * Dρ + s₀ * ρ̂ * (y⁺.q - y⁻.q))
+    D = if haskey(y⁻, :q_tot)
+        q̂ = a⁻ * y⁻.q_tot + a⁺ * y⁺.q_tot
+        (; D..., ρq_tot = q̂ * Dρ + s₀ * ρ̂ * (y⁺.q_tot - y⁻.q_tot))
     else
         D
     end
@@ -245,17 +246,25 @@ function dg_cache(::Grids.DG, ::FluxForm, ᶜlocal_geometry, ᶠlocal_geometry, 
         error("DG_FLUX=rusanov does not transport water; use a \
                flux-differencing scheme")
     Tensor = typeof(dg_momentum_transport(zero(FT), zero(UVW)))
+    ᶠdYt_ρw = similar(ᶠlocal_geometry, FT)
     return (;
-        ᶜfscalar = ᶜf,
+        ᶜf_coriolis = ᶜf,
         ᶜuₕ = similar(ᶜlocal_geometry, UV),
         ᶜu = similar(ᶜlocal_geometry, UVW),
-        ᶜuc = similar(ᶜlocal_geometry, UVW),
+        ᶜu_cart = similar(ᶜlocal_geometry, UVW),
         ᶜλ = similar(ᶜlocal_geometry, FT),
         dg_horizontal_cache(scheme.volume2pt, ᶜlocal_geometry, scheme, Y)...,
         ᶠu = similar(ᶠlocal_geometry, UVW),
-        ᶠTc = similar(ᶠlocal_geometry, Tensor),
-        ᶠwvec = similar(ᶠlocal_geometry, Geometry.WVector{FT}),
-        ᶠwlift = similar(ᶠlocal_geometry, UV),
+        ᶠT_cart = similar(ᶠlocal_geometry, Tensor),
+        ᶠw = similar(ᶠlocal_geometry, C3{FT}),
+        ᶠuₕ = similar(ᶠlocal_geometry, UV),
+        ᶠρw_value = similar(ᶠlocal_geometry, FT),
+        ᶠλ = similar(ᶠlocal_geometry, FT),
+        ᶠdYt_ρw,
+        ᶠρw_completion = Operators.tendency_completion(
+            ᶠdYt_ρw;
+            numflux = dg_vertical_momentum_numflux,
+        ),
         # no momentum flux through the top or bottom
         ᶜdivᵥT = Operators.DivergenceF2C(
             top = Operators.SetValue(zero(Tensor)),
@@ -272,7 +281,7 @@ function dg_horizontal_cache(::Nothing, ᶜlocal_geometry, scheme, Y)
     ᶜdivT = similar(ᶜlocal_geometry, UVW)
     return (;
         ᶜT = similar(ᶜlocal_geometry, Tensor),
-        ᶜTc = similar(ᶜlocal_geometry, Tensor),
+        ᶜT_cart = similar(ᶜlocal_geometry, Tensor),
         ᶜdivT,
         ᶜdYt,
         ᶜthermo_completion =
@@ -283,15 +292,14 @@ function dg_horizontal_cache(::Nothing, ᶜlocal_geometry, scheme, Y)
     )
 end
 
-# Flux-differencing scratch: the node state the fluxes read (with `q` when the
-# state carries water) and the mass-weighted residual.
+# Flux-differencing scratch: node state and mass-weighted residual.
 function dg_horizontal_cache(volume2pt::V, ᶜlocal_geometry, scheme, Y) where {V}
     UV = Geometry.UVVector{FT}
-    state_names = (:ρ, :ρe, :e, :p, :λ, :uv, :u1, :u2, :u3, :E1, :E2, :E3)
+    state_names = (:ρ, :ρe, :e_tot, :p, :λ, :uₕ, :u_x, :u_y, :u_z, :x̂, :ŷ, :ẑ)
     state_types = (FT, FT, FT, FT, FT, UV, FT, FT, FT, UV, UV, UV)
-    residual_names = (:ρ, :ρe, :ρu1, :ρu2, :ρu3)
+    residual_names = (:ρ, :ρe, :ρu_x, :ρu_y, :ρu_z)
     if has_moisture(Y.c)
-        state_names = (state_names..., :q)
+        state_names = (state_names..., :q_tot)
         state_types = (state_types..., FT)
         residual_names = (residual_names..., :ρq_tot)
     end
@@ -299,14 +307,14 @@ function dg_horizontal_cache(volume2pt::V, ᶜlocal_geometry, scheme, Y) where {
         ᶜlocal_geometry,
         NamedTuple{state_names, Tuple{state_types...}},
     )
-    # Tangential projections of the Cartesian unit vectors, filled once.
+    # Cartesian unit vectors in the local (u, v) basis.
     space = axes(ᶜlocal_geometry)
     geometry = Spaces.global_geometry(space)
     coords = Fields.coordinate_field(space)
     for (Ec, ê) in (
-        (ᶜfluxstate.E1, Geometry.Cartesian123Vector(FT(1), FT(0), FT(0))),
-        (ᶜfluxstate.E2, Geometry.Cartesian123Vector(FT(0), FT(1), FT(0))),
-        (ᶜfluxstate.E3, Geometry.Cartesian123Vector(FT(0), FT(0), FT(1))),
+        (ᶜfluxstate.x̂, Geometry.Cartesian123Vector(FT(1), FT(0), FT(0))),
+        (ᶜfluxstate.ŷ, Geometry.Cartesian123Vector(FT(0), FT(1), FT(0))),
+        (ᶜfluxstate.ẑ, Geometry.Cartesian123Vector(FT(0), FT(0), FT(1))),
     )
         tangent(geom, coord) = Geometry.project(
             Geometry.UVAxis(),
@@ -336,10 +344,10 @@ end
 function dg_remaining_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜρe = Y.c.ρe
-    ᶠw = Y.f.w
+    ᶠw = face_velocity(Y, p)
     (; ᶜK, ᶜΦ, ᶜp) = p
-    (; ᶜfscalar, ᶜuₕ, ᶜu, ᶜuc, ᶜλ) = p
-    (; ᶠu, ᶠTc, ᶜdivᵥT) = p
+    (; ᶜf_coriolis, ᶜuₕ, ᶜu, ᶜu_cart, ᶜλ) = p
+    (; ᶠu, ᶠT_cart, ᶜdivᵥT) = p
     ᶜspace = axes(Y.c)
     ᶠspace = axes(Y.f)
     geometry = Spaces.global_geometry(ᶜspace)
@@ -348,57 +356,82 @@ function dg_remaining_tendency!(Yₜ, Y, p, t)
 
     @. ᶜuₕ = Y.c.ρuₕ / ᶜρ
     @. ᶜu = Geometry.UVWVector(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw)))
-    @. ᶜuc = Geometry.CartesianVector(ᶜu, geometry, ᶜcoords)
+    @. ᶜu_cart = Geometry.CartesianVector(ᶜu, geometry, ᶜcoords)
     @. ᶜK = norm_sqr(ᶜu) / 2
     thermo_pressure!(ᶜp, Y.c, ᶜK, ᶜΦ, p.moisture)
     @. ᶜλ = dg_wavespeed(ᶜρ, ᶜu, ᶜp)
 
     dg_horizontal_tendency!(p.volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
 
-    # Vertical transport by `uₕ` (the `w` part of mass and energy is implicit).
+    # Vertical transport by `uₕ` (by `ρw`: implicit).
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
     if has_moisture(Y.c)
         @. Yₜ.c.ρq_tot -= ᶜdivᵥ(ᶠinterp(Y.c.ρq_tot * ᶜuₕ))
-        dg_vertical_water_tendency!(Yₜ, Y, p)
+        dg_vertical_water_tendency!(Yₜ, Y, p, ᶠw)
     end
-    # Vertical momentum flux, rotated to Cartesian and back like the horizontal.
+    # Vertical flux of `ρuₕ`, rotated to Cartesian and back.
     @. ᶠu = Geometry.UVWVector(C123(ᶠinterp(ᶜuₕ)) + C123(ᶠw))
-    @. ᶠTc = Geometry.CartesianTensor(
+    @. ᶠT_cart = Geometry.CartesianTensor(
         dg_momentum_transport(ᶠinterp(ᶜρ), ᶠu),
         geometry,
         ᶠcoords,
     )
     @. Yₜ.c.ρuₕ -= Geometry.project(
         Geometry.UVAxis(),
-        Geometry.LocalVector(ᶜdivᵥT(ᶠTc), geometry, ᶜcoords),
+        Geometry.LocalVector(ᶜdivᵥT(ᶠT_cart), geometry, ᶜcoords),
     )
 
-    @. Yₜ.c.ρuₕ += dg_coriolis(ᶜfscalar, Y.c.ρuₕ)
-    # `Φ` is continuous, so its gradient needs no face lift.
+    @. Yₜ.c.ρuₕ += dg_coriolis(ᶜf_coriolis, Y.c.ρuₕ)
+    # `Φ` is continuous: no face flux needed.
     @. Yₜ.c.ρuₕ -= ᶜρ * Geometry.project(Geometry.UVAxis(), gradₕ(ᶜΦ))
 
-    dg_w_tendency!(Yₜ, Y, p, ᶜuₕ)
+    dg_vertical_momentum_tendency!(Yₜ, Y, p, ᶠw)
     return Yₜ
 end
 
-# Water's vertical transport by `w`, all explicit: the central mass flux of the
-# implicit step times a monotone (Lin-van Leer) face `q`, which keeps a uniform
-# `q` uniform and the element means of `ρq_tot` non-negative, as the
-# positivity limiter requires.
+# Vertical water transport by `w` (explicit): mass flux times a monotone
+# (Lin-van Leer) face `q_tot`, keeping element means of `ρq_tot` non-negative.
 const ᶠmonotone_product = Operators.LinVanLeerC2F(
     constraint = Operators.MonotoneLocalExtrema(),
 )
-function dg_vertical_water_tendency!(Yₜ, Y, p)
+function dg_vertical_water_tendency!(Yₜ, Y, p, ᶠw)
     ᶜρ = Y.c.ρ
     @. Yₜ.c.ρq_tot -= ᶜdivᵥ(
-        ᶠinterp(ᶜρ) * ᶠmonotone_product(Y.f.w, Y.c.ρq_tot / ᶜρ, p.dt),
+        ᶠinterp(ᶜρ) * ᶠmonotone_product(ᶠw, Y.c.ρq_tot / ᶜρ, p.dt),
     )
     return Yₜ
 end
 
-# Vector-invariant `w` equation with a face lift completing `curlₕ(ᶠw)`.
-# Shared by both DG forms; `ᶜuₕ` may be in either basis.
+# Explicit `ρw` advection, `-∇ᵥ·(ρw w) - ∇ₕ·(uₕ ρw)`; zero at the boundaries.
+function dg_vertical_momentum_tendency!(Yₜ, Y, p, ᶠw)
+    ᶠρw = Y.f.ρw
+    (; ᶜuₕ, ᶠuₕ, ᶠρw_value, ᶠλ, ᶠdYt_ρw, ᶠρw_completion) = p
+    @. Yₜ.f.ρw -= C3(
+        ᶠdivᵥ_tensor(ᶜinterp(Geometry.WVector(ᶠρw) ⊗ Geometry.WVector(ᶠw))),
+    )
+    @. ᶠuₕ = ᶠinterp(ᶜuₕ)
+    @. ᶠρw_value = vertical_component(Geometry.WVector(ᶠρw))
+    @. ᶠλ = norm(ᶠuₕ)
+    @. ᶠdYt_ρw = -wdivₕ(ᶠuₕ * ᶠρw_value)
+    Operators.complete_tendency!(ᶠρw_completion, ᶠdYt_ρw, ᶠρw_value, ᶠuₕ, ᶠλ)
+    @. Yₜ.f.ρw += C3(Geometry.WVector(ᶠdYt_ρw))
+    @. Yₜ.f.ρw = ᶠno_momentum_flux(Yₜ.f.ρw)
+    return Yₜ
+end
+
+const ᶠdivᵥ_tensor = Operators.DivergenceC2F(
+    bottom = Operators.SetDivergence(Geometry.WVector(FT(0))),
+    top = Operators.SetDivergence(Geometry.WVector(FT(0))),
+)
+const ᶠno_momentum_flux = Operators.SetBoundaryOperator(
+    bottom = Operators.SetValue(C3(FT(0))),
+    top = Operators.SetValue(C3(FT(0))),
+)
+
+@inline vertical_component(w) = w.components.data.:1
+
+# Vector-invariant `w` equation (DG vector-invariant form).
 function dg_w_tendency!(Yₜ, Y, p, ᶜuₕ)
     ᶠw = Y.f.w
     (; ᶠω¹², ᶠu¹², ᶠwvec, ᶠwlift) = p
@@ -426,7 +459,7 @@ end
 function dg_horizontal_tendency!(::Nothing, Yₜ, Y, p, geometry, ᶜcoords)
     ᶜρ = Y.c.ρ
     ᶜρe = Y.c.ρe
-    (; ᶜp, ᶜu, ᶜuc, ᶜλ, ᶜT, ᶜTc, ᶜdivT, ᶜdYt) = p
+    (; ᶜp, ᶜu, ᶜu_cart, ᶜλ, ᶜT, ᶜT_cart, ᶜdivT, ᶜdYt) = p
     (; ᶜthermo_completion, ᶜmomentum_completion) = p
 
     @. ᶜdYt = -wdivₕ(dg_thermo_flux(ᶜρ, ᶜρe, ᶜu, ᶜp))
@@ -437,33 +470,32 @@ function dg_horizontal_tendency!(::Nothing, Yₜ, Y, p, geometry, ᶜcoords)
     @. ᶜT = dg_momentum_flux(ᶜρ, ᶜu, ᶜp)
     Operators.cartesian_tensor_divergence!(
         ᶜdivT,
-        ᶜTc,
+        ᶜT_cart,
         ᶜT,
         ᶜmomentum_completion,
         ᶜρ,
-        ᶜuc,
+        ᶜu_cart,
         ᶜλ,
     )
     @. Yₜ.c.ρuₕ -= Geometry.project(Geometry.UVAxis(), ᶜdivT)
     return Yₜ
 end
 
-# Flux differencing: one volume term and one interface flux over the whole
-# state, accumulated into a mass-weighted residual.
+# Flux differencing over the whole state, into a mass-weighted residual.
 function dg_horizontal_tendency!(volume2pt::V, Yₜ, Y, p, geometry, ᶜcoords) where {V}
-    (; ᶜp, ᶜu, ᶜuc, ᶜλ, ᶜfluxstate, ᶜresidual, numflux) = p
+    (; ᶜp, ᶜu, ᶜu_cart, ᶜλ, ᶜfluxstate, ᶜresidual, numflux) = p
     ᶜWJ = Fields.local_geometry_field(axes(Y.c)).WJ
 
     @. ᶜfluxstate.ρ = Y.c.ρ
     @. ᶜfluxstate.ρe = Y.c.ρe
-    @. ᶜfluxstate.e = Y.c.ρe / Y.c.ρ
+    @. ᶜfluxstate.e_tot = Y.c.ρe / Y.c.ρ
     @. ᶜfluxstate.p = ᶜp
     @. ᶜfluxstate.λ = ᶜλ
-    @. ᶜfluxstate.uv = Geometry.project(Geometry.UVAxis(), ᶜu)
-    @. ᶜfluxstate.u1 = ᶜuc.components.data.:1
-    @. ᶜfluxstate.u2 = ᶜuc.components.data.:2
-    @. ᶜfluxstate.u3 = ᶜuc.components.data.:3
-    has_moisture(Y.c) && (@. ᶜfluxstate.q = Y.c.ρq_tot / Y.c.ρ)
+    @. ᶜfluxstate.uₕ = Geometry.project(Geometry.UVAxis(), ᶜu)
+    @. ᶜfluxstate.u_x = ᶜu_cart.components.data.:1
+    @. ᶜfluxstate.u_y = ᶜu_cart.components.data.:2
+    @. ᶜfluxstate.u_z = ᶜu_cart.components.data.:3
+    has_moisture(Y.c) && (@. ᶜfluxstate.q_tot = Y.c.ρq_tot / Y.c.ρ)
 
     fill!(parent(ᶜresidual), zero(FT))
     Operators.add_flux_differencing_divergence!(
@@ -489,7 +521,7 @@ end
 dg_cartesian_momentum_tendency(r, WJ, geometry, coord) = Geometry.project(
     Geometry.UVAxis(),
     Geometry.LocalVector(
-        Geometry.UVWVector(r.ρu1, r.ρu2, r.ρu3) / WJ,
+        Geometry.UVWVector(r.ρu_x, r.ρu_y, r.ρu_z) / WJ,
         geometry,
         coord,
     ),

@@ -36,7 +36,8 @@ function ImplicitEquationJacobian(Y, flags = (;))
 
     ᶜρ_name = @name(c.ρ)
     ᶜ𝔼_name = @name(c.ρe)
-    ᶠ𝕄_name = @name(f.w)
+    is_flux_form = hasfield(eltype(Y.f), :ρw)
+    ᶠ𝕄_name = is_flux_form ? @name(f.ρw) : @name(f.w)
 
     BidiagonalRow_C3 = BidiagonalMatrixRow{C3{FT}}
     BidiagonalRow_ACT3 = BidiagonalMatrixRow{typeof(CT3(FT(0))')}
@@ -44,7 +45,8 @@ function ImplicitEquationJacobian(Y, flags = (;))
     TridiagonalRow_C3xACT3 =
         TridiagonalMatrixRow{typeof(C3(FT(0)) * CT3(FT(0))')}
     ∂ᶜ𝔼ₜ∂ᶠ𝕄_Row_ACT3 =
-        flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact && :ρe in propertynames(Y.c) ?
+        !is_flux_form && flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact &&
+        :ρe in propertynames(Y.c) ?
         QuaddiagonalRow_ACT3 : BidiagonalRow_ACT3
     ∂Yₜ∂Y = MatrixFields.FieldMatrix(
         (ᶜρ_name, ᶠ𝕄_name) => zeros(BidiagonalRow_ACT3, axes(Y.c)),

@@ -4,32 +4,15 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on either
-  horizontal discretization from one driver: `DISCRETIZATION=DG` runs
-  `examples/hybrid/driver.jl` on a discontinuous space, where the momentum
-  equation takes the flux form of the new `examples/hybrid/dg_tendency.jl` and
-  the element coupling is an interface numerical flux instead of a DSS. The two
-  forms share the driver, the spaces, the initial condition, the vertical
-  finite differences, the implicit split, the Jacobian and the diagnostics;
-  code common to both reaches the prognostic momentum through
-  `horizontal_momentum` / `horizontal_velocity`, so the choice lives in the
-  space. The CG configuration is unchanged.
-
-  `DG_FLUX` selects the DG horizontal assembly: `kg-roe` (default) and
-  `kg-rusanov` use `Operators.add_flux_differencing_divergence!` with the
-  Kennedy-Gruber two-point volume flux and a Roe or Rusanov interface flux,
-  while `rusanov` uses the weak-form volume divergence with a Rusanov
-  interface flux. All carry the momentum in the global Cartesian basis.
-
-  `MOMENTUM_FORM=vector_invariant` runs the vector-invariant velocity equation
-  on the DG space instead (`examples/hybrid/dg_vector_invariant_tendency.jl`),
-  with its weak-form derivatives completed by `Operators.complete_tendency!`
-  (central fluxes and a velocity-jump penalty). The new `sphere/moist_baroclinic_wave_rhoe` case adds total water
-  `ρq_tot` and 0-moment microphysics to the DG flux form; it runs from a new
-  `examples` environment that carries Thermodynamics.jl and
-  CloudMicrophysics.jl, which ClimaCore does not depend on, and keeps water
-  positive with the Zhang-Shu `Limiters.PositivityLimiter`, applied at every
-  stage through the driver's new `stage_limiter` hook.
+- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on CG or
+  DG from one driver (`DISCRETIZATION=DG`). The DG flux form
+  (`examples/hybrid/dg_tendency.jl`) carries `ρuₕ` and `ρw`, with
+  Kennedy-Gruber flux differencing and Roe or Rusanov interface fluxes
+  (`DG_FLUX`); `MOMENTUM_FORM=vector_invariant` runs the vector-invariant form
+  on DG instead, completed by `Operators.complete_tendency!`. A new
+  `sphere/moist_baroclinic_wave_rhoe` case adds total water, 0-moment
+  microphysics and the Zhang-Shu `Limiters.PositivityLimiter`; it runs from a
+  new `examples` environment carrying Thermodynamics.jl and CloudMicrophysics.jl.
 
 - ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` accepts
   `method = Remapping.LogLinearInPressure()` to interpolate linearly in log

@@ -101,9 +101,7 @@ function sphere_center_initial_condition(
     )
 end
 
-# The same flow in whichever momentum variable the form prognoses: covariant
-# velocity for the vector-invariant form, orthonormal momentum for the flux
-# one, whose interface flux is evaluated against an orthonormal face normal.
+# The flow in the form's momentum variable: covariant `uₕ` or orthonormal `ρuₕ`.
 function initial_state(
     ::VectorInvariantForm,
     ᶜlocal_geometry,
@@ -125,13 +123,19 @@ center_velocity(Yc) = center_velocity(momentum_form(Yc), Yc)
 center_velocity(::VectorInvariantForm, Yc) = @. Geometry.UVVector(Yc.uₕ)
 center_velocity(::FluxForm, Yc) = @. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)
 
-# The specific kinetic energy of a saved state, `w` included. A state moved to
-# the CPU has separate copies of the center and face grids, so `w`, interpolated
-# from the faces, is put on the space of `Y.c` before the two are combined.
+# Center vertical velocity of a saved state, placed on the space of `Y.c` (a
+# state moved to the CPU has separate center and face grids).
+function center_vertical_velocity(Y)
+    ᶠm = vertical_momentum(Y.f)
+    ᶜm_values = Fields.field_values(@. Geometry.WVector(ᶜinterp(ᶠm)))
+    ᶜm = Fields.Field(ᶜm_values, axes(Y.c))
+    return momentum_form(Y.c) isa FluxForm ? (@. ᶜm / Y.c.ρ) : ᶜm
+end
+
+# The specific kinetic energy of a saved state, `w` included.
 function center_kinetic_energy(Y)
     ᶜuₕ = center_velocity(Y.c)
-    ᶜw_values = Fields.field_values(@. Geometry.WVector(ᶜinterp(Y.f.w)))
-    ᶜw = Fields.Field(ᶜw_values, axes(Y.c))
+    ᶜw = center_vertical_velocity(Y)
     return @. (norm_sqr(ᶜuₕ) + norm_sqr(ᶜw)) / 2
 end
 
@@ -142,8 +146,7 @@ function center_temperature(Y)
     return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
 end
 
-# An animation of `temperature(Y)` on one level, on a color scale fixed over
-# all frames.
+# Animation of `temperature(Y)` on one level, on a fixed color scale.
 function temperature_animation(sol, output_dir, temperature; level = 1)
     ᶜTs = map(temperature, sol.u)
     T_min = minimum(T -> minimum(Fields.level(T, level)), ᶜTs)
@@ -154,10 +157,12 @@ function temperature_animation(sol, output_dir, temperature; level = 1)
     Plots.mp4(anim, joinpath(output_dir, "T.mp4"), fps = 5)
 end
 
+# At rest in the vertical (`w` or `ρw`).
 function face_initial_condition(local_geometry)
     (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
-    return NamedTuple{(:w,)}.(tuple.(w))
+    name = momentum_form_name == "flux" ? :ρw : :w
+    return NamedTuple{(name,)}.(tuple.(w))
 end
 
 ##
@@ -180,5 +185,7 @@ function rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     ᶜmₜ = horizontal_momentum(Yₜ.c)
     ᶜm = horizontal_momentum(Y.c)
     @. ᶜmₜ -= ᶜβ * ᶜm
-    @. Yₜ.f.w -= ᶠβ * Y.f.w
+    ᶠmₜ = vertical_momentum(Yₜ.f)
+    ᶠm = vertical_momentum(Y.f)
+    @. ᶠmₜ -= ᶠβ * ᶠm
 end

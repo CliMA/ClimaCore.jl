@@ -63,9 +63,7 @@ const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../common_spaces.jl")
 
-# The Galerkin form of the horizontal space. It reaches the case files through
-# the space alone: the tendency, the initial condition and the diagnostics all
-# dispatch on `Spaces.discretization`, so nothing else here has to branch.
+# The Galerkin form of the horizontal space.
 const discretization_name = get(ENV, "DISCRETIZATION", "CG")
 const discretization = if discretization_name == "CG"
     Grids.CG()
@@ -76,9 +74,8 @@ else
            $(repr(discretization_name))")
 end
 
-# The form of the horizontal momentum equation, which the initial condition
-# fixes by its prognostic variable: `vector_invariant` carries velocity `uₕ`,
-# `flux` carries momentum `ρuₕ` and needs a DG space.
+# The momentum form, fixed by the initial state's variables: `vector_invariant`
+# (`uₕ`, `w`) or `flux` (`ρuₕ`, `ρw`; DG only).
 const momentum_form_name = get(
     ENV,
     "MOMENTUM_FORM",
@@ -204,8 +201,7 @@ problem = CTS.ODEProblem(
             implicit_tendency!;
             jac_kwargs(ode_algo, Y, jacobian_flags)...,
         ),
-        # ClimaTimeSteppers calls `lim!` only for a tendency passed as `T_lim!`,
-        # which it otherwise treats exactly as `T_exp!`.
+        # `lim!` is only called for a tendency passed as `T_lim!`.
         (
             isnothing(stage_limiter) ? (; T_exp! = remaining_tendency!) :
             (; T_lim! = remaining_tendency!, lim! = stage_limiter)
@@ -288,8 +284,7 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
 end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
-    # `postprocessing` reduces and plots the saved states, which indexes them
-    # elementwise, so it gets them on the CPU (a no-op copy on a CPU run).
+    # Postprocessing indexes the saved states, so it gets them on the CPU.
     sol = CTS.ODESolution(sol.t, ClimaCore.to_cpu.(sol.u), sol.prob, sol.alg)
     ENV["GKSwstype"] = "nul" # avoid displaying plots
     # TODO: split `postprocessing` into an assertion hook and a plotting hook,

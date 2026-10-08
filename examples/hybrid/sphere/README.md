@@ -37,35 +37,22 @@ Environment variables read by the driver:
 * `OUTPUT_DIR`: where JLD2 output is written.
 * `RESTART_FILE`: a JLD2 file from a previous run to restart from.
 * `FLOAT_TYPE`: `Float32` (default) or `Float64`.
-* `DISCRETIZATION`: `CG` (default) or `DG`, the horizontal Galerkin form.
-  `DG` runs `sphere/baroclinic_wave_rhoe` with the flux-form momentum
-  equation of `examples/hybrid/dg_tendency.jl` and an interface numerical flux
-  in place of the DSS, and without hyperdiffusion — over a shorter run than
-  the CG one, for the reason the case file gives. Output goes to a
-  `_dg`-suffixed directory.
-* `DG_FLUX`: the DG horizontal assembly — `kg-roe` (default), `kg-rusanov`
-  (Kennedy-Gruber flux differencing with a Roe or Rusanov interface flux), or
-  `rusanov` (weak-form volume divergence with a Rusanov interface flux). See
-  `examples/hybrid/dg_tendency.jl`.
-* `MOMENTUM_FORM`: `flux` (default on DG) or `vector_invariant` (the only
-  form on CG). `DISCRETIZATION=DG MOMENTUM_FORM=vector_invariant` keeps the
-  velocity equation of the CG form on a DG space, its weak-form derivatives
-  completed by `Operators.complete_tendency!` with central fluxes and a
-  velocity-jump penalty (`examples/hybrid/dg_vector_invariant_tendency.jl`);
-  output goes to a `_dg_vi`-suffixed directory.
-* `T_END`, `DT`, `ODE_ALGORITHM`: override the baroclinic waves' run length,
-  timestep and ClimaTimeSteppers scheme (`SSP333`, IMEX, by default; an
-  explicit scheme such as `SSP33ShuOsher` needs a timestep of a few seconds).
+* `DISCRETIZATION`: `CG` (default) or `DG` (interface numerical fluxes, no
+  hyperdiffusion; output in a `_dg`-suffixed directory).
+* `DG_FLUX`: `kg-roe` (default), `kg-rusanov` (Kennedy-Gruber flux
+  differencing with a Roe or Rusanov interface flux) or `rusanov` (weak form).
+* `MOMENTUM_FORM`: on DG, `flux` (default; `ρuₕ`, `ρw`, `dg_tendency.jl`) or
+  `vector_invariant` (`uₕ`, `w`, `dg_vector_invariant_tendency.jl`; output in
+  a `_dg_vi`-suffixed directory).
+* `H_ELEM`, `Z_ELEM`, `T_END`, `DT`, `ODE_ALGORITHM`: resolution, run length,
+  timestep and scheme of the baroclinic waves (`SSP333` by default).
 
 ## Moist baroclinic wave
 
-`sphere/moist_baroclinic_wave_rhoe` adds total water and 0-moment
-microphysics to the DG flux form. It needs Thermodynamics.jl and
-CloudMicrophysics.jl, which ClimaCore does not depend on, so it runs from the
-examples environment. The Zhang-Shu positivity limiter
-(`Limiters.PositivityLimiter`) keeps `q_tot`, density and pressure positive at
-every stage; `POSITIVITY_LIMITER=0` turns it off, and `ZS_RHO_MIN` and
-`ZS_P_MIN` set its floors.
+`sphere/moist_baroclinic_wave_rhoe` adds total water, 0-moment microphysics
+and a Zhang-Shu positivity limiter (`POSITIVITY_LIMITER=0` turns it off) to the
+DG flux form. It needs Thermodynamics.jl and CloudMicrophysics.jl, so it runs
+from the examples environment:
 
 ```bash
 julia --project=examples -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
@@ -73,10 +60,8 @@ TEST_NAME=sphere/moist_baroclinic_wave_rhoe DISCRETIZATION=DG \
     julia --project=examples examples/hybrid/driver.jl
 ```
 
-Resolution, timestep, and output frequency are set in the case file itself
-(e.g. `sphere/baroclinic_wave_rhoe.jl`); `dt_save_to_disk = FT(0)` disables
-JLD2 output. The baroclinic wave picks its timestep from `DISCRETIZATION`,
-the DG form needing a smaller one for its explicit horizontal terms.
+Defaults are set in the case files; `dt_save_to_disk = FT(0)` disables JLD2
+output.
 
 ## Remapping output to a lat/lon grid
 
