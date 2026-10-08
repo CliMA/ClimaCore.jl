@@ -13,7 +13,12 @@ main
   from the compiled loop. `Field`s get their own `materialize!` for
   `FieldStyle` expressions, which does the style combination, instantiation
   and masked copy in one layer instead of four; each layer is re-optimized
-  with the whole loop inlined.
+  with the whole loop inlined. It and the `DataLayouts` loop entry points are
+  excluded from constant propagation, which otherwise inferred them a second
+  time. On a 17-argument turbulent-flux-like kernel
+  (`perf/land_like_broadcast_compile.jl`) the compile time per distinct
+  expression goes from 0.74 s to 0.37 s (inference from 0.58 s to 0.23 s, 724
+  to 434 method instances).
 
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of

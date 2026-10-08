@@ -17,7 +17,7 @@ import ..Spaces: get_mask, set_mask!
 import ..Geometry: Geometry
 import ..Utilities: PlusHalf, half, safe_eltype, unsafe_eltype
 import ..Utilities: recursive_bottom_eltype, @drop_recursion_limits
-import ..Utilities: drop_auto_broadcasters, auto_broadcasted
+import ..Utilities: drop_auto_broadcasters, auto_broadcasted, @drop_constprop
 import ..Utilities: add_auto_broadcasters, is_auto_broadcastable
 using UnrolledUtilities
 using ClimaComms
@@ -785,5 +785,10 @@ end
 
 set_mask!(space::Spaces.AbstractSpace, field::Field) =
     set_mask!(Spaces.horizontal_space(space), field_values(field))
+
+# The Field entry point of broadcasting is re-optimized with the whole loop inlined;
+# keep it from being inferred a second time with constant arguments (see the
+# compilation-time note in DataLayouts/loops.jl).
+@drop_constprop Base.Broadcast.materialize!
 
 end # module
