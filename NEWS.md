@@ -10,7 +10,10 @@ main
   view of every argument, which was the costliest part of compiling it. It
   evaluates the expression with `_broadcast_getindex` rather than `getindex`,
   whose bounds check was inferred for every expression although it is elided
-  from the compiled loop.
+  from the compiled loop. `Field`s get their own `materialize!` for
+  `FieldStyle` expressions, which does the style combination, instantiation
+  and masked copy in one layer instead of four; each layer is re-optimized
+  with the whole loop inlined.
 
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of

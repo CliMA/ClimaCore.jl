@@ -250,6 +250,29 @@ Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
     return dest
 end
 
+# Base's materialize! goes through two methods (one to combine the styles, one to
+# instantiate the expression) before reaching the Field copyto! and then the
+# DataLayout copyto!; each of these is re-optimized with the whole loop inlined
+# (see the compilation-time note in DataLayouts/loops.jl). This method does the
+# same work in one layer. It only applies to pointwise expressions (FieldStyle):
+# operator expressions have the other AbstractFieldStyles and their own copyto!
+# methods, which Base's materialize! dispatches to.
+@inline function Base.Broadcast.materialize!(
+    dest::Field,
+    bc::Base.Broadcast.Broadcasted{<:FieldStyle},
+)
+    style = Base.Broadcast.combine_styles(dest, bc)
+    bc_with_axes = Base.Broadcast.instantiate(
+        Base.Broadcast.Broadcasted{typeof(style)}(bc.f, bc.args, axes(dest)),
+    )
+    DataLayouts.pointwise_copyto!(
+        field_values(dest),
+        Base.Broadcast.instantiate(field_values(bc_with_axes)),
+        get_mask(axes(dest)),
+    )
+    return dest
+end
+
 # Fused multi-broadcast entry point for Fields. The mask argument must be
 # constrained to DataMask because an unconstrained second argument makes this
 # ambiguous with copyto! methods that only constrain their second arguments,
