@@ -560,8 +560,14 @@ end
 
 # Body of the pointwise copyto! loop (see IndexOnly): the single argument is the
 # tuple broadcast of the destination and the source, whose size check lets the
-# source have singleton dimensions that the destination does not.
+# source have singleton dimensions that the destination does not. A broadcast
+# expression is evaluated with _broadcast_getindex rather than getindex: the
+# loop's indices are in bounds by construction, and getindex's bounds check,
+# although elided from the compiled loop, would still be inferred for every
+# distinct expression.
 @inline point_value(arg, index) = @inbounds arg[index]
+@inline point_value(bc::LazyDataLayout, index) =
+    @inbounds Broadcast._broadcast_getindex(bc, index)
 @inline function copy_index!(index, dest_and_arg)
     @inbounds (dest, arg) = dest_and_arg.args
     @inbounds dest[index] = point_value(arg, index)
