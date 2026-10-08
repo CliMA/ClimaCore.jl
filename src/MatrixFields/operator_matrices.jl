@@ -511,6 +511,13 @@ When `op` is such an operator, `operator_matrix(op)` throws an error.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
 operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)
+# The matrix of a DirichletOperator is the matrix of the underlying operator
+# holding the Dirichlet values as SetValue boundary conditions
+operator_matrix(op::Operators.DirichletOperator{<:OneArgFDOperator}) =
+    LazyOneArgFDOperatorMatrix(Operators.setvalue_operator(op))
+operator_matrix(
+    op::Operators.DirichletOperator{Operators.UpwindBiasedProductC2F},
+) = FDOperatorMatrix(Operators.setvalue_operator(op))
 operator_matrix(op::Operators.AdvectionOperator) =
     Operators.has_linear_stencil(op) ? FDOperatorMatrix(op) :
     error(
@@ -680,6 +687,14 @@ const ValueFixingBoundaryCondition = Union{
 # genuine boundary stencil in the matrix (see `modifies_input`).
 const InputFixingFDOperator =
     Union{Operators.GradientF2C, Operators.DivergenceF2C}
+# The center-to-face operators whose SetValue prescribes the argument's value at
+# the boundary face itself (through a `DirichletOperator`; the matrix is given
+# the operator holding the SetValue by `Operators.setvalue_operator`). Their
+# boundary output is linear in the adjacent interior input plus a constant, so
+# the row is again a genuine boundary stencil: the linear part of the Dirichlet
+# stencil.
+const DirichletRowFDOperator =
+    Union{InputFixingFDOperator, Operators.DirichletC2FOperator}
 
 Base.@propagate_inbounds Operators.stencil_left_boundary(
     op_matrix::FDOperatorMatrix,
@@ -699,14 +714,16 @@ Base.@propagate_inbounds Operators.stencil_right_boundary(
     args...,
 ) = zero(Operators.return_eltype(op_matrix, args...))
 
-# GradientF2C/DivergenceF2C with a SetValue are the exception (as with
-# `modifies_input`): the condition fixes an input value, and the near-boundary output
-# still depends linearly on the adjacent interior input, so the row is the genuine
-# boundary stencil (with the fixed input's coefficient dropped) rather than zero. The
-# last of `args` is the local geometry field that `op_matrix` was given, which the
-# underlying operator's row functions do not take.
+# The DirichletRowFDOperators with a SetValue are the exception: the condition
+# fixes an input value (GradientF2C/DivergenceF2C, as with `modifies_input`) or the
+# argument's value at the boundary face (the DirichletC2FOperators), and the
+# boundary output still depends linearly on the adjacent interior input, so the row
+# is the genuine boundary stencil
+# rather than zero. The last of `args` is the local geometry field that `op_matrix`
+# was given, which the underlying operator's row functions do not take. Only a value of zero
+# can be fixed on the boundary for these operators.
 Base.@propagate_inbounds function Operators.stencil_left_boundary(
-    op_matrix::FDOperatorMatrix{<:InputFixingFDOperator},
+    op_matrix::FDOperatorMatrix{<:DirichletRowFDOperator},
     bc::Operators.SetValue,
     space,
     idx,
@@ -725,7 +742,7 @@ Base.@propagate_inbounds function Operators.stencil_left_boundary(
 end
 # Mirror of stencil_left_boundary above, for the right boundary.
 Base.@propagate_inbounds function Operators.stencil_right_boundary(
-    op_matrix::FDOperatorMatrix{<:InputFixingFDOperator},
+    op_matrix::FDOperatorMatrix{<:DirichletRowFDOperator},
     bc::Operators.SetValue,
     space,
     idx,
@@ -924,6 +941,32 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     av³ = CT3(abs(v³.u³))
     return BidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
+# With a SetValue (see `DirichletRowFDOperator`), the ghost point is the
+# prescribed value, so only the in-range point's upwind coefficient remains.
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.UpwindBiasedProductC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    return BidiagonalMatrixRow(zero(v³), v³ - av³) / 2
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.UpwindBiasedProductC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+    velocity,
+)
+    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    av³ = CT3(abs(v³.u³))
+    return BidiagonalMatrixRow(v³ + av³, zero(v³)) / 2
+end
 
 op_matrix_row_type(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
@@ -1118,6 +1161,18 @@ op_matrix_last_row(
     ::Operators.SetValue,
     ::Type{FT},
 ) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
+# G(x)[1/2] = 2 (x[1] - x₀) e³ and G(x)[n+1/2] = 2 (x₀ - x[n]) e³ (see
+# `DirichletRowFDOperator`).
+op_matrix_first_row(
+    ::Operators.GradientC2F,
+    ::Operators.SetValue,
+    ::Type{FT},
+) where {FT} = BidiagonalMatrixRow(C3(FT(0)), C3(FT(2)))
+op_matrix_last_row(
+    ::Operators.GradientC2F,
+    ::Operators.SetValue,
+    ::Type{FT},
+) where {FT} = BidiagonalMatrixRow(-C3(FT(2)), C3(FT(0)))
 
 op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
     extrapolate_row_type(op, BidiagonalMatrixRow{C3Cov{FT}})
@@ -1156,6 +1211,32 @@ Base.@propagate_inbounds function op_matrix_last_row(
     J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
 end
+# D(v)[1/2] = 2 (Jv³[1] - Jv³₀) / J[1/2] and D(v)[n+1/2] = 2 (Jv³₀ - Jv³[n]) /
+# J[n+1/2] (see `DirichletRowFDOperator`).
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.DivergenceC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
+    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * 2invJ
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.DivergenceC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    FT = Spaces.undertype(space)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
+    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * 2invJ
+end
 
 op_matrix_row_type(
     ::Operators.CurlFiniteDifferenceOperator,
@@ -1169,4 +1250,26 @@ Base.@propagate_inbounds function op_matrix_interior_row(
 )
     invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
+end
+# C(u)[1/2] = 2 εⁱʲ (u[1] - u₀) / J[1/2] and C(u)[n+1/2] = 2 εⁱʲ (u₀ - u[n]) /
+# J[n+1/2] (see `DirichletRowFDOperator`).
+Base.@propagate_inbounds function op_matrix_first_row(
+    ::Operators.CurlC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    return BidiagonalMatrixRow(zero(εⁱʲ), εⁱʲ) * 2invJ
+end
+Base.@propagate_inbounds function op_matrix_last_row(
+    ::Operators.CurlC2F,
+    ::Operators.SetValue,
+    space,
+    idx,
+    hidx,
+)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    return BidiagonalMatrixRow(-εⁱʲ, zero(εⁱʲ)) * 2invJ
 end
