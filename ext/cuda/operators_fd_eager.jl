@@ -1,12 +1,11 @@
 import ClimaCore: Spaces, Quadratures, Topologies, Operators
 import Base.Broadcast: Broadcasted
-import ClimaCore.Fields: Field, field_values, AbstractFieldStyle
+import ClimaCore.Fields: Field, LazyField, field_values, AbstractFieldStyle
 import ClimaComms
 import ClimaCore.Utilities: half, new, unsafe_eltype
 import ClimaCore.Operators
 import ClimaCore.Geometry: project
-import ClimaCore.Operators:
-    StencilBroadcasted, setidx!, getidx
+import ClimaCore.Operators: StencilBroadcasted, setidx!, getidx
 import ClimaCore.MatrixFields: FaceToCenter, CenterToFace, CenterToCenter,
     FaceToFace, FDOperatorMatrix, MultiplyColumnwiseBandMatrixField,
     op_matrix_row_type, BandMatrixRow, band_matrix_d
@@ -40,21 +39,18 @@ non-concrete type; see `cached_operand_type`), in which case the caller must fal
 to the lazy `copyto_stencil_kernel!` instead of launching the eager kernel.
 """
 max_eager_shmem_per_thread(x) = 0
-max_eager_shmem_per_thread(bc::Union{Broadcasted, StencilBroadcasted}) =
+max_eager_shmem_per_thread(bc::LazyField) =
     _max_eager_shmem_over_args(bc.args)
-max_eager_shmem_per_thread(
-    bc::StencilBroadcasted{S, <:MultiplyColumnwiseBandMatrixField},
-) where {S} =
+max_eager_shmem_per_thread(bc::StencilBroadcasted{<:MultiplyColumnwiseBandMatrixField}) =
     _shmem_max(
         _sizeof_or_nothing(cached_operand_type(bc)),
         _max_eager_shmem_over_args(bc.args),
     )
-max_eager_shmem_per_thread(
-    bc::StencilBroadcasted{S, <:Operators.AdvectionOperator},
-) where {S} = _shmem_max(
-    _sizeof_or_nothing(advection_shmem_entry_type(bc)),
-    _max_eager_shmem_over_args(bc.args),
-)
+max_eager_shmem_per_thread(bc::StencilBroadcasted{<:Operators.AdvectionOperator}) =
+    _shmem_max(
+        _sizeof_or_nothing(advection_shmem_entry_type(bc)),
+        _max_eager_shmem_over_args(bc.args),
+    )
 
 _max_eager_shmem_over_args(args::Tuple) = UnrolledUtilities.unrolled_mapreduce(
     max_eager_shmem_per_thread,
@@ -170,9 +166,9 @@ compile-time constant.
 """
     eager_copyto_stencil_kernel!(out, bc::BC, mask)
 
-Compute the value of the `Broadcasted` or `StencilBroadcasted` expression `bc` at the
-current thread's index and copy it into `out`; this is the CUDA kernel of the eager
-finite-difference path. The value is computed by `calc_level_val(bc, hidx)`.
+Compute the value of the `LazyField` `bc` at the current thread's index and copy
+it into `out`; this is the CUDA kernel of the eager finite-difference path. The
+value is computed by `calc_level_val(bc, hidx)`.
 """
 Base.@propagate_inbounds function eager_copyto_stencil_kernel!(out, bc′, mask)
     bc = toggle_placeholder_grid(bc′, axes(out))
@@ -242,21 +238,21 @@ end
 """
     calc_level_val(val::T, hidx)
 
-If `val` is not a `Broadcasted`, `StencilBroadcasted`, or `Field`, return `val`. If it
-is a `Ref`, return `val[]`. If it is a one-element tuple, return the element.
+If `val` is not a `Field` or `LazyField`, return `val`. If it is a `Ref`, return
+`val[]`. If it is a one-element tuple, return the element.
 """
 Base.@propagate_inbounds calc_level_val(val::Ref, hidx) = val[]
 Base.@propagate_inbounds calc_level_val(val::Tuple{<:Any}, hidx) = first(val)
 Base.@propagate_inbounds calc_level_val(val, hidx) = val
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <:MultiplyColumnwiseBandMatrixField}, hidx)
+    calc_level_val(bc::StencilBroadcasted{<:MultiplyColumnwiseBandMatrixField}, hidx)
 
 Call `calc_level_val` on both args of `bc`, place the result of the second arg into shared memory,
 and then perform the multiplication.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::StencilBroadcasted{<:Any, <:MultiplyColumnwiseBandMatrixField},
+    bc::StencilBroadcasted{<:MultiplyColumnwiseBandMatrixField},
     hidx,
 )
     # The launch configuration sizes the dynamic shared memory to fit the largest single
@@ -336,7 +332,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <:SetBoundaryOperator}, hidx)
+    calc_level_val(bc::StencilBroadcasted{<:SetBoundaryOperator}, hidx)
 
 Compute the value of a `SetBoundaryOperator` at the current thread's level. The operator
 modifies only the two boundary levels of the space it is applied to and is the identity
@@ -345,14 +341,14 @@ in the interior: at the boundaries the value comes from `stencil_left_boundary` 
 interior the eagerly computed value of the argument is reused.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::StencilBroadcasted{<:Any, <:Operators.SetBoundaryOperator},
+    bc::StencilBroadcasted{<:Operators.SetBoundaryOperator},
     hidx,
 )
     op = bc.op
     space = axes(bc)
     v = threadIdx().x
     val_no_bcs = @inline @inbounds calc_level_val(bc.args[1i32], hidx)
-    # A `SetBoundaryOperator` is space-preserving (`return_space(op, space) = space`), so
+    # A `SetBoundaryOperator` is space-preserving (`return_space(op, arg) = axes(arg)`), so
     # this method is compiled for both staggerings: the automatic conversion puts one on a
     # face output (InterpolateC2F + SetValue), on a center output (DivergenceF2C +
     # SetDivergence), and on a face input (GradientF2C + SetValue). Deriving `idx` from
@@ -388,7 +384,7 @@ Base.@propagate_inbounds function calc_level_val(
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <:AdvectionOperator}, hidx)
+    calc_level_val(bc::StencilBroadcasted{<:AdvectionOperator}, hidx)
 
 Compute the value of an `AdvectionOperator` at the current thread's face level. Each
 thread computes the velocity (converted to its contravariant3 component) and the
@@ -406,7 +402,7 @@ whose garbage entry is cached but never read because the window indices are clam
 the center range (or wrapped, on periodic spaces) exactly like `stencil_interior`'s.
 """
 Base.@propagate_inbounds function calc_level_val(
-    bc::StencilBroadcasted{<:Any, <:Operators.AdvectionOperator},
+    bc::StencilBroadcasted{<:Operators.AdvectionOperator},
     hidx,
 )
     op = bc.op
@@ -603,14 +599,12 @@ Base.@propagate_inbounds function calc_level_val(arg::Field, hidx)
 end
 
 """
-    calc_level_val(bc::StencilBroadcasted{<:Any, <:FDOperatorMatrix}, hidx)
+    calc_level_val(bc::StencilBroadcasted{<:FDOperatorMatrix}, hidx)
 
 Return the row of the operator matrix for the current thread's level.
 """
-Base.@propagate_inbounds calc_level_val(
-    bc::StencilBroadcasted{<:Any, <:FDOperatorMatrix},
-    hidx,
-) = get_op_row(bc.op, bc.args, hidx, axes(bc))
+Base.@propagate_inbounds calc_level_val(bc::StencilBroadcasted{<:FDOperatorMatrix}, hidx) =
+    get_op_row(bc.op, bc.args, hidx, axes(bc))
 
 """
     get_op_row(op_matrix, args, hidx, space)

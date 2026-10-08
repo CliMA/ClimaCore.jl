@@ -6,9 +6,6 @@ Abstract supertype of the broadcast styles of `Field`s. Subtypes: `FieldStyle` a
 """
 abstract type AbstractFieldStyle <: Base.BroadcastStyle end
 
-const LazyField{S <: AbstractFieldStyle} = Base.Broadcast.Broadcasted{S}
-const MaybeLazyField = Union{Field, LazyField}
-
 """
     FieldStyle{DS <: DataStyle}
 
@@ -55,6 +52,10 @@ Base.Broadcast.result_join(
     ::Base.Broadcast.Unknown,
 ) = FieldConflict()
 
+const LazyField{S <: AbstractFieldStyle} = Base.Broadcast.Broadcasted{S}
+const PointwiseBroadcasted{DS <: DataStyle} = LazyField{FieldStyle{DS}}
+const MaybeLazyField = Union{Field, LazyField}
+
 # Override the recursive unrolling used in combine_styles (which can lead to
 # inference failures in broadcast expressions with more than 10 arguments) with
 # manual unrolling (which can have higher latency but is always inferrable).
@@ -87,7 +88,7 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
 @inline check_broadcast_space(_, _, _) = nothing
 @inline check_broadcast_space(space, field::Field, ::Val{true}) =
     Base.Broadcast.check_broadcast_axes(
-        axes(Fields.local_geometry_field(space)),
+        axes(Fields.field_values(Fields.local_geometry_field(space))),
         Fields.field_values(field),
     )
 @inline check_broadcast_space(space, field::Field, ::Val{false}) =
@@ -139,18 +140,24 @@ Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)
 Base.copy(bc::LazyField) = copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
 
 field_values(bc::Broadcast.Broadcasted) = bc
-@inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
+field_values(bc::LazyField{S}) where {S} =
+    throw(ArgumentError("field_values does not support $S broadcast expressions"))
+@inline field_values(bc::PointwiseBroadcasted{DS}) where {DS} =
     Broadcast.Broadcasted{DS}(
         bc.f,
         unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args),
     )
 
-# Forward size primitives from Base and DataLayouts to the field_values.
+# Forward size primitives from Base and DataLayouts to the field_values when
+# possible, or use a representative field from the space otherwise.
 for f in (:size, :length, :ndims)
-    @eval Base.$f(arg::MaybeLazyField) = $f(field_values(arg))
+    @eval Base.$f(arg::Union{Field, PointwiseBroadcasted}) = $f(field_values(arg))
+    @eval Base.$f(bc::LazyField) = $f(local_geometry_field(axes(bc)))
 end
 for f in (:shape_params, :inferred_size, :nelems)
-    @eval DataLayouts.$f(arg::MaybeLazyField) = DataLayouts.$f(field_values(arg))
+    @eval DataLayouts.$f(arg::Union{Field, PointwiseBroadcasted}) =
+        DataLayouts.$f(field_values(arg))
+    @eval DataLayouts.$f(bc::LazyField) = DataLayouts.$f(local_geometry_field(axes(bc)))
 end
 
 @inline has_field_style(::T) where {T} =
@@ -230,12 +237,15 @@ Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
     eachindex(field_values(arg), unrolled_map(field_values, args)...)
 
-Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
+# Reassign materialized results to the broadcast's scope, since the space is
+# shared by all available threads, but the arguments can have narrower scopes.
+Base.similar(bc::LazyField, ::Type{T}) where {T} =
+    DataLayouts.reassign(Field(T, axes(bc)), DataLayouts.DataScope(bc))
 
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view
 # even when the broadcast's layout shape is static.
-Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
+Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the
