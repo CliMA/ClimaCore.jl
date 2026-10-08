@@ -44,14 +44,86 @@ end
 """
     read_type(ts::AbstractString)
 
-Parse a string `ts` into an expression, and then evaluate it into a type if it is a valid type expression.
+Parse a string `ts` into an expression, and then resolve it into a type if it is a valid type expression.
 """
 function read_type(ts::AbstractString)
     type_expr = Meta.parse(ts)
     if is_type_expr(type_expr)
-        return eval(type_expr)
+        return resolve_type_expr(type_expr)
     end
     error("$ts cannot be parsed into a valid type")
+end
+
+"""
+    resolve_type_expr(expr)
+
+Turn a validated type expression into the type it names, without `eval`.
+
+`eval` would evaluate into this module, which Julia rejects while a downstream package is
+being precompiled ("evaluation into the closed module `InputOutput`"), so reading any
+ClimaCore HDF5 file inside a `PrecompileTools.@compile_workload` would fail. Resolving the
+expression structurally only *reads* existing bindings, which is always legal, and avoids
+evaluating arbitrary expressions taken from file contents.
+
+The accepted grammar is exactly what [`is_type_expr`](@ref) admits.
+"""
+function resolve_type_expr end
+
+resolve_type_expr(s::Symbol) = resolve_type_name(s)
+resolve_type_expr(q::QuoteNode) = q.value
+resolve_type_expr(x) = x    # isbits type parameters: Int, Bool, Char, ...
+
+function resolve_type_expr(expr::Expr)
+    if expr.head === :.
+        return getproperty(resolve_type_expr(expr.args[1]), _name_of(expr.args[2]))
+    elseif expr.head === :curly
+        return Core.apply_type(map(resolve_type_expr, expr.args)...)
+    elseif expr.head === :tuple
+        return Tuple(map(resolve_type_expr, expr.args))
+    elseif expr.head === :macrocall && expr.args[1] == Symbol("@NamedTuple")
+        return resolve_named_tuple(expr.args[end])
+    end
+    error("cannot resolve type expression $expr")
+end
+
+_name_of(q::QuoteNode) = q.value
+_name_of(s::Symbol) = s
+
+"""
+    resolve_type_name(s::Symbol)
+
+Resolve a top-level name to its value by lookup only. `InputOutput` imports ClimaCore's
+submodules but not `ClimaCore` itself, so loaded packages are consulted by name.
+"""
+function resolve_type_name(s::Symbol)
+    isdefined(@__MODULE__, s) && return getglobal(@__MODULE__, s)
+    isdefined(Base, s) && return getglobal(Base, s)
+    isdefined(Core, s) && return getglobal(Core, s)
+    for (pkgid, mod) in Base.loaded_modules
+        pkgid.name == String(s) && return mod
+    end
+    error("cannot resolve name `$s` while reading a type")
+end
+
+"""
+Expand `@NamedTuple{a::T, b::U}` without invoking macro expansion.
+"""
+function resolve_named_tuple(body)
+    names = Symbol[]
+    types = Any[]
+    for arg in body.args
+        arg isa LineNumberNode && continue
+        if arg isa Symbol
+            push!(names, arg)
+            push!(types, Any)
+        elseif arg isa Expr && arg.head === Symbol("::") && length(arg.args) == 2
+            push!(names, arg.args[1]::Symbol)
+            push!(types, resolve_type_expr(arg.args[2]))
+        else
+            error("cannot resolve @NamedTuple field $arg")
+        end
+    end
+    return NamedTuple{Tuple(names), Tuple{types...}}
 end
 
 """
