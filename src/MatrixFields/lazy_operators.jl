@@ -13,6 +13,8 @@ abstract type AbstractLazyOperator end
 
 struct LazyOperatorStyle <: Base.Broadcast.BroadcastStyle end
 
+const LazyOperatorBroadcasted = Base.Broadcast.Broadcasted{LazyOperatorStyle}
+
 Base.Broadcast.broadcasted(op::AbstractLazyOperator) =
     Base.Broadcast.broadcasted(LazyOperatorStyle(), op)
 
@@ -27,12 +29,6 @@ Base.Broadcast.BroadcastStyle(
         LazyOperatorStyle,
     },
 ) = LazyOperatorStyle()
-
-struct LazyOperatorBroadcasted{F, A} <:
-       Operators.OperatorBroadcasted{LazyOperatorStyle}
-    f::F
-    args::A
-end
 
 # TODO: This definition of Base.Broadcast.broadcasted results in 2 additional
 # method invalidations when using Julia 1.8.5. However, if we were to delete it,
@@ -65,10 +61,10 @@ replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
 """
     replace_lazy_operator(space, lazy_op)
 
-Return an instance of `Base.AbstractBroadcasted` that corresponds to the
-expression `lazy_op.()`, where the broadcast in which this expression appears is
-evaluated on the given `space`. The staggering (`CellCenter` or `CellFace`) of
-this `space` depends on the specifics of the broadcast and is not predetermined.
+Return a `LazyField` that corresponds to the expression `lazy_op.()`, where the
+broadcast in which this expression appears is evaluated on the given `space`.
+The staggering (`CellCenter` or `CellFace`) of this `space` depends on the
+specifics of the broadcast and is not predetermined.
 """
 replace_lazy_operator(_, ::AbstractLazyOperator) =
     error("Every subtype of AbstractLazyOperator must implement a method for
@@ -76,7 +72,7 @@ replace_lazy_operator(_, ::AbstractLazyOperator) =
 
 largest_space(_) = nothing
 largest_space(field::Fields.Field) = axes(field)
-largest_space(bc::Base.AbstractBroadcasted) =
+largest_space(bc::Fields.LazyField) =
     unrolled_reduce(larger_space, unrolled_map(largest_space, bc.args); init = nothing)
 
 larger_space(::Nothing, ::Nothing) = nothing

@@ -1,5 +1,4 @@
-const ColumnIndexable =
-    Union{Field, FieldVector, Base.AbstractBroadcasted, Spaces.AbstractSpace}
+const ColumnIndexable = Union{MaybeLazyField, FieldVector, Spaces.AbstractSpace}
 Base.@propagate_inbounds Base.getindex(
     x::ColumnIndexable,
     colidx::ColumnIndex,

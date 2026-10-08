@@ -21,7 +21,6 @@ stencil_left_boundary
 stencil_right_boundary
 left_interior_idx
 right_interior_idx
-fd_shmem_is_supported
 ```
 
 ```@docs

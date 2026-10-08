@@ -843,8 +843,7 @@ end
                   matrix[@name(foo), @name(foo)]
         entry = matrix[@name(foo._value), @name(a.b)]
         @test_all entry isa (
-            is_scalar_test ? MatrixFields.ColumnwiseBandMatrixField :
-            Base.AbstractBroadcasted
+            is_scalar_test ? MatrixFields.ColumnwiseBandMatrixField : Fields.LazyField
         )
         entry = is_scalar_test ? entry : Base.materialize(entry)
         @test entry == map(
@@ -852,8 +851,7 @@ end
             matrix[@name(foo), @name(a.b)],
         )
 
-        @test_all matrix[@name(a.c), @name(foo._value)] isa
-                  Base.AbstractBroadcasted
+        @test_all matrix[@name(a.c), @name(foo._value)] isa Fields.LazyField
         @test Base.materialize(matrix[@name(a.c), @name(foo._value)]) == map(
             row -> map(a -> a.c, row),
             matrix[@name(a), @name(foo._value)],

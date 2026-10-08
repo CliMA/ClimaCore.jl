@@ -7,7 +7,6 @@ import ClimaCore.Operators
 import ClimaCore.Operators: AbstractStencilStyle
 import ClimaCore.Grids: toggle_placeholder_grid
 import ClimaCore.Operators: setidx!, getidx
-import ClimaCore.Operators: StencilBroadcasted
 
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 
@@ -21,10 +20,7 @@ include("operators_fd_eager.jl")
 
 function Base.copyto!(
     out::Field,
-    bc::Union{
-        StencilBroadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAColumnStencilStyle},
-    },
+    bc::LazyField{CUDAColumnStencilStyle},
     mask::DataLayouts.DataMask = Spaces.get_mask(axes(out)),
 )
     bounds = Operators.window_bounds(bc)
@@ -117,10 +113,7 @@ end
 
 function copyto_stencil_kernel!(
     out,
-    bc′::Union{
-        StencilBroadcasted{CUDAColumnStencilStyle},
-        Broadcasted{CUDAColumnStencilStyle},
-    },
+    bc′::LazyField{CUDAColumnStencilStyle},
     bds,
     mask,
     cart_inds,

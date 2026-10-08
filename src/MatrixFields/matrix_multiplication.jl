@@ -269,13 +269,12 @@ Operators.stencil_interior_width(
 ) = ((0, 0), outer_diagonals(eltype(matrix1)))
 
 function Operators.left_interior_idx(
-    space::Spaces.AbstractSpace,
     ::MultiplyColumnwiseBandMatrixField,
     ::TopLeftMatrixCorner,
     matrix1,
     arg,
 )
-    column_space1 = column_axes(matrix1, space)
+    column_space1 = column_axes(matrix1)
     li1 = Operators.left_idx(column_space1)
     ld1 = outer_diagonals(eltype(matrix1))[1]
     if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
@@ -290,13 +289,12 @@ function Operators.left_interior_idx(
 end
 
 function Operators.right_interior_idx(
-    space::Spaces.AbstractSpace,
     ::MultiplyColumnwiseBandMatrixField,
     ::BottomRightMatrixCorner,
     matrix1,
     arg,
 )
-    column_space1 = column_axes(matrix1, space)
+    column_space1 = column_axes(matrix1)
     ri1 = Operators.right_idx(column_space1)
     ud1 = outer_diagonals(eltype(matrix1))[2]
     if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
@@ -336,7 +334,7 @@ function Operators.return_eltype(
     end
 end
 
-Operators.return_space(::MultiplyColumnwiseBandMatrixField, space, _) = space
+Operators.return_space(::MultiplyColumnwiseBandMatrixField, arg, _) = axes(arg)
 
 # Compute max(li - i, ld) and min(ri - i, ud). Both corners clamp both ends of
 # the band: on columns too short for the interior stencil, the boundary windows
