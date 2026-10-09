@@ -8,6 +8,14 @@ main
   shared-memory allocations with `LLVM.Interop.@llvmgenerated`, which replaces
   the `create_function`/`call_function` helpers that LLVM.jl 10 removed; the
   generated code is unchanged.
+  
+- ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
+  simpler `PlaceholderGrid`, which only stands in for grids in the arguments of
+  GPU kernels launched from the host and is swapped out at the start of each
+  kernel, so CPU and device-side broadcasts no longer pay for it. This fixes GPU
+  compilation of some finite difference broadcasts (e.g., lazy `FCTZalesak`
+  stencils), and spectral element operators now accept broadcasts that combine
+  extruded fields with level fields (e.g., `@. gradh(field * level_field)`).
 
 - ![][badge-✨feature/enhancement] `Remapping.PressureInterpolator` accepts
   `method = Remapping.LogLinearInPressure()` to interpolate linearly in log

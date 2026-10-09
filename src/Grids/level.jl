@@ -8,7 +8,7 @@ weights, and global geometry of `full_grid`, and its local geometry is the
 corresponding level of the local geometry of `full_grid`.
 """
 struct LevelGrid{
-    G <: AbstractExtrudedFiniteDifferenceGrid,
+    G <: Union{AbstractExtrudedFiniteDifferenceGrid, PlaceholderGrid},
     L <: Union{Int, PlusHalf{Int}},
 } <: AbstractGrid
     full_grid::G

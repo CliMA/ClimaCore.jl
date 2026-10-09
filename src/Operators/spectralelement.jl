@@ -230,11 +230,11 @@ end
         axes,
     )
 
-# Apply size/scope primitives to an operator-free pointwise equivalent of bc.
+# Apply size primitives to an operator-free pointwise equivalent of bc.
 for f in (:size, :length, :ndims)
     @eval Base.$f(bc::SpectralBroadcasted) = $f(drop_operators(bc))
 end
-for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+for f in (:shape_params, :inferred_size, :nelems)
     @eval DataLayouts.$f(bc::SpectralBroadcasted) = DataLayouts.$f(drop_operators(bc))
 end
 
@@ -268,11 +268,9 @@ function Base.copyto!(
     bc::SpectralBroadcasted,
     mask::DataLayouts.DataMask = DataLayouts.NoMask(),
 )
-    bc_no_space = strip_space(bc, axes(dest)) # Drop copies of space before sending to GPU.
     # A mask cannot skip slabs: a slab is live whenever any of its columns is
     # active, and a spectral operator reads every point of its slab.
-    DataLayouts.foreach_slab(dest, bc_no_space) do dest_slab, bc_slab_no_space
-        bc_slab = unstrip_space(bc_slab_no_space, axes(dest_slab))
+    DataLayouts.foreach_slab(dest, bc) do dest_slab, bc_slab
         copyto_slab!(dest_slab, apply_operators(bc_slab))
     end
     call_post_op_callback() && post_op_callback(dest, dest, bc; mask)

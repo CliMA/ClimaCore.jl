@@ -20,11 +20,9 @@ NVTX.@annotate function multiple_field_solve!(
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
     _, Ni, Nj, Nh = size(Fields.field_values(x1))
-    sscache = Operators.strip_space(cache)
-    mask = Spaces.get_mask(axes(x1))
-    ssx = Operators.strip_space(x)
-    ssA = Operators.strip_space(A)
-    ssb = Operators.strip_space(b)
+    space = axes(x1)
+    mask = Spaces.get_mask(space)
+    (sscache, ssx, ssA, ssb) = Grids.toggle_placeholder_grid((cache, x, A, b), space)
     caches = map(name -> sscache[name], names)
     xs = map(name -> ssx[name], names)
     As = map(name -> ssA[name, name], names)
@@ -34,7 +32,7 @@ NVTX.@annotate function multiple_field_solve!(
 
     cart_inds =
         cartesian_indices_multiple_field_solve(Fields.field_values(x1); Nnames)
-    args = (device, caches, xs, As, bs, mask, cart_inds, Val(Nnames))
+    args = (device, caches, xs, As, bs, space, mask, cart_inds, Val(Nnames))
 
     nitems = Ni * Nj * Nh * Nnames
     (; threads, blocks) = config_via_occupancy(multiple_field_solve_kernel!, nitems, args)
@@ -78,14 +76,17 @@ end
 
 function multiple_field_solve_kernel!(
     device::ClimaComms.CUDADevice,
-    caches,
-    xs,
-    As,
-    bs,
+    caches′,
+    xs′,
+    As′,
+    bs′,
+    space,
     mask,
     cart_inds,
     ::Val{Nnames},
 ) where {Nnames}
+    (caches, xs, As, bs) =
+        Grids.toggle_placeholder_grid((caches′, xs′, As′, bs′), space)
     @inbounds begin
         tidx = linear_thread_idx()
         if linear_is_valid_index(tidx, unval(cart_inds))

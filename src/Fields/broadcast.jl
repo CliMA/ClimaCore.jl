@@ -69,9 +69,13 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
 # flagging expressions like field .+ subfield_1 .+ subfield_2 as broadcast
 # errors when subfield_1 and subfield_2 are defined on different spaces, so it
 # must be replaced with a method that recursively combines all broadcast inputs.
+# An instantiated broadcast has already been checked, so its stored axes are
+# used in place of its inputs (whose spaces may not be comparable after slicing,
+# e.g., when a level field is sliced along with an extruded field).
 @inline shared_space(_) = nothing
 @inline shared_space(field::Field) = axes(field)
 @inline shared_space(bc::LazyField) =
+    !isnothing(bc.axes) ? bc.axes :
     unrolled_reduce(bc.args; init = nothing) do space, arg
         !isnothing(shared_space(arg)) &&
         (isnothing(space) || Spaces.maybe_issubspace(space, shared_space(arg))) ?
@@ -87,10 +91,14 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
         Fields.field_values(field),
     )
 @inline check_broadcast_space(space, field::Field, ::Val{false}) =
-    !isnothing(space) && Spaces.issubspace(axes(field), space) ? nothing :
-    throw(DimensionMismatch("Fields could not be broadcast to a shared space"))
+    check_subspace(space, axes(field))
 @inline check_broadcast_space(space, bc::LazyField, only_check_size) =
+    only_check_size == Val(false) && !isnothing(bc.axes) ?
+    check_subspace(space, bc.axes) :
     unrolled_foreach(arg -> check_broadcast_space(space, arg, only_check_size), bc.args)
+@inline check_subspace(space, subspace) =
+    !isnothing(space) && Spaces.issubspace(subspace, space) ? nothing :
+    throw(DimensionMismatch("Fields could not be broadcast to a shared space"))
 
 @drop_recursion_limits shared_space, check_broadcast_space
 
@@ -137,14 +145,19 @@ field_values(bc::Broadcast.Broadcasted) = bc
         unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args),
     )
 
-# Forward size/scope primitives from Base and DataLayouts to the field_values.
+# Forward size primitives from Base and DataLayouts to the field_values.
 for f in (:size, :length, :ndims)
     @eval Base.$f(arg::MaybeLazyField) = $f(field_values(arg))
 end
-for f in (:DataScope, :shape_params, :inferred_size, :nelems)
+for f in (:shape_params, :inferred_size, :nelems)
     @eval DataLayouts.$f(arg::MaybeLazyField) = DataLayouts.$f(field_values(arg))
 end
 
+@inline has_field_style(::T) where {T} =
+    Base.Broadcast.BroadcastStyle(T) isa Fields.AbstractFieldStyle
+
+@inline DataLayouts.DataScope(bc::LazyField) =
+    DataLayouts.DataScope(unrolled_filter(has_field_style, bc.args)...)
 @inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
@@ -154,6 +167,12 @@ end
     ),
     bc.axes,
 )
+
+# Duplicate grid pointers in Fields and LazyFields are toggled off before
+# launching a kernel, then toggled back on when the kernel starts executing.
+# Note that this could be optimized further by dropping grid pointers from arg1.
+Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
+    (arg1, unrolled_map(arg -> Grids.toggle_placeholder_grid(arg, axes(arg1)), args)...)
 
 # Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
 # broadcast expression from slices of their arguments, skipping the
@@ -178,11 +197,27 @@ sliced_broadcast_body(op, bc_type) = quote
         Base.Cartesian.@ntuple(
             $(length(bc_type.parameters[4].parameters)),
             n -> let arg = getfield(args, n)
-                arg isa MaybeLazyField ? $op(arg, inds...) : arg
+                arg isa MaybeLazyField ? $op(arg, arg_slice_indices($op, arg, inds)...) :
+                arg
             end,
         ),
         $op(bc.axes, inds...),
     )
+end
+
+# Like Broadcast.newindex, project slice indices onto the dimensions that are
+# missing from each argument's space, so that, e.g., a level field is sliced
+# along with an extruded field. Nested broadcasts without stored axes are not
+# projected, since their arguments get projected when they are sliced, and
+# computing their axes would add a significant compilation cost.
+@inline function arg_slice_indices(op::O, arg, inds) where {O}
+    space = arg isa Field ? axes(arg) : getfield(arg, :axes)
+    (op == Base.view || isnothing(space)) && return inds
+    v = Spaces.has_vertical(space) ? inds[1] : 1
+    has_h = Spaces.has_horizontal(space)
+    op == level && return (v,)
+    op == column && return has_h ? inds : ntuple(Returns(1), Val(length(inds)))
+    return length(inds) == 1 ? (has_h ? inds[1] : 1,) : (v, has_h ? inds[2] : 1)
 end
 
 for op in (:(Base.view), :level, :slab, :column)
