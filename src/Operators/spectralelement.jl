@@ -50,26 +50,30 @@ struct WeakForm <: FormType end
 end
 
 # Multiply arg by, or divide dest by, the Jacobian factor for the given form:
-# J for StrongForm, WJ for WeakForm. The weighted values are read exactly once,
-# at their own point, so they never cross a thread boundary and are only
-# materialized when has_private_buffers holds.
+# J for StrongForm, WJ for WeakForm. The weighted values are read at their own
+# points, once per horizontal dimension, so they never cross a thread boundary
+# and are evaluated only once (see own_point_values).
 jacobian_weight(::StrongForm, arg) = Fields.local_geometry_field(arg).J
 jacobian_weight(::WeakForm, arg) = Fields.local_geometry_field(arg).WJ
 @inline materialize_jacobian_weighted(form::FormType, arg) =
-    maybe_private_buffer(Base.broadcasted(*, arg, jacobian_weight(form, arg)))
+    own_point_values(Base.broadcasted(*, arg, jacobian_weight(form, arg)))
 @inline jacobian_unweighted(form, dest) =
     Base.broadcasted(/, dest, jacobian_weight(form, dest))
 
 # Lazily multiply arg by, or divide dest by, the quadrature weights W = WJ / J
 # for WeakForm operators; a no-op for StrongForm. In both forms arg is
-# materialized first via maybe_private_buffer, which must be skipped when
-# buffers are shared: the buffer stays live for the whole application, and its
-# byte size can equal the per-dimension intermediate's, so on GPUs the first
-# dimension's intermediate would overwrite arg.
-@inline materialize_quadrature_weighted(::StrongForm, arg) =
-    maybe_private_buffer(arg)
+# evaluated once via own_point_values, which never uses a shared buffer: the
+# buffer would stay live for the whole application, and its byte size can
+# equal the per-dimension intermediate's, so on GPUs the first dimension's
+# intermediate would overwrite arg. A single thread materializes arg before
+# weighting it, while a scope with registers evaluates the weighted argument
+# there.
+@inline materialize_quadrature_weighted(::StrongForm, arg) = own_point_values(arg)
 @inline function materialize_quadrature_weighted(::WeakForm, arg)
     (; WJ, J) = Fields.local_geometry_field(arg)
+    has_private_buffers(arg) || return own_point_values(
+        Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J)),
+    )
     return Base.broadcasted(
         *, maybe_private_buffer(arg), Base.broadcasted(/, WJ, J),
     )
@@ -159,43 +163,40 @@ sum_value(matrix, arg_value::F, dim::Union{Val{:i}, Val{:j}}, i, j) where {F} =
 # All threads that materialize arg must be synchronized before this is called.
 # A single thread owning the whole slab (as on CPUs) visits a slice as a unit;
 # otherwise each thread may only write the destination points in its own
-# registers (see register_similar), so it visits them one at a time.
+# registers (see register_similar), so it visits them one at a time, with every
+# thread reading arg in lockstep (see cached_arg).
 @inline muladd_slab!(dest, matrix, arg, dim) =
     has_private_buffers(dest) ? sliced_muladd_slab!(dest, matrix, arg, dim) :
     pointwise_muladd_slab!(dest, matrix, arg, dim)
 
-@inline function pointwise_muladd_slab!(dest, matrix, arg, dim, clip = Val(false))
+@inline function pointwise_muladd_slab!(dest, matrix, arg, dim)
     arg_data = slab_data(arg)
-    DataLayouts.foreach_column(
-        slab_data(dest); enumerate = Val(true),
-    ) do dest_index, dest_point
+    DataLayouts.update_points!(+, slab_data(dest), column) do dest_index
         (i, j, _) = Tuple(dest_index)
         arg_value(i′, j′) = arg_point_value(arg_data, i′, j′)
-        in_bounds = if clip isa Val{true}
-            (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
-            Nq = size(matrix, 1)
-            dim isa Val{:i} ? (i <= Nq && j <= Nj) : (i <= Ni && j <= Nq)
-        else
-            true
-        end
-        in_bounds && @inbounds dest_point[] += unrolled_sum(
+        @inbounds unrolled_sum(
             sum_value(matrix, arg_value, dim, i, j),
             summed_indices(matrix),
         )
-        nothing
     end
 end
 
 # Destination indices come from each_slice_index so their bounds checks are
 # still elided under --check-bounds: an index of unproven provenance lets
 # dest's MArray escape into the check's error path, moving it to the heap.
+# The point-read closure is inlined explicitly: reading a slab view through
+# its parent array (see parent_array_and_index_args) costs more in the
+# inliner's model than the threshold, and a non-inlined closure passes the
+# lazy argument (see fused_buffer) through memory at every point, which keeps
+# LLVM from folding its constants (3-4x slower CPU gradients).
 @inline function sliced_muladd_slab!(dest, matrix, arg, dim)
     (arg_data, dest_data) = (slab_data(arg), slab_data(dest))
     n′s = summed_indices(matrix)
     indices = DataLayouts.each_slice_index(column, dest_data)
     ordered(k, n) = dim isa Val{:i} ? (k, n) : (n, k)
     @inbounds for n in axes(indices, dim isa Val{:i} ? 2 : 1)
-        values = unrolled_map(n′ -> arg_point_value(arg_data, ordered(n′, n)...), n′s)
+        @inline point_value(n′) = arg_point_value(arg_data, ordered(n′, n)...)
+        values = unrolled_map(point_value, n′s)
         for k in axes(indices, dim isa Val{:i} ? 1 : 2)
             column(dest_data, Tuple(indices[ordered(k, n)..., 1])...)[] +=
                 unrolled_sum(n′ -> matrix[k, n′] * values[n′], n′s)
@@ -205,9 +206,26 @@ end
 
 # Like muladd_slab!, but skipping output points beyond the size of arg along
 # the non-sliced dimension or of matrix along the sliced one; either can occur
-# in sequential_muladd_slab!, where partial_result has the larger size.
-@inline clipped_muladd_slab!(dest, matrix, arg, dim) =
-    pointwise_muladd_slab!(dest, matrix, arg, dim, Val(true))
+# in sequential_muladd_slab!, where partial_result has the larger size. Since
+# the skipped points do not read arg, it must be readable by every thread
+# without reading in lockstep.
+@inline function clipped_muladd_slab!(dest, matrix, arg, dim)
+    arg_data = slab_data(arg)
+    DataLayouts.foreach_column(
+        slab_data(dest); enumerate = Val(true),
+    ) do dest_index, dest_point
+        (i, j, _) = Tuple(dest_index)
+        arg_value(i′, j′) = arg_point_value(arg_data, i′, j′)
+        (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
+        Nq = size(matrix, 1)
+        in_bounds = dim isa Val{:i} ? (i <= Nq && j <= Nj) : (i <= Ni && j <= Nq)
+        in_bounds && @inbounds dest_point[] += unrolled_sum(
+            sum_value(matrix, arg_value, dim, i, j),
+            summed_indices(matrix),
+        )
+        nothing
+    end
+end
 
 # Set dest_slice[n] .+= (matrix * Fₙ)[n] for each 1D i or j slice of the inputs,
 # where Fₙ = (arg1[n] + arg1) * (arg2[n] + arg2) / 2 is a slice of the symmetric
@@ -215,16 +233,14 @@ end
 @inline function split_muladd_slab!(dest, matrix, arg1, arg2, dim)
     arg1_data = slab_data(arg1)
     arg2_data = slab_data(arg2)
-    DataLayouts.foreach_column(
-        slab_data(dest); enumerate = Val(true),
-    ) do dest_index, dest_point
+    DataLayouts.update_points!(+, slab_data(dest), column) do dest_index
         (i, j, _) = Tuple(dest_index)
         arg1_value(i′, j′) = arg_point_value(arg1_data, i′, j′)
         arg2_value(i′, j′) = arg_point_value(arg2_data, i′, j′)
         flux_value(i′, j′) =
             @inbounds (arg1_value(i, j) + arg1_value(i′, j′)) *
                       (arg2_value(i, j) + arg2_value(i′, j′)) / 2
-        @inbounds dest_point[] += unrolled_sum(
+        @inbounds unrolled_sum(
             sum_value(matrix, flux_value, dim, i, j),
             summed_indices(matrix),
         )
@@ -280,13 +296,14 @@ end
 
 # Contravariant component along horizontal dimension h of a Jacobian-weighted
 # argument, and the covariant basis vector eʰ that Gradient multiplies by.
-@inline materialize_contravariant(::Val{h}, arg, lg) where {h} = materialize_buffer(
+@inline materialize_contravariant(::Val{h}, arg, lg) where {h} = cached_arg(
     components_broadcasted(
         h == 1 ? Geometry.contravariant1 : Geometry.contravariant2,
         Geometry.Contravariant(),
         arg,
         lg,
     ),
+    Val(true),
 )
 @inline covariant_basis_vector(::Val{h}) where {h} =
     h == 1 ? Geometry.Covariant1Vector(true) : Geometry.Covariant2Vector(true)
@@ -307,7 +324,7 @@ end
         )
     term(V, f) =
         Base.broadcasted(V, components_broadcasted(f, Geometry.Covariant(), arg, lg))
-    return materialize_buffer(Base.broadcasted(-, term(V₁, f₁), term(V₂, f₂)))
+    return cached_arg(Base.broadcasted(-, term(V₁, f₁), term(V₂, f₂)), Val(true))
 end
 
 """
@@ -517,8 +534,10 @@ sequentially along each dimension.
 struct SplitDivergence <: SpectralElementOperator end
 
 return_space(::SplitDivergence, arg1, _) = axes(arg1)
-return_eltype(::SplitDivergence, arg1, arg2) =
-    Geometry.mul_return_type(Geometry.divergence_result_type(eltype(arg1)), eltype(arg2))
+return_eltype(::SplitDivergence, arg1, arg2) = Utilities.return_type(
+    *,
+    Tuple{Geometry.divergence_result_type(eltype(arg1)), eltype(arg2)},
+)
 
 # Split form at index n is J⁻¹ ∑ₕ [Dₕ - Diag(Dₕ)] Fʰ[n, :], where F[n, :] is a
 # slice of the tensor F[n, m] = (arg1[n] + arg1[m]) * (arg2[n] + arg2[m]) / 2.
@@ -526,7 +545,7 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
     dims = horizontal_dims(arg1)
     lg = Fields.local_geometry_field(arg1)
     arg1′ = materialize_jacobian_weighted(StrongForm(), arg1)
-    arg2′ = materialize_buffer(arg2)
+    arg2′ = cached_arg(arg2, Val(true))
     dest = register_similar(arg1, return_eltype(op, arg1, arg2))
     matrix = if isempty(dims)
         nothing
@@ -821,7 +840,9 @@ function tensor_weighted(::Restrict, arg)
              materialize its argument outside the fused loop",
         ),
     )
-    return materialize_jacobian_weighted(WeakForm(), arg)
+    return maybe_private_buffer(
+        Base.broadcasted(*, arg, jacobian_weight(WeakForm(), arg)),
+    )
 end
 tensor_unweighted(::Interpolate, dest) = dest
 tensor_unweighted(::Restrict, dest) = jacobian_unweighted(WeakForm(), dest)

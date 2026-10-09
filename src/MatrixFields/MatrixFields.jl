@@ -53,8 +53,8 @@ import NVTX
 import Adapt
 using UnrolledUtilities
 
-import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype
-import ..Utilities: @drop_recursion_limits
+import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype, return_type
+import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
@@ -64,8 +64,6 @@ import ..Topologies
 import ..Spaces
 import ..Fields
 import ..Operators
-using ..Geometry:
-    mul_with_projection, mul_return_type, basis1, basis2, tensor_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -93,6 +91,10 @@ include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 include("field_matrix_with_solver.jl")
 
+# Extend the recursion limit removal in Operators to the methods defined above.
+@drop_recursion_limits Operators.stencil_value, multiply_matrix_row, matrix_matrix_row
+@drop_constprop Operators.stencil_value, multiply_matrix_row, matrix_matrix_row
+
 # Evaluate multiplications in left-associative order. This should technically be
 # right-associative, but flipping the order worsens performance in GPU kernels,
 # where the second argument of each matrix product is cached. Left-associativity
@@ -103,7 +105,7 @@ Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
 
 Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
     check_entry(FieldNamePair, x) && check_entry(FieldName, y) ?
-    Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, y) :
+    Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, projected_operand(x, y)) :
     auto_broadcasted(style, *, (x, y))
 
 function Base.broadcasted(

@@ -62,7 +62,7 @@ if !@isdefined(USING_BT)
 end
 ClimaComms.@import_required_backends
 import ClimaCore:
-    Utilities,
+    DataLayouts,
     Geometry,
     Domains,
     Meshes,
@@ -197,8 +197,10 @@ function test_field_broadcast(;
                    \n\tMaximum Error = $max_eps_error eps"
 
             # Test that set_result! is performant and correct when compared
-            # against ref_set_result.
-            @test time / ref_time <= time_ratio_limit
+            # against ref_set_result. The reference time is floored at 100 ns,
+            # since a reference that runs within one tick of a coarse timer
+            # (41 ns on macOS) can be measured as 0 s.
+            @test time / max(ref_time, 1e-7) <= time_ratio_limit
             @test max_eps_error <= max_eps_error_limit
         end
 
@@ -509,8 +511,9 @@ end
 
 set_result!(result, bc) = (materialize!(result, bc); nothing)
 
-function call_getidx(space, bc, idx, hidx)
-    @inbounds Operators.getidx(bc, idx, hidx)
+# Evaluate the operators in one column of a broadcast, as copyto! does.
+function call_apply_operators(bc_column)
+    Operators.apply_operators(bc_column)
     return nothing
 end
 
@@ -531,40 +534,17 @@ end
 
 trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 
-function get_getidx_args(bc)
-    space = axes(bc)
-    # TODO: change this to idx_l, idx_i, idx_r
-    # may need to define a helper
-    (li, lw, rw, ri) = Operators.window_bounds(bc)
-    idx_l, idx_r = if Topologies.isperiodic(space)
-        li, ri
-    else
-        lw, rw
-    end
-    idx_i = if space.staggering isa Spaces.CellCenter
-        Int(round((idx_l + idx_r) / 2; digits = 0))
-    else
-        Utilities.PlusHalf(Int(round((idx_l + idx_r) / 2; digits = 0)))
-    end
-    hidx = (1, 1, 1)
-    return (; space, bc, idx_l, idx_i, idx_r, hidx)
-end
+# One column of a broadcast, as it appears in the inner loop of copyto!.
+column_broadcast(bc) = DataLayouts.reassign(
+    Fields.column(Base.Broadcast.instantiate(bc), 1, 1, 1),
+    DataLayouts.ThisThread(),
+)
 
-function perf_getidx(bc; broken = false)
-    (; space, bc, idx_l, idx_i, idx_r, hidx) = get_getidx_args(bc)
-    call_getidx(space, bc, idx_l, hidx)
-    call_getidx(space, bc, idx_i, hidx)
-    call_getidx(space, bc, idx_r, hidx)
-
-    bel =
-        time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx_l, $hidx))
-    bei =
-        time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx_i, $hidx))
-    ber =
-        time_and_units_str(BT.@belapsed call_getidx($space, $bc, $idx_r, $hidx))
-    @test_opt call_getidx(space, bc, idx_l, hidx)
-    @test_opt call_getidx(space, bc, idx_i, hidx)
-    @test_opt call_getidx(space, bc, idx_r, hidx)
-    @info "getidx times max(left,interior,right) = ($bel,$bei,$ber)"
+function perf_apply_operators(bc)
+    bc_column = column_broadcast(bc)
+    call_apply_operators(bc_column)
+    time = time_and_units_str(BT.@belapsed call_apply_operators($bc_column))
+    @test_opt call_apply_operators(bc_column)
+    @info "apply_operators time per column = $time"
     return nothing
 end

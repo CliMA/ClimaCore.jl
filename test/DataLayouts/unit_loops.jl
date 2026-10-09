@@ -398,11 +398,12 @@ end
 # the generic AbstractArray fallback allocates a Vector and throws an
 # interpolated size error, neither of which can be compiled for a GPU.
 @testset "range subsets of a StridedRange" begin
-    range = DataLayouts.StridedRange(3, 5, 4) # 3:5:18
+    range = DataLayouts.StridedRange(3, 5, 18) # 3:5:18
     values = collect(range)
     @test values == [3, 8, 13, 18]
 
-    for sub in (Base.OneTo(3), 2:4, 2:2:4, 4:-2:2, 3:2, DataLayouts.StridedRange(2, 2, 2))
+    # Subsets have positive steps (an invariant of StridedRange).
+    for sub in (Base.OneTo(3), 2:4, 2:2:4, 3:2, DataLayouts.StridedRange(2, 2, 4))
         subset = range[sub]
         @test subset isa DataLayouts.StridedRange
         @test collect(subset) == values[sub]
@@ -410,9 +411,9 @@ end
 
     # Views of views must reindex without allocating.
     array = reshape(collect(1:24), 4, 6)
-    for outer in (DataLayouts.StridedRange(2, 4, 3), 2:4:14)
+    for outer in (DataLayouts.StridedRange(2, 4, 10), 2:4:14)
         outer_view = view(array, outer)
-        for inner in (Base.OneTo(2), 2:3, DataLayouts.StridedRange(1, 2, 2))
+        for inner in (Base.OneTo(2), 2:3, DataLayouts.StridedRange(1, 2, 3))
             @test collect(view(outer_view, inner)) == collect(outer_view)[inner]
         end
     end
@@ -430,6 +431,60 @@ DataLayouts.static_num_threads(::FakeGroup{N}) where {N} = N
 # Rank of the thread currently "running", stepped through by one CPU thread.
 const FAKE_RANK = Ref(1)
 DataLayouts.thread_rank(::FakeGroup) = FAKE_RANK[]
+
+# GPU kernels index arrays with helpers that replace Base's 64-bit conversions
+# by 32-bit ones (see ext/cuda/data_layouts.jl); each must agree with Base on
+# every index, including dimensions that are not powers of two.
+@testset "32-bit index helpers agree with Base" begin
+    for dims in ((7,), (3, 5), (4, 1, 6, 2), (1, 63, 1, 1), (5, 4, 4, 1, 7))
+        cartesian = CartesianIndices(dims)
+        offset = CartesianIndices(map(d -> 3:(d + 2), dims))
+        for i in 1:prod(dims)
+            for T in (Int32, UInt32)
+                @test DataLayouts.cartesian_index_from_linear(dims, T(i)) == cartesian[i]
+            end
+            for T in (Int, Int32, UInt32)
+                @test DataLayouts.single_axis_cartesian_index(offset, T(i)) == offset[i]
+            end
+        end
+    end
+
+    for I in (Int32, UInt32, Int), start in 1:4, step in 1:3, stop in 0:12
+        range = DataLayouts.StridedRange(I(start), I(step), I(stop))
+        values = collect(start:step:stop)
+        @test collect(range) == values
+        @test length(range) == length(values)
+        @test isempty(range) == isempty(values)
+        isempty(values) || @test last(range) == last(values)
+        n = length(values)
+        for sub in (Base.OneTo(n), 2:n, 1:2:n, DataLayouts.StridedRange(2, 2, n))
+            @test collect(range[sub]) == values[collect(sub)]
+        end
+    end
+    for I in (Int32, UInt32, Int), n in 1:5, n_indices in 0:11, rank in 1:n
+        @test collect(DataLayouts.strided_range(I(rank), I(n), n_indices)) ==
+              collect(rank:n:n_indices)
+    end
+
+    # The Cartesian methods of a RegisterArray address the same storage as its
+    # linear methods, for points owned by any thread.
+    for (array_size, F) in (
+            ((1, 4, 4, 3, 1), 4),
+            ((9, 1, 1, 2, 1), 4),
+            ((5, 1, 1, 1, 1), 4),
+            ((6, 1, 1, 1), nothing),
+        ),
+        Stride in (1, 2, 4, 16)
+
+        (; Nf, Np) = DataLayouts.register_array_params(array_size, Val(F))
+        storage = StaticArrays.MArray{Tuple{cld(Np, Stride) * Nf}, Float64}(undef)
+        array = DataLayouts.RegisterArray{array_size, F, Stride}(storage)
+        for (i, index) in enumerate(CartesianIndices(array_size))
+            @test DataLayouts.register_index(array, Tuple(index)) ==
+                  DataLayouts.register_index(array, i)
+        end
+    end
+end
 
 @testset "RegisterArray stores one thread's points" begin
     for Nq in (2, 4, 5, 17), Nf in (1, 3), N in (2, 4, 16, 32, 256)
@@ -463,6 +518,23 @@ DataLayouts.thread_rank(::FakeGroup) = FAKE_RANK[]
     @test is_register(FakeGroup{16}())
     @test !is_register(DataLayouts.ThisThread())
     @test !is_register(DataLayouts.ThisThreadPool()) # no static_num_threads
+
+    # The points of a column in registers are read and written through the
+    # Cartesian methods of the array, also at linear indices (see
+    # DataLayouts.has_cartesian_components).
+    T = Tuple{Float64, Float64}
+    column = DataLayouts.VIJFH{T, 9, 1, 1, 1}(Array{Float64})
+    registers =
+        DataLayouts.register_similar(DataLayouts.reassign(column, FakeGroup{16}()), T)
+    @test DataLayouts.parent_type(registers) <: DataLayouts.RegisterArray
+    for v in 1:9
+        registers[v] = (v, -v)
+        @test registers[v] == registers[CartesianIndex(v, 1, 1, 1)] == (v, -v)
+        view(registers, v)[] = (2v, 3v)
+        @test registers[CartesianIndex(v, 1, 1, 1)] == (2v, 3v)
+        @test first(DataLayouts.array_and_index_args(registers, v)[2]) ==
+              CartesianIndex(v, 1, 1, 1)
+    end
 end
 
 # A launch unit holding only part of a subscope silently skips some points; see

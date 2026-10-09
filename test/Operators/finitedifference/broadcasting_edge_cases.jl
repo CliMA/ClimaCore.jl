@@ -66,3 +66,51 @@ end
         @test parent(@. grad(z + z_column)) ≈ 2 .* parent(∇z)
     end
 end
+
+# Base flattens the second operand of .&& or .|| into a closure that captures
+# it, so a pointwise operand is flattened without capturing its fields instead,
+# and an operator broadcast is kept as an operand; an operator broadcast in the
+# first operand is always an operand.
+@testset "Short-circuiting broadcasts of finite difference operators" begin
+    FT = Float64
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 4, Nq = 2)
+    fspace = ClimaCore.Spaces.face_space(cspace)
+    interp = Operators.InterpolateF2C()
+    c = ClimaCore.Fields.coordinate_field(cspace).z
+    f = ClimaCore.Fields.coordinate_field(fspace).z
+    op_bool = @. interp(f) > 1 / 2
+    c_bool = @. c < 3 / 4
+    @test parent(@. (interp(f) > 1 / 2) && (c < 3 / 4)) == parent(op_bool .& c_bool)
+    @test parent(@. (c < 3 / 4) && (interp(f) > 1 / 2)) == parent(c_bool .& op_bool)
+    @test parent(@. (interp(f) > 1 / 2) || c_bool) == parent(op_bool .| c_bool)
+    @test parent(@. c_bool || (interp(f) > 1 / 2)) == parent(c_bool .| op_bool)
+
+    # A pointwise second operand is only evaluated where the first operand does
+    # not determine the result (sqrt(-c) throws a DomainError wherever c > 0).
+    @test !any(parent(@. (c < 0) && (sqrt(-c) > 0)))
+    @test all(parent(@. (c >= 0) || (sqrt(-c) > 0)))
+end
+
+@testset "Stencil nested in the argument of a Dirichlet operator" begin
+    FT = Float32
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2, Nq = 4)
+    fspace = TU.FaceExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2, Nq = 4)
+    c = ClimaCore.Fields.coordinate_field(cspace).z .+ 1
+    f = ClimaCore.Fields.coordinate_field(fspace).z .+ 1
+    fu³ = map(x -> Geometry.Contravariant3Vector(one(x)), f)
+    upwind = Operators.UpwindBiasedProductC2F(;
+        bottom = Operators.SetValue(FT(0)),
+        top = Operators.SetValue(FT(0)),
+    )
+    interp = Operators.InterpolateF2C()
+    # The argument of the Dirichlet operator contains a stencil, so its level
+    # adjacent to each boundary cannot be read lazily.
+    nested = upwind.(fu³, c .* interp.(f .* f))
+    unnested = upwind.(fu³, c .* Base.materialize(interp.(f .* f)))
+    @test parent(nested) == parent(unnested)
+    div = Operators.DivergenceF2C(;
+        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
+        top = Operators.SetValue(Geometry.WVector(FT(0))),
+    )
+    @test parent(div.(nested)) == parent(div.(upwind.(fu³, c .* interp.(f .* f))))
+end

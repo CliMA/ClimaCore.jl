@@ -153,10 +153,7 @@ Base.Broadcast.broadcasted(
 # result (after the multiply), while `modifies_input` conditions are applied to
 # the argument (before the multiply). A condition that is linear (e.g. Extrapolate)
 # is encoded directly in the matrix and is neither. (For DivergenceF2C this widens
-# every matrix row by one diagonal on each side -- see `extrapolate_row_type` -- but
-# reapplying the condition to the result with a SetBoundaryOperator instead
-# benchmarked slower on GPU, because the boundary levels then recompute the multiply
-# through the lazy `getidx` path.)
+# every matrix row by one diagonal on each side; see `extrapolate_row_type`.)
 #
 # For nearly every operator such a boundary condition prescribes the operator's
 # output at the boundary, so it modifies the output. Examples:
@@ -220,7 +217,7 @@ op_with_matrix_bcs(op) =
 multiply_matrix_broadcasted(::Type{Style}, op_matrix, arg, axes) where {Style} =
     Base.Broadcast.Broadcasted{Style}(
         MultiplyColumnwiseBandMatrixField(),
-        (op_matrix, arg),
+        (op_matrix, projected_operand(op_matrix, arg)),
         axes,
     )
 
@@ -248,9 +245,9 @@ unconverted_stencil_broadcasted(::Type{Style}, op, args, axes) where {Style} =
 Base.Broadcast.Broadcasted(
     ::Style,
     op::Operators.SetBoundaryOperator,
-    args,
+    args::Tuple,
     axes::Spaces.AbstractSpace,
-) where {Style <: Operators.AbstractStencilStyle} =
+) where {Style <: Operators.StencilStyle} =
     unconverted_stencil_broadcasted(Style, op, args, axes)
 
 # Converts a broadcast over a one-argument operator, `op(arg)`, into the
@@ -262,12 +259,14 @@ Base.Broadcast.Broadcasted(
 function Base.Broadcast.Broadcasted(
     ::Style,
     op::OneArgFDOperator,
-    args,
+    args::Tuple,
     axes::Spaces.AbstractSpace,
-) where {Style <: Operators.AbstractStencilStyle}
-    op_matrix = Base.Broadcast.broadcasted(
-        FDOperatorMatrix(op_with_matrix_bcs(op)),
-        Fields.local_geometry_field(operator_input_space(op, axes)),
+) where {Style <: Operators.StencilStyle}
+    op_matrix = Base.Broadcast.instantiate(
+        Base.Broadcast.broadcasted(
+            FDOperatorMatrix(op_with_matrix_bcs(op)),
+            Fields.local_geometry_field(operator_input_space(op, axes)),
+        ),
     )
 
     bcs_in = input_bcs(op)
@@ -278,7 +277,6 @@ function Base.Broadcast.Broadcasted(
             Operators.SetBoundaryOperator(bcs_in),
             args[1],
             Base.axes(args[1]),
-            nothing,
         )
     arg = adjoint_matrix_arg(op, arg)
 
@@ -306,9 +304,9 @@ end
 Base.Broadcast.Broadcasted(
     ::Style,
     op::TwoArgFDOperator,
-    args,
+    args::Tuple,
     axes::Spaces.AbstractSpace,
-) where {Style <: Operators.AbstractStencilStyle} =
+) where {Style <: Operators.StencilStyle} =
     two_arg_matrix_broadcasted(Style, op, args, axes)
 
 # An advection operator is only equivalent to a matrix multiply when its
@@ -320,24 +318,19 @@ Base.Broadcast.Broadcasted(
 Base.Broadcast.Broadcasted(
     ::Style,
     op::Operators.AdvectionOperator,
-    args,
+    args::Tuple,
     axes::Spaces.AbstractSpace,
-) where {Style <: Operators.AbstractStencilStyle} =
+) where {Style <: Operators.StencilStyle} =
     Operators.has_linear_stencil(op) ?
     two_arg_matrix_broadcasted(Style, op, args, axes) :
     unconverted_stencil_broadcasted(Style, op, args, axes)
 
-function two_arg_matrix_broadcasted(
-    ::Type{Style},
-    op,
-    args,
-    axes,
-    work,
-) where {Style}
-    op_matrix =
-        Base.Broadcast.broadcasted(FDOperatorMatrix(op_with_matrix_bcs(op)), args[1])
+function two_arg_matrix_broadcasted(::Type{Style}, op, args, axes) where {Style}
+    op_matrix = Base.Broadcast.instantiate(
+        Base.Broadcast.broadcasted(FDOperatorMatrix(op_with_matrix_bcs(op)), args[1]),
+    )
 
-    result = multiply_matrix_broadcasted(Style, op_matrix, args[2], axes, work)
+    result = multiply_matrix_broadcasted(Style, op_matrix, args[2], axes)
 
     bcs_out = output_bcs(op)
     return isempty(bcs_out) ? result :
@@ -346,7 +339,6 @@ function two_arg_matrix_broadcasted(
         Operators.SetBoundaryOperator(bcs_out),
         result,
         axes,
-        work,
     )
 end
 
@@ -479,223 +471,345 @@ operator_matrix(::O) where {O <: Operators.AbstractOperator} =
 
 ################################################################################
 
-Operators.get_boundary(
-    op_matrix::FDOperatorMatrix,
-    lbw::Operators.LeftBoundaryWindow{name},
-) where {name} = Operators.get_boundary(op_matrix.op, lbw)
-Operators.get_boundary(
-    op_matrix::FDOperatorMatrix,
-    rbw::Operators.RightBoundaryWindow{name},
-) where {name} = Operators.get_boundary(op_matrix.op, rbw)
+Operators.fuses_into_stencils(::FDOperatorMatrix) = true
 
-Operators.stencil_interior_width(op_matrix::FDOperatorMatrix, args...) =
-    Operators.stencil_interior_width(op_matrix.op, args...)
-
-Operators.left_interior_idx(
-    op_matrix::FDOperatorMatrix,
-    bc::Operators.VerticalBoundaryCondition,
-    args...,
-) = Operators.left_interior_idx(op_matrix.op, bc, args...)
-
-Operators.right_interior_idx(
-    op_matrix::FDOperatorMatrix,
-    bc::Operators.VerticalBoundaryCondition,
-    args...,
-) = Operators.right_interior_idx(op_matrix.op, bc, args...)
+# The rows of a weighted interpolation read the weights at neighboring points.
+# Every row reads its arguments at the same offsets, at indices clamped to the
+# column, before any boundary condition is applied (see stencil_value).
+Operators.reads_neighbors(
+    ::FDOperatorMatrix{<:Operators.WeightedInterpolationOperator},
+    _,
+    _,
+) = (Val(true), Val(false))
+Operators.reads_in_lockstep(::FDOperatorMatrix) = true
 
 Operators.return_space(op_matrix::FDOperatorMatrix, args...) =
     Operators.return_space(op_matrix.op, args...)
 
 function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
-    args′ = args[1:(end - 1)]
-    if typeof(args[end]) <: Spaces.AbstractSpace
-        FT = Spaces.undertype(args[end])
+    if last(args) isa Spaces.AbstractSpace
+        FT = Spaces.undertype(last(args))
     else
-        FT = Geometry.undertype(eltype(args[end]))
+        FT = Geometry.undertype(eltype(last(args)))
     end
-    return op_matrix_row_type(op_matrix.op, FT, args′...)
+    return op_matrix_row_type(op_matrix.op, FT, Base.front(args)...)
 end
 
-Base.@propagate_inbounds function Operators.stencil_interior(
-    op_matrix::FDOperatorMatrix,
-    space,
-    idx,
-    hidx,
-    args...,
-)
-    args′ = args[1:(end - 1)]
-    row = op_matrix_interior_row(op_matrix.op, space, idx, hidx, args′...)
-    return convert(Operators.return_eltype(op_matrix, args...), row)
-end
-
-Base.@propagate_inbounds function Operators.stencil_left_boundary(
-    op_matrix::FDOperatorMatrix,
-    bc::Operators.VerticalBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    args...,
-)
-    args′ = args[1:(end - 1)]
-    row = op_matrix_first_row(op_matrix.op, bc, space, idx, hidx, args′...)
-    return convert(Operators.return_eltype(op_matrix, args...), row)
-end
-
-Base.@propagate_inbounds function Operators.stencil_right_boundary(
-    op_matrix::FDOperatorMatrix,
-    bc::Operators.VerticalBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    args...,
-)
-    args′ = args[1:(end - 1)]
-    row = op_matrix_last_row(op_matrix.op, bc, space, idx, hidx, args′...)
-    return convert(Operators.return_eltype(op_matrix, args...), row)
-end
-
-# Simplified methods for when the operator matrix only depends on FT.
+# Simplified methods for when the operator matrix only depends on FT. The rows
+# of such a matrix read no values, so they are recomputed at every point that
+# reads them rather than cached (see Operators.recomputable).
 op_matrix_row_type(op, ::Type{FT}, args...) where {FT} =
     typeof(op_matrix_interior_row(op, FT))
-op_matrix_interior_row(op, space, idx, hidx, args...) =
+op_matrix_interior_row(op, space, idx, args...) =
     op_matrix_interior_row(op, Spaces.undertype(space))
-op_matrix_first_row(op, bc, space, idx, hidx, args...) =
-    op_matrix_first_row(op, bc, Spaces.undertype(space))
-op_matrix_last_row(op, bc, space, idx, hidx, args...) =
-    op_matrix_last_row(op, bc, Spaces.undertype(space))
+Operators.recomputable_operator(op_matrix::FDOperatorMatrix) =
+    op_matrix.op isa ConstantRowOperator
 
-# Fallback methods for unspecified boundary conditions: a missing boundary
-# condition leaves the operator's boundary rows undefined, so they are filled
-# with `NaN`s, matching the `NaN` that the pointwise stencil path produces
-# (see `Operators.stencil_left_boundary(op, ::NullBoundaryCondition, ...)`).
-# A multiply against a `NaN` row makes only that row's output `NaN`; interior
-# rows are unaffected.
-#
-# The row must not be the interior row. Only operators whose input is centers reach
-# these methods -- every face-input operator has
-# `boundary_width(op, ::NullBoundaryCondition) == 0`, so no boundary row is requested
-# for it -- and a center-input operator's interior row at the boundary face reaches a
-# center outside the domain. The multiply clips those band entries, so only the `NaN`
-# entries in range contribute, but building the interior row can also read out of
-# range: `DivergenceOperator`'s row evaluates `LocalGeometry(space, idx - half, hidx)`,
-# which is center 0 at the bottom face, and that is a `BoundsError` under
-# `--check-bounds=yes`. The `NaN` row is built from the row type alone, so it reads
-# nothing.
-
-@inline nan_boundary_row(
-    ::Type{BMR},
-    ::Type{FT},
-) where {BMR <: BandMatrixRow, FT} = convert(BMR, zero(BMR) * FT(NaN))
-Operators.stencil_left_boundary(
+# Every row of an operator matrix is computed by the same code. The operator's
+# interior row is evaluated at every index, reading local geometry and arguments
+# at indices clamped to the column (see `lower_index`), so that all the
+# points of a column read the arguments in lockstep (see
+# `Operators.reads_in_lockstep`). The boundary conditions then transform the
+# row's static band near the boundaries, without reading any arguments, by
+# selecting (with `ifelse`) between entries based on the distances from idx to
+# the ends of the column:
+#  - With `Extrapolate`, the entries that lie outside of the column (the
+#    coefficients of the ghost points of the row's stencil) are folded into the
+#    in-range entries and zeroed (see `fold_ghosts`).
+#  - In the boundary window of a condition (the indices where a pointwise
+#    stencil uses its boundary stencil; see `Operators.left_interior_idx`),
+#    which contains every row that reaches its ghost points, other conditions
+#    replace the row (see `boundary_row`). On a column too short to separate the
+#    two windows, the left (bottom) one takes precedence, as in
+#    `Operators.stencil_value`.
+#  - DivergenceF2C with `Extrapolate` replicates the row adjacent to the
+#    boundary (see `op_matrix_row`).
+# The rows that no transform affects are returned before the transforms are
+# computed. The ghost points and windows only depend on the types of the
+# operator and its boundary conditions (see `Operators.max_ghost_counts` and
+# `Operators.right_window_width`), so this check is skipped at compile time when
+# no row is affected. The rows of a periodic column are all interior rows. The
+# last of `args` is the local geometry field of the operator's input space,
+# which the row functions do not take.
+Base.@propagate_inbounds function Operators.stencil_value(
     op_matrix::FDOperatorMatrix,
-    ::Operators.NullBoundaryCondition,
     space,
     idx,
-    hidx,
     args...,
-) = nan_boundary_row(
-    Operators.return_eltype(op_matrix, args...),
-    Spaces.undertype(space),
 )
-Operators.stencil_right_boundary(
-    op_matrix::FDOperatorMatrix,
-    ::Operators.NullBoundaryCondition,
+    op = op_matrix.op
+    Row = Operators.return_eltype(op_matrix, args...)
+    Topologies.isperiodic(space) && return convert(
+        Row,
+        op_matrix_interior_row(op, space, idx, Base.front(args)...),
+    )
+    row = op_matrix_row(Row, op, space, idx, Base.front(args)...)
+    left_bc = Operators.get_boundary(op, Operators.left_boundary_window(space))
+    right_bc = Operators.get_boundary(op, Operators.right_boundary_window(space))
+    (ld, ud) = outer_diagonals(Row)
+    (nghost_left, nghost_right) = Operators.ghost_counts(space, idx, ld, ud)
+    in_left = Operators.in_window(
+        idx - Operators.left_idx(space),
+        Operators.left_window_width(space, op, left_bc, args...),
+    )
+    in_right =
+        !in_left & Operators.in_window(
+            Operators.right_idx(space) - idx,
+            Operators.right_window_width(space, op, right_bc, args...),
+        )
+    (nghost_left > 0) | (nghost_right > 0) | in_left | in_right || return row
+
+    (max_left, max_right) = Operators.max_ghost_counts(space, idx, ld, ud)
+    # Every row of a column has at least one entry in range, and a row with at
+    # most two entries can only reach ghost points on one side, so when both of
+    # its sides are folded, both folds can be computed from the interior row.
+    nin = max(ud - ld + 1 - nghost_left - nghost_right, 1)
+    left_row = fold_ghosts(row, op, left_bc, nghost_left, max_left, nin, Val(true))
+    row =
+        ud - ld + 1 <= 2 && folds_ghosts(op, left_bc) && folds_ghosts(op, right_bc) ?
+        select_row(
+            nghost_left > 0,
+            left_row,
+            fold_ghosts(row, op, right_bc, nghost_right, max_right, nin, Val(false)),
+        ) :
+        fold_ghosts(left_row, op, right_bc, nghost_right, max_right, nin, Val(false))
+    FT = Spaces.undertype(space)
+    row = select_row(
+        in_left,
+        boundary_row(row, op, left_bc, FT, nghost_left, max_left, Val(true)),
+        row,
+    )
+    return select_row(
+        in_right,
+        boundary_row(row, op, right_bc, FT, nghost_right, max_right, Val(false)),
+        row,
+    )
+end
+
+@inline select_row(condition, row1, row2) =
+    map((entry1, entry2) -> ifelse(condition, entry1, entry2), row1, row2)
+
+# The row of `op` at idx, converted to the row type of its operator matrix. This
+# is the interior row, except for DivergenceF2C with Extrapolate, which
+# replicates the interior output adjacent to each such boundary
+# (D(v)[1] = D(v)[2]): its row at a boundary center is the interior row at the
+# adjacent center, with band offsets shifted by one to make them relative to
+# idx. The shifted rows fit in the row type, which `extrapolate_row_type` widens
+# by one diagonal on each side (the interior row is read at every index first).
+Base.@propagate_inbounds op_matrix_row(
+    ::Type{Row},
+    op,
     space,
     idx,
-    hidx,
     args...,
-) = nan_boundary_row(
-    Operators.return_eltype(op_matrix, args...),
-    Spaces.undertype(space),
-)
+) where {Row} = convert(Row, op_matrix_interior_row(op, space, idx, args...))
+Base.@propagate_inbounds function op_matrix_row(
+    ::Type{Row},
+    op::Operators.DivergenceF2C,
+    space,
+    idx,
+) where {Row}
+    uses_extrapolate(op) ||
+        return convert(Row, op_matrix_interior_row(op, space, idx))
+    row_idx = replicated_row_index(op, space, idx)
+    row = op_matrix_interior_row(op, space, row_idx)
+    row_idx == idx && return convert(Row, row)
+    return select_row(
+        row_idx - idx == 1,
+        convert(Row, shift_row_band(row, Val(1))),
+        convert(Row, shift_row_band(row, Val(-1))),
+    )
+end
 
-# Boundary rows for value-fixing boundary conditions that are still attached to
-# the operator matrix. This only happens through the explicit `operator_matrix(op)`
-# API (`@. op_matrix() * arg`), which keeps `op`'s boundary conditions inside the
-# FDOperatorMatrix. The automatic `@. op(arg)` conversion instead strips these
-# conditions from the matrix and reapplies them with a SetBoundaryOperator (see
-# `modifies_input` / `modifies_output`), so in that case the matrix carries no
-# boundary condition and the NullBoundaryCondition methods above are used instead.
+# The index of the interior row of DivergenceF2C that its row at idx replicates:
+# the adjacent center at a boundary center with Extrapolate, and idx elsewhere.
+@inline function replicated_row_index(op::Operators.DivergenceF2C, space, idx)
+    left_bc = Operators.get_boundary(op, Operators.left_boundary_window(space))
+    right_bc = Operators.get_boundary(op, Operators.right_boundary_window(space))
+    first_idx = Operators.left_idx(space) + (left_bc isa Operators.Extrapolate)
+    last_idx = Operators.right_idx(space) - (right_bc isa Operators.Extrapolate)
+    return Operators.column_index(space, clamp(idx, first_idx, last_idx))
+end
+
+# The row index and first factor from which a matrix-vector product computes its
+# row at idx. When every condition of a DivergenceF2C matrix is an Extrapolate,
+# each row of the product is the product's interior row at the replicated index,
+# so it is computed there with the matrix of DivergenceF2C without conditions,
+# whose rows have the two entries of the interior stencil rather than the four
+# of the widened row type: the two extra entries are zeros, but a product with
+# the widened rows reads the vector at both of them in every row (on CPUs, this
+# evaluates a fused flux expression twice as many times). A zero entry only
+# changes a row of the product when the vector has a value that is not finite
+# there. Other conditions modify the rows near the boundaries (see
+# boundary_row), so their matrices are multiplied as they are. A periodic column
+# has no boundaries, so all of its rows are interior rows (see stencil_value).
+@inline replicated_product_row(space, idx, matrix1) = (idx, matrix1)
+@inline function replicated_product_row(
+    space,
+    idx,
+    matrix1::Base.Broadcast.Broadcasted{
+        Operators.StencilStyle,
+        <:Any,
+        <:FDOperatorMatrix{<:Operators.DivergenceF2C},
+    },
+)
+    op = matrix1.f.op
+    uses_extrapolate(op) &&
+    unrolled_all(Base.Fix2(isa, Operators.Extrapolate), op.bcs) ||
+        return (idx, matrix1)
+    interior_op = Operators.DivergenceF2C()
+    interior_matrix = Base.Broadcast.Broadcasted(
+        matrix1.style,
+        FDOperatorMatrix{typeof(interior_op)}(interior_op),
+        matrix1.args,
+        matrix1.axes,
+    )
+    row_idx =
+        Topologies.isperiodic(space) ? idx : replicated_row_index(op, space, idx)
+    return (row_idx, interior_matrix)
+end
+
+# Reinterprets a row computed at `idx - shift` as a row at `idx` by shifting
+# its band offsets. The offsets are type-level constants, so the shift happens
+# at compile time.
+shift_row_band(row::BandMatrixRow{ld}, ::Val{shift}) where {ld, shift} =
+    BandMatrixRow{ld + shift}(row.entries...)
+
+widen_row_type(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
+    BandMatrixRow{ld - 1, bw + 2, T}
+extrapolate_row_type(op, ::Type{Row}) where {Row <: BandMatrixRow} =
+    uses_extrapolate(op) ? widen_row_type(Row) : Row
+
+# An Extrapolate condition folds the coefficients of the ghost points of a row
+# (its `nghost` entries that lie outside of the column, counted from the left
+# boundary when `from_left` and from the right one otherwise) into its in-range
+# entries: as for the ghost values of the pointwise advection stencils (see
+# `Operators.advection_ghost_values`), every ghost point on one side takes the
+# value extrapolated from the in-range points, so the row is multiplied (on the
+# right) by the matrix `E` that expresses each stencil point in terms of the
+# in-range points -- the identity for the in-range points, and the extrapolation
+# weights for the ghost points. Since all ghost rows of `E` are equal, the
+# product reduces to adding `sum(ghost coefficients) * weight[k]` to the k-th
+# in-range entry, ordered from the boundary outwards. For example, at the
+# bottom, the interior row of Upwind3rdOrderBiasedProductC2F,
+# (-v³ - |v³|, 7v³ + 3|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12, becomes
+# (0, 6v³ + 2|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 at the face one in from the
+# boundary with Extrapolate{0}, and (0, 5v³ + |v³|, 8v³ - 2|v³|, -v³ + |v³|) / 12
+# with Extrapolate{1}; at a boundary face of InterpolateC2F, every order copies
+# the closest input. The weights come from `extrapolate_weights` with the number
+# of in-range entries, `nin`, which on 1- and 2-center columns also excludes the
+# ghost points beyond the opposite boundary, so that the second fold (of the
+# right boundary) extrapolates from the same points as the first.
 #
-# An operator matrix can only capture the linear part of the operator; the
-# constant contributed by the boundary value is zeroed out (see `has_affine_bc`).
-# For every operator except GradientF2C/DivergenceF2C, a value-fixing condition
-# prescribes the output at the boundary as a pure constant, so its linear part is zero
-# and the boundary row is all zeros (`zero` of the row type, which keeps the row's
-# bandwidth and zeroes its entries; the multiply clips the out-of-range band entries at
-# the column ends, so the row need not be narrowed).
+# The rows of the other conditions only reach ghost points in their boundary
+# windows, where `boundary_row` replaces them (and the multiply skips entries
+# outside of the column), so they are left unchanged. DivergenceF2C's
+# Extrapolate replicates an output rather than extrapolating its input, and its
+# rows only reach ghost points on degenerate columns.
+folds_ghosts(op, bc) = false
+folds_ghosts(op, ::Operators.Extrapolate) = true
+folds_ghosts(::Operators.DivergenceF2C, ::Operators.Extrapolate) = false
+@inline fold_ghosts(row, op, bc, nghost, max_ghost, nin, from_left) =
+    folds_ghosts(op, bc) ?
+    clip_row(
+        row,
+        Operators.extrapolate_weights(bc, nin, eltype(eltype(row))),
+        nghost,
+        max_ghost,
+        from_left,
+    ) : row
+
+# Zeroes the first `nghost` entries of a row from one of its ends, after folding
+# them into the other entries with the extrapolation `weights` (unless they are
+# `nothing`), where `nghost` is at most `max_ghost` (a compile-time constant).
+# The entry at position `pos` from that end is only folded when
+# 1 <= nghost < pos, so its folded value is selected from those static cases,
+# which keeps the folds of rows with constant entries constant. Entries are
+# selected with `ifelse` rather than multiplied by masks, so that a row with no
+# ghost points is returned unchanged (adding a zero would turn a -0.0 entry into
+# 0.0).
+@inline function clip_row(
+    row::BandMatrixRow{ld, bw},
+    weights,
+    nghost,
+    max_ghost,
+    ::Val{from_left},
+) where {ld, bw, from_left}
+    entries = row.entries
+    z = zero(eltype(row))
+    from_boundary(j) = from_left ? j : bw + 1 - j
+    ghost_sum(n) =
+        unrolled_sum(ntuple(k -> ifelse(from_boundary(k) <= n, entries[k], z), Val(bw)))
+    clipped_entries = ntuple(Val(bw)) do j
+        pos = from_boundary(j)
+        folded = unrolled_reduce(
+            ntuple(identity, Val(bw - 1));
+            init = entries[j],
+        ) do entry, n
+            isnothing(weights) || !(n <= max_ghost && n < pos <= n + 3) ? entry :
+            ifelse(
+                nghost == n,
+                entries[j] + ghost_sum(n) * weights[pos - n],
+                entry,
+            )
+        end
+        pos <= max_ghost ? ifelse(pos <= nghost, z, folded) : folded
+    end
+    return BandMatrixRow{ld}(clipped_entries...)
+end
+
+# The row of an operator matrix in the boundary window of a condition, given the
+# clipped row. A missing condition gives `NaN`s, matching the `NaN` that the
+# pointwise stencils produce (see `Operators.NullBoundaryCondition`); a multiply
+# by that row makes only its own output `NaN`. A condition that fixes the
+# operator's output at the boundary gives zeros: an operator matrix only captures
+# the linear part of the operator, and the fixed value is a constant (see
+# `has_affine_bc`). Such conditions only remain in the matrix through the
+# explicit `operator_matrix(op)` API (`@. op_matrix() * arg`); the automatic
+# conversion of `@. op(arg)` strips them and reapplies them with a
+# SetBoundaryOperator instead (see `modifies_output`), leaving a missing
+# condition in the matrix. GradientF2C and DivergenceF2C with SetValue are the
+# exception (as with `modifies_input`): the condition fixes an input value, and
+# the output still depends linearly on the adjacent interior input, so only the
+# coefficient of the fixed boundary face is zeroed, like that of a ghost point.
+# Every other condition leaves the row unchanged.
 const ValueFixingBoundaryCondition = Union{
     Operators.SetValue,
     Operators.SetGradient,
     Operators.SetDivergence,
     Operators.SetCurl,
 }
-# The operators whose SetValue fixes an input rather than an output, and so keep a
-# genuine boundary stencil in the matrix (see `modifies_input`).
 const InputFixingFDOperator =
     Union{Operators.GradientF2C, Operators.DivergenceF2C}
 
-Base.@propagate_inbounds Operators.stencil_left_boundary(
-    op_matrix::FDOperatorMatrix,
+@inline boundary_row(row, op, bc, _, nghost, max_ghost, from_left) = row
+@inline boundary_row(
+    row,
+    op,
+    ::Operators.NullBoundaryCondition,
+    ::Type{FT},
+    nghost,
+    max_ghost,
+    from_left,
+) where {FT} = convert(typeof(row), zero(row) * FT(NaN))
+@inline boundary_row(
+    row,
+    op,
     ::ValueFixingBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
-# Mirror of stencil_left_boundary above, for the right boundary.
-Base.@propagate_inbounds Operators.stencil_right_boundary(
-    op_matrix::FDOperatorMatrix,
-    ::ValueFixingBoundaryCondition,
-    space,
-    idx,
-    hidx,
-    args...,
-) = zero(Operators.return_eltype(op_matrix, args...))
-
-# GradientF2C/DivergenceF2C with a SetValue are the exception (as with
-# `modifies_input`): the condition fixes an input value, and the near-boundary output
-# still depends linearly on the adjacent interior input, so the row is the genuine
-# boundary stencil (with the fixed input's coefficient dropped) rather than zero. The
-# last of `args` is the local geometry field that `op_matrix` was given, which the
-# underlying operator's row functions do not take.
-Base.@propagate_inbounds function Operators.stencil_left_boundary(
-    op_matrix::FDOperatorMatrix{<:InputFixingFDOperator},
-    bc::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    args...,
-)
-    row = op_matrix_first_row(
-        op_matrix.op,
-        bc,
-        space,
-        idx,
-        hidx,
-        args[1:(end - 1)]...,
-    )
-    return convert(Operators.return_eltype(op_matrix, args...), row)
-end
-# Mirror of stencil_left_boundary above, for the right boundary.
-Base.@propagate_inbounds function Operators.stencil_right_boundary(
-    op_matrix::FDOperatorMatrix{<:InputFixingFDOperator},
-    bc::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-    args...,
-)
-    row = op_matrix_last_row(
-        op_matrix.op,
-        bc,
-        space,
-        idx,
-        hidx,
-        args[1:(end - 1)]...,
-    )
-    return convert(Operators.return_eltype(op_matrix, args...), row)
-end
+    _,
+    nghost,
+    max_ghost,
+    from_left,
+) = zero(row)
+@inline boundary_row(
+    row,
+    ::InputFixingFDOperator,
+    ::Operators.SetValue,
+    _,
+    nghost,
+    max_ghost,
+    from_left,
+) = clip_row(row, nothing, nghost + 1, max(max_ghost, 0) + 1, from_left)
 
 ################################################################################
 
@@ -707,8 +821,8 @@ end
 Alias for `BandMatrixRow{-1 + half, 1, T}`: a row of a [`BandMatrixRow`](@ref) matrix
 field with a single entry on the diagonal `-1/2`. Together with
 `UpperDiagonalMatrixRow`, it is used for the one-sided rows of center-to-face and
-face-to-center operator matrices, e.g. the boundary rows generated by
-[`operator_matrix`](@ref) for interpolation and upwinding operators.
+face-to-center operator matrices, e.g. the rows generated by
+[`operator_matrix`](@ref) for the biased interpolation operators.
 """
 const LowerDiagonalMatrixRow = BandMatrixRow{-1 + half, 1}    # -0.5
 
@@ -719,8 +833,8 @@ const LowerDiagonalMatrixRow = BandMatrixRow{-1 + half, 1}    # -0.5
 Alias for `BandMatrixRow{half, 1, T}`: a row of a [`BandMatrixRow`](@ref) matrix
 field with a single entry on the diagonal `+1/2`. Together with
 `LowerDiagonalMatrixRow`, it is used for the one-sided rows of center-to-face and
-face-to-center operator matrices, e.g. the boundary rows generated by
-[`operator_matrix`](@ref) for interpolation and upwinding operators.
+face-to-center operator matrices, e.g. the rows generated by
+[`operator_matrix`](@ref) for the biased interpolation operators.
 """
 const UpperDiagonalMatrixRow = BandMatrixRow{half, 1}         #  0.5
 
@@ -748,86 +862,36 @@ const εⁱʲ = Geometry.Tensor(
     (Geometry.Contravariant12Axis(), Geometry.Contravariant12Axis()),
 )
 
-Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
+# Indices of the points below and above idx (at idx ∓ 1/2) that a row reads,
+# clamped to the column: the faces adjacent to a center are always in the
+# column, but the center below the bottom face and the center above the top
+# face are not.
+@inline lower_index(space, idx) =
+    idx isa PlusHalf && !Topologies.isperiodic(space) ?
+    max(idx - half, Operators.first_index(space, idx - half)) : idx - half
+@inline upper_index(space, idx) =
+    idx isa PlusHalf && !Topologies.isperiodic(space) ?
+    min(idx + half, Operators.last_index(space, idx + half)) : idx + half
+
+Base.@propagate_inbounds ct3_data(velocity, space, idx) =
     Geometry.contravariant3(
-        Operators.getidx(velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
+        Operators.column_value(velocity, space, idx),
+        Geometry.LocalGeometry(space, idx),
     )
 
 ################################################################################
 
-# Boundary rows for the Extrapolate boundary condition. Extrapolate has two
-# distinct meanings, depending on the operator:
-#
-#  - Copy the nearest input (interpolation operators): their stencil only
-#    reaches a ghost point at the boundary face itself, where a single
-#    interior point is in range, so every extrapolation order reduces to the
-#    value of the closest interior point, and the interpolation of that value
-#    with itself is again that value: the boundary row is an identity entry
-#    pointing at the closest interior point. Such a row fits inside the
-#    interior row's band, so the operator's row type is unchanged.
-#
-#  - Replicate the nearest interior output (DivergenceF2C): the output at the
-#    boundary center replicates the operator's output at the closest interior
-#    center, so the boundary row is the interior row evaluated at `idx ± 1`,
-#    with its band offsets shifted by `±1` to make them relative to `idx`. The
-#    `convert` in `stencil_left_boundary` / `stencil_right_boundary` zero-pads
-#    the shifted row to the operator's full row type, which must be one
-#    diagonal wider on each side than the interior row (see
-#    `extrapolate_row_type`); the multiply clips band entries that lie outside
-#    the column. (Keeping the row Bidiagonal by reapplying the condition to
-#    the result with a SetBoundaryOperator instead benchmarked slower on GPU,
-#    because the boundary levels then recompute the multiply through the lazy
-#    `getidx` path.)
-const CopyInputExtrapolateOp =
-    Union{Operators.InterpolateC2F, Operators.WeightedInterpolateC2F}
-
-op_matrix_first_row(
-    ::CopyInputExtrapolateOp,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(true)
-op_matrix_last_row(
-    ::CopyInputExtrapolateOp,
-    ::Operators.Extrapolate,
-    ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(true)
-
-# Reinterprets a row computed at `idx - shift` as a row at `idx` by shifting
-# its band offsets. The offsets are type-level constants, so the shift happens
-# at compile time.
-shift_row_band(row::BandMatrixRow{ld}, ::Val{shift}) where {ld, shift} =
-    BandMatrixRow{ld + shift}(row.entries...)
-
-Base.@propagate_inbounds op_matrix_first_row(
-    op::Operators.DivergenceF2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    args...,
-) = shift_row_band(
-    op_matrix_interior_row(op, space, idx + 1, hidx, args...),
-    Val(1),
-)
-Base.@propagate_inbounds op_matrix_last_row(
-    op::Operators.DivergenceF2C,
-    ::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    args...,
-) = shift_row_band(
-    op_matrix_interior_row(op, space, idx - 1, hidx, args...),
-    Val(-1),
-)
-
-widen_row_type(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
-    BandMatrixRow{ld - 1, bw + 2, T}
-extrapolate_row_type(op, ::Type{Row}) where {Row <: BandMatrixRow} =
-    uses_extrapolate(op) ? widen_row_type(Row) : Row
-
-################################################################################
+# Operators with the rows below that only depend on FT.
+const ConstantRowOperator = Union{
+    Operators.InterpolateC2F,
+    Operators.InterpolateF2C,
+    Operators.BottomBiasedC2F,
+    Operators.BottomBiasedF2C,
+    Operators.TopBiasedC2F,
+    Operators.TopBiasedF2C,
+    Operators.SetBoundaryOperator,
+    Operators.GradientOperator,
+}
 
 op_matrix_interior_row(
     ::Union{Operators.InterpolateC2F, Operators.InterpolateF2C},
@@ -853,11 +917,17 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.WeightedInterpolationOperator,
     space,
     idx,
-    hidx,
     weight,
 )
-    w⁻ = Operators.getidx(weight, idx - half, hidx)
-    w⁺ = Operators.getidx(weight, idx + half, hidx)
+    idx⁻ = lower_index(space, idx)
+    idx⁺ = upper_index(space, idx)
+    w⁻ = Operators.column_value(weight, space, idx⁻)
+    w⁺ = Operators.column_value(weight, space, idx⁺)
+    # At a boundary face, both points of the stencil are clamped to the same
+    # point, so their weights are equal whatever their value, and the boundary
+    # row only depends on the boundary conditions. The weights are read at every
+    # face (see `Operators.stencil_value`), but only divided where they differ.
+    idx⁻ == idx⁺ && return BidiagonalMatrixRow(one(w⁻), one(w⁺)) / 2
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end
@@ -871,10 +941,9 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.UpwindBiasedProductC2F,
     space,
     idx,
-    hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx))
     av³ = CT3(abs(v³.u³))
     return BidiagonalMatrixRow(v³ + av³, v³ - av³) / 2
 end
@@ -888,171 +957,12 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.Upwind3rdOrderBiasedProductC2F,
     space,
     idx,
-    hidx,
     velocity,
 )
-    v³ = CT3(ct3_data(velocity, space, idx, hidx))
+    v³ = CT3(ct3_data(velocity, space, idx))
     av³ = CT3(abs(v³.u³))
     return QuaddiagonalMatrixRow(-v³ - av³, 7v³ + 3av³, 7v³ - 3av³, -v³ + av³) /
            12
-end
-
-# Boundary rows for the matrix-representable advection operators (with the
-# Extrapolate boundary condition, the only one they accept). Boundary faces
-# are computed with the interior stencil, padding the ghost points it reaches
-# with the condition's extrapolation from the in-range interior points (see
-# `Operators.Extrapolate`; the extrapolation order is reduced where fewer
-# interior points are in range).
-#
-# The matrix multiply clips out-of-range band entries instead of extrapolating
-# their values, so each face whose interior row reaches a ghost point gets a
-# boundary row that folds the ghost coefficients into the in-range interior
-# columns, leaving zeros in the out-of-range slots (which the multiply then
-# clips): the boundary row is the interior row multiplied (on the right) by
-# the square matrix `E` that expresses each stencil point in terms of the
-# in-range interior points -- the identity for the in-range points, and the
-# extrapolation weights for the ghost points. Since every ghost point of a
-# stencil shares the same extrapolated value, all ghost rows of `E` are equal,
-# and the product reduces to adding `sum(ghost coefficients) * weight[k]` to
-# the k-th in-range column. The folded rows fit the interior row type, so no
-# widening is needed. For example, at the bottom, the interior row of
-# Upwind3rdOrderBiasedProductC2F, (-v³ - |v³|, 7v³ + 3|v³|, 7v³ - 3|v³|,
-# -v³ + |v³|) / 12, becomes (0, 6v³ + 2|v³|, 7v³ - 3|v³|, -v³ + |v³|) / 12 at
-# the face one in from the boundary with Extrapolate{0}, and
-# (0, 5v³ + |v³|, 8v³ - 2|v³|, -v³ + |v³|) / 12 with Extrapolate{1}.
-#
-# The rows are reached through the generic FDOperatorMatrix
-# stencil_left_boundary / stencil_right_boundary methods; advection operators
-# never carry NullBoundaryCondition (Extrapolate{0} is added by default), so
-# no zero-row fallback applies here. The interior row of these operators only
-# reads the velocity and local geometry at the row's own face, so it is safe
-# to evaluate at boundary faces.
-const ExtrapolateAdvectionOp = Union{
-    Operators.UpwindBiasedProductC2F,
-    Operators.Upwind3rdOrderBiasedProductC2F,
-}
-
-Base.@propagate_inbounds function op_matrix_first_row(
-    op::ExtrapolateAdvectionOp,
-    bc::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    row = op_matrix_interior_row(op, space, idx, hidx, velocity)
-    nghost =
-        Operators.boundary_width(op, bc) -
-        (idx - Operators.left_face_boundary_idx(space))
-    # On a short column the row can also reach ghost points beyond the right
-    # boundary (the middle face of a 2-center column is one in from both
-    # boundaries, and both faces of a 1-center column reach ghosts on both
-    # sides). `should_call_left_boundary` takes precedence, so this row must
-    # fold the right boundary's ghosts as well, with the order of both
-    # extrapolations reduced to the number of in-range points.
-    bc_right =
-        Operators.get_boundary(op, Operators.right_boundary_window(space))
-    nghost_right = max(
-        Operators.boundary_width(op, bc_right) -
-        (Operators.right_face_boundary_idx(space) - idx),
-        0,
-    )
-    row = fold_extrapolate_row_left(row, bc, nghost, nghost_right)
-    nghost_right == 0 && return row
-    return fold_extrapolate_row_right(row, bc_right, nghost_right, nghost)
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    op::ExtrapolateAdvectionOp,
-    bc::Operators.Extrapolate,
-    space,
-    idx,
-    hidx,
-    velocity,
-)
-    row = op_matrix_interior_row(op, space, idx, hidx, velocity)
-    nghost =
-        Operators.boundary_width(op, bc) -
-        (Operators.right_face_boundary_idx(space) - idx)
-    # This row cannot also reach the left boundary's ghost points in practice
-    # (`should_call_left_boundary` takes precedence, so overlapping faces are
-    # routed to `op_matrix_first_row`), but fold them like `op_matrix_first_row`
-    # does for symmetry and robustness.
-    bc_left =
-        Operators.get_boundary(op, Operators.left_boundary_window(space))
-    nghost_left = max(
-        Operators.boundary_width(op, bc_left) -
-        (idx - Operators.left_face_boundary_idx(space)),
-        0,
-    )
-    row = fold_extrapolate_row_right(row, bc, nghost, nghost_left)
-    nghost_left == 0 && return row
-    return fold_extrapolate_row_left(row, bc_left, nghost_left, nghost)
-end
-
-# `interior row * E` written out: the `nghost` out-of-range entries on the
-# boundary side are zeroed, and their sum, weighted by the extrapolation
-# weights of the in-range points ordered from the boundary outwards, is added
-# to the in-range entries. `nother` is the number of out-of-range entries on
-# the opposite side of the row (nonzero only on 1- and 2-center columns);
-# they reduce the extrapolation order like the in-range count does, and the
-# trailing zeros of `extrapolate_weights`'s 3-tuple keep them untouched here,
-# so that the opposite boundary's fold (applied before or after this one) can
-# zero them and fold their coefficients itself. `extrapolate_weights` returns
-# 3 weights, which is enough for any row with up to 4 entries (a row with at
-# least 1 ghost entry has at most 3 others).
-# `nghost` is a function of the runtime row index, so it cannot be constant-
-# propagated into the folds below; these ladders make it a compile-time
-# constant instead, which folds the `ntuple` branches and turns the
-# `w[j - nghost]` weight lookups into constant tuple indices (~40% faster per
-# fold than a runtime `nghost`). The callers guarantee `nghost >= 1`, and a
-# foldable row keeps at least one in-range entry, so `nghost <= 3`. `nother`
-# stays a runtime value: it only selects the extrapolation order inside
-# `extrapolate_weights`, which is a branch-free select either way.
-@inline fold_extrapolate_row_left(row, bc, nghost, nother = 0) =
-    nghost == 1 ? fold_extrapolate_row_left(row, bc, Val(1), nother) :
-    nghost == 2 ? fold_extrapolate_row_left(row, bc, Val(2), nother) :
-    fold_extrapolate_row_left(row, bc, Val(3), nother)
-@inline fold_extrapolate_row_right(row, bc, nghost, nother = 0) =
-    nghost == 1 ? fold_extrapolate_row_right(row, bc, Val(1), nother) :
-    nghost == 2 ? fold_extrapolate_row_right(row, bc, Val(2), nother) :
-    fold_extrapolate_row_right(row, bc, Val(3), nother)
-@inline function fold_extrapolate_row_left(
-    row::BandMatrixRow{ld, bw},
-    bc::Operators.Extrapolate,
-    ::Val{nghost},
-    nother,
-) where {ld, bw, nghost}
-    entries = row.entries
-    z = zero(first(entries))
-    w = Operators.extrapolate_weights(bc, bw - nghost - nother)
-    ghost_sum = reduce(+, ntuple(k -> k <= nghost ? entries[k] : z, Val(bw)))
-    return BandMatrixRow{ld}(
-        ntuple(
-            j -> j <= nghost ? z : entries[j] + ghost_sum * w[j - nghost],
-            Val(bw),
-        )...,
-    )
-end
-@inline function fold_extrapolate_row_right(
-    row::BandMatrixRow{ld, bw},
-    bc::Operators.Extrapolate,
-    ::Val{nghost},
-    nother,
-) where {ld, bw, nghost}
-    entries = row.entries
-    z = zero(first(entries))
-    w = Operators.extrapolate_weights(bc, bw - nghost - nother)
-    last_in_range = bw - nghost
-    ghost_sum =
-        reduce(+, ntuple(k -> k > last_in_range ? entries[k] : z, Val(bw)))
-    return BandMatrixRow{ld}(
-        ntuple(
-            j ->
-                j > last_in_range ? z :
-                entries[j] + ghost_sum * w[last_in_range + 1 - j],
-            Val(bw),
-        )...,
-    )
 end
 
 op_matrix_interior_row(::Operators.SetBoundaryOperator, ::Type{FT}) where {FT} =
@@ -1062,16 +972,6 @@ op_matrix_row_type(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow{C3{FT}}
 op_matrix_interior_row(::Operators.GradientOperator, ::Type{FT}) where {FT} =
     BidiagonalMatrixRow(-C3(FT(1)), C3(FT(1)))
-op_matrix_first_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(C3(FT(0)), C3(FT(1)))
-op_matrix_last_row(
-    ::Operators.GradientF2C,
-    ::Operators.SetValue,
-    ::Type{FT},
-) where {FT} = BidiagonalMatrixRow(-C3(FT(1)), C3(FT(0)))
 
 op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
     extrapolate_row_type(op, BidiagonalMatrixRow{C3Cov{FT}})
@@ -1079,36 +979,11 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.DivergenceOperator,
     space,
     idx,
-    hidx,
 )
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
+    invJ = Geometry.LocalGeometry(space, idx).invJ
+    J⁻ = Geometry.LocalGeometry(space, lower_index(space, idx)).J
+    J⁺ = Geometry.LocalGeometry(space, upper_index(space, idx)).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_first_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁺ = Geometry.LocalGeometry(space, idx + half, hidx).J
-    return BidiagonalMatrixRow(C3(FT(0))', C3(J⁺)') * invJ
-end
-Base.@propagate_inbounds function op_matrix_last_row(
-    ::Operators.DivergenceF2C,
-    ::Operators.SetValue,
-    space,
-    idx,
-    hidx,
-)
-    FT = Spaces.undertype(space)
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
-    J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
-    return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
 end
 
 op_matrix_row_type(
@@ -1119,8 +994,7 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     ::Operators.CurlFiniteDifferenceOperator,
     space,
     idx,
-    hidx,
 )
-    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    invJ = Geometry.LocalGeometry(space, idx).invJ
     return BidiagonalMatrixRow(-εⁱʲ, εⁱʲ) * invJ
 end

@@ -30,6 +30,12 @@ FiniteDifferenceSpace(
 local_geometry_type(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} =
     local_geometry_type(G)
 
+# Read the type of a column slice's local geometry from its full grid, instead of
+# building a view of the column's data.
+undertype(space::FiniteDifferenceSpace{<:Grids.ColumnGrid}) = Geometry.undertype(
+    eltype(local_geometry_data(grid(space).full_grid, staggering(space))),
+)
+
 """
     FaceFiniteDifferenceSpace{G}
 

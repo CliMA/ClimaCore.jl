@@ -1,20 +1,12 @@
 import ..DataLayouts
-dual_type(::Type{A}) where {A} = typeof(Geometry.dual(A.instance))
 
-inv_return_type(::Type{X}) where {X} = error(
-    "Cannot solve linear system because a diagonal entry in A contains the \
-     non-invertible type $X",
-)
-inv_return_type(::Type{X}) where {X <: Union{Number, SMatrix}} = X
-inv_return_type(::Type{X}) where {T, X <: Geometry.Tensor{2, T}} =
-    tensor_type(T, Tuple{dual_type(basis2(X)), dual_type(basis1(X))})
-
+# Each value of x is a product of a value of b with the inverse of a value of A.
+inv_mul(a, b) = inv(a) * b
 x_eltype(A::ScalingFieldMatrixEntry, b) =
     x_type(eltype(A), eltype(Base.broadcastable(b)))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
     x_type(eltype(eltype(A)), eltype(Base.broadcastable(b)))
-x_type(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} =
-    mul_return_type(inv_return_type(T_A), T_b)
+x_type(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} = return_type(inv_mul, Tuple{T_A, T_b})
 
 ################################################################################
 
@@ -34,7 +26,7 @@ single_field_solver_cache(::ScalingFieldMatrixEntry, b) = similar(b, Tuple{})
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
     ud == 0 && return similar(b, Tuple{})
-    T_U = mul_return_type(inv_return_type(eltype(eltype(A))), eltype(eltype(A)))
+    T_U = x_type(eltype(eltype(A)), eltype(eltype(A)))
     return similar(b, Tuple{x_eltype(A, b), ntuple(Returns(T_U), Val(ud))...})
 end
 

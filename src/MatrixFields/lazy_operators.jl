@@ -13,8 +13,6 @@ abstract type AbstractLazyOperator end
 
 struct LazyOperatorStyle <: Base.Broadcast.BroadcastStyle end
 
-const LazyOperatorBroadcasted = Base.Broadcast.Broadcasted{LazyOperatorStyle}
-
 Base.Broadcast.broadcasted(op::AbstractLazyOperator) =
     Base.Broadcast.broadcasted(LazyOperatorStyle(), op)
 
@@ -29,6 +27,17 @@ Base.Broadcast.BroadcastStyle(
         LazyOperatorStyle,
     },
 ) = LazyOperatorStyle()
+
+# A broadcast expression that contains lazy operators, which is turned into a
+# Base.Broadcast.Broadcasted once the lazy operators are replaced. Using a type
+# that is distinct from Base.Broadcast.Broadcasted means that the methods of
+# materialize below do not invalidate Base's methods for Broadcasted.
+struct LazyOperatorBroadcasted{F, A} <: Base.AbstractBroadcasted
+    f::F
+    args::A
+end
+Base.Broadcast.BroadcastStyle(::Type{<:LazyOperatorBroadcasted}) = LazyOperatorStyle()
+Base.Broadcast.broadcastable(bc::LazyOperatorBroadcasted) = bc
 
 # TODO: This definition of Base.Broadcast.broadcasted results in 2 additional
 # method invalidations when using Julia 1.8.5. However, if we were to delete it,
@@ -70,38 +79,15 @@ replace_lazy_operator(_, ::AbstractLazyOperator) =
     error("Every subtype of AbstractLazyOperator must implement a method for
            replace_lazy_operator(space, lazy_op)")
 
-largest_space(_) = nothing
-largest_space(field::Fields.Field) = axes(field)
-largest_space(bc::Fields.LazyField) =
-    unrolled_reduce(larger_space, unrolled_map(largest_space, bc.args); init = nothing)
-
-larger_space(::Nothing, ::Nothing) = nothing
-larger_space(space1, ::Nothing) = space1
-larger_space(::Nothing, space2) = space2
-larger_space(space1::S, ::S) where {S} = space1 # Neither space is larger.
-larger_space(
-    space1::Spaces.FiniteDifferenceSpace,
-    ::Spaces.FiniteDifferenceSpace,
-) = space1 # The staggering does not matter here, so neither space is larger.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space1 # The staggering does not matter here, so neither space is larger.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.FiniteDifferenceSpace,
-) = space1 # The types indicate that space2 is a subspace of space1.
-larger_space(
-    ::Spaces.FiniteDifferenceSpace,
-    space2::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space2 # The types indicate that space1 is a subspace of space2.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.AbstractSpectralElementSpace,
-) = space1 # The types indicate that space2 is a subspace of space1.
-larger_space(
-    ::Spaces.AbstractSpectralElementSpace,
-    space2::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space2 # The types indicate that space1 is a subspace of space2.
-larger_space(::S1, ::S2) where {S1, S2} =
-    error("Mismatched spaces ($(S1.name.name) and $(S2.name.name))")
+# The largest space in a broadcast expression with lazy operators, found like
+# the shared space of an ordinary broadcast (see Fields.shared_space). Spaces on
+# the same grid with different staggerings are interchangeable here, since
+# replace_lazy_operator only depends on the grid of its space.
+largest_space(arg) = Fields.shared_space(arg)
+largest_space(bc::LazyOperatorBroadcasted) =
+    unrolled_reduce(bc.args; init = nothing) do space, arg
+        arg_space = largest_space(arg)
+        !isnothing(arg_space) &&
+        (isnothing(space) || Spaces.maybe_issubspace(space, arg_space)) ?
+        arg_space : space
+    end

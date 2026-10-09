@@ -253,6 +253,8 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     @test Spaces.column(z, 1, 1, 1) isa Fields.Field
     @test_throws BoundsError Spaces.column(z, 1, 2, 1)
     @test Spaces.column(z, 1, 2) isa Fields.Field
+    @test Spaces.column(c_space, 1, 1, 1) isa Spaces.FiniteDifferenceSpace
+    @test_throws BoundsError Spaces.column(c_space, 1, 2, 1)
 end
 
 @testset "finite difference space" begin

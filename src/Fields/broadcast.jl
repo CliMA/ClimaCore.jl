@@ -130,6 +130,25 @@ Base.Broadcast.broadcastable(bc::LazyField) =
 Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
+# Base implements .&& and .|| with a Broadcasted second operand by flattening
+# the operand into a closure that captures it, along with every Field in it. A
+# Field captured in a closure cannot be rebuilt in a GPU kernel that restores
+# its grid (see Grids.toggle_placeholder_grid), so the closure here captures
+# only the function of the flattened operand, whose arguments remain arguments.
+struct ShortCircuit{Op, F}
+    f::F
+end
+ShortCircuit{Op}(f::F) where {Op, F} = ShortCircuit{Op, F}(f)
+@inline (sc::ShortCircuit{Base.Broadcast.AndAnd})(a, args...) = a && sc.f(args...)
+@inline (sc::ShortCircuit{Base.Broadcast.OrOr})(a, args...) = a || sc.f(args...)
+for Op in (:AndAnd, :OrOr)
+    @eval function Base.Broadcast.broadcasted(::Base.Broadcast.$Op, a, bc::LazyField)
+        bcf = Base.Broadcast.flatten(bc)
+        f = ShortCircuit{Base.Broadcast.$Op}(bcf.f)
+        return Base.Broadcast.broadcasted(f, a, bcf.args...)
+    end
+end
+
 Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
     iszero(ndims(arg)) ? CartesianIndex() : index
 
@@ -137,7 +156,7 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) = copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
+Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
 field_values(bc::LazyField{S}) where {S} =
@@ -163,8 +182,14 @@ end
 @inline has_field_style(::T) where {T} =
     Base.Broadcast.BroadcastStyle(T) isa Fields.AbstractFieldStyle
 
+# Combine the scopes of all Field arguments without unrolled_filter, whose output
+# type promotion adds about ten method instances to every broadcast expression.
 @inline DataLayouts.DataScope(bc::LazyField) =
-    DataLayouts.DataScope(unrolled_filter(has_field_style, bc.args)...)
+    unrolled_mapreduce(field_arg_scope, combine_field_arg_scopes, bc.args)
+@inline field_arg_scope(arg) = has_field_style(arg) ? DataLayouts.DataScope(arg) : nothing
+@inline combine_field_arg_scopes(scope1, scope2) =
+    isnothing(scope1) ? scope2 :
+    isnothing(scope2) ? scope1 : DataLayouts.DataScope(scope1, scope2)
 @inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
@@ -191,24 +216,31 @@ Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
 @inline sliced_broadcasted(f::F, args, axes) where {F} =
     Broadcast.Broadcasted(Broadcast.combine_styles(args...), f, args, axes)
 
+# The function of a broadcast node after slicing. Only operators need to be
+# sliced (e.g., to slice their field-valued boundary conditions), so other
+# callable objects are left unchanged.
+sliced_function(_, f, _) = f
+
 # Body of a slice operator applied to one node of a broadcast expression; a
 # generated function makes slicing a node one method instance rather than three
 # per node per distinct expression type (as in DataLayouts/indexing.jl).
 sliced_broadcast_body(op, bc_type) = quote
     Base.@_propagate_inbounds_meta
-    f = getfield(bc, :f)
-    f′ = f isa Union{Function, Type} ? f : $op(f, inds...)
+    f′ = sliced_function($op, getfield(bc, :f), inds)
     args = getfield(bc, :args)
     return sliced_broadcasted(
         f′,
         Base.Cartesian.@ntuple(
             $(length(bc_type.parameters[4].parameters)),
             n -> let arg = getfield(args, n)
-                arg isa MaybeLazyField ? $op(arg, arg_slice_indices($op, arg, inds)...) :
+                arg isa Field ?
+                DataLayouts.slice_arg($op, arg, arg_slice_indices($op, arg, inds)...) :
+                arg isa MaybeLazyField ?
+                $op(arg, arg_slice_indices($op, arg, inds)...) :
                 arg
             end,
         ),
-        $op(bc.axes, inds...),
+        DataLayouts.slice_arg($op, bc.axes, inds...),
     )
 end
 
@@ -232,6 +264,10 @@ for op in (:(Base.view), :level, :slab, :column)
         sliced_broadcast_body($(QuoteNode(op)), bc)
 end
 
+# Index into pointwise broadcasts like into Fields, through their field_values.
+Base.@propagate_inbounds Base.getindex(bc::PointwiseBroadcasted, index::PointIndex) =
+    getindex(field_values(bc), index)
+
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
@@ -249,8 +285,7 @@ Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the
-# copyto! methods in DataLayouts/loops.jl), and every copyto! method for a
-# LazyField style accepts it in the same position.
+# copyto! methods in DataLayouts/loops.jl).
 @inline function Base.copyto!(
     dest::Field,
     bc::LazyField,

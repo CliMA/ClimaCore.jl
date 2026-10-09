@@ -1,5 +1,9 @@
 import ..Utilities:
-    AutoBroadcaster, nested_broadcast, nested_broadcast_result_type, unwrap
+    AutoBroadcaster,
+    nested_broadcast,
+    nested_broadcast_result_type,
+    unwrap,
+    add_auto_broadcasters
 
 # TODO: Avoid defining these methods by refactoring the Geometry module so that
 # all relevant functionality is expressed in terms of standard math operations
@@ -14,26 +18,57 @@ Jcontravariant3(x::AutoBroadcaster, lg) =
     nested_broadcast(Base.Fix2(Jcontravariant3, lg), x)
 
 # An AutoBroadcaster entry pairs componentwise like its wrapped collection
-# (see `mul_with_projection` below and `_dual_axes_for_projection`).
+# (see `project_for_mul` below and `_dual_axes_for_projection`).
 @inline _dual_axes_for_projection(::Type{X}) where {X <: AutoBroadcaster} =
     _dual_axes_for_projection(unwrap(X))
 
-mul_with_projection(x::AutoBroadcaster, y::AutoBroadcaster, lg) =
-    nested_broadcast((x, y) -> mul_with_projection(x, y, lg), x, y)
-mul_with_projection(x::AutoBroadcaster, y, lg) =
-    nested_broadcast(x -> mul_with_projection(x, y, lg), x)
-mul_with_projection(x, y::AutoBroadcaster, lg) =
-    nested_broadcast(y -> mul_with_projection(x, y, lg), y)
+# A single axis projects every tensor in an AutoBroadcaster, while the axes of
+# an entry with multiple components pair componentwise with the components of an
+# AutoBroadcaster, or with copies of a single tensor, like the multiplication of
+# the entry by the projected value. Nested axes are wrapped in AutoBroadcasters,
+# so that nested_broadcast pairs every level and only projects single tensors.
+@inline project_for_mul(axis::Components, y::AutoBroadcaster, lg) =
+    nested_broadcast(y -> project_for_mul(axis, y, lg), y)
+@inline project_for_mul(::Union{Tuple, NamedTuple}, y, _) = y
+@inline project_for_mul(
+    axes::Union{Tuple, NamedTuple},
+    y::Union{AbstractTensor, AutoBroadcaster},
+    lg,
+) = nested_broadcast(
+    (y, axis) -> project_for_mul(axis, y, lg),
+    y,
+    add_auto_broadcasters(axes),
+)
 
-mul_return_type(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: AutoBroadcaster, Y <: AutoBroadcaster} =
-    nested_broadcast_result_type(mul_return_type, X, Y)
-mul_return_type(::Type{X}, ::Type{Y}) where {X <: AutoBroadcaster, Y} =
-    nested_broadcast_result_type(Base.Fix2(mul_return_type, Y), X)
-mul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: AutoBroadcaster} =
-    nested_broadcast_result_type(Base.Fix1(mul_return_type, X), Y)
+@inline projected_metric(axis::Components, ::Val{Y}, lg) where {Y <: AutoBroadcaster} =
+    unrolled_mapreduce(
+        val -> projected_metric(axis, val, lg),
+        (metric1, metric2) -> combine_projected_metrics(metric1, metric2, lg),
+        fieldtype_vals(unwrap(Y));
+        init = nothing,
+    )
+@inline projected_metric(::Union{Tuple, NamedTuple}, _, _) = nothing
+@inline projected_metric(
+    axes::Union{Tuple, NamedTuple},
+    val::Val{<:AbstractTensor},
+    lg,
+) = unrolled_mapreduce(
+    component_axes -> projected_metric(component_axes, val, lg),
+    (metric1, metric2) -> combine_projected_metrics(metric1, metric2, lg),
+    values(axes);
+    init = nothing,
+)
+@inline projected_metric(
+    axes::Union{Tuple, NamedTuple},
+    ::Val{Y},
+    lg,
+) where {Y <: AutoBroadcaster} = unrolled_mapreduce(
+    (component_axes, val) -> projected_metric(component_axes, val, lg),
+    (metric1, metric2) -> combine_projected_metrics(metric1, metric2, lg),
+    values(axes),
+    fieldtype_vals(unwrap(Y));
+    init = nothing,
+)
 
 divergence_result_type(::Type{X}) where {X <: AutoBroadcaster} =
     nested_broadcast_result_type(divergence_result_type, X)

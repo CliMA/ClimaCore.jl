@@ -79,9 +79,14 @@ struct ThisKernel <: DataLayouts.DataScope end
 # THREADS_PER_WARP points. ThisBlock stays a subscope of ThisKernel even though
 # it is not part of the static partitioning chain; it is the scope of every
 # shared-memory allocation (see DataScope(::Type{<:CUDA.CuDeviceArray}) above).
-@inline DataLayouts.num_threads(::ThisKernel) = CUDA.gridDim().x * CUDA.blockDim().x
-@inline DataLayouts.thread_rank(::ThisKernel) =
-    (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+@inline DataLayouts.num_threads(::ThisKernel) =
+    DataLayouts.num_subscopes(ThisBlock(), ThisKernel()) *
+    DataLayouts.num_threads(ThisBlock())
+@inline function DataLayouts.thread_rank(::ThisKernel)
+    block_rank = DataLayouts.subscope_rank(ThisBlock(), ThisKernel())
+    return (block_rank - one(block_rank)) * DataLayouts.num_threads(ThisBlock()) +
+           DataLayouts.thread_rank(ThisBlock())
+end
 @inline DataLayouts.strided_access(::ThisKernel) = true
 
 """
@@ -121,8 +126,14 @@ struct ThisBlock <: ThisCooperativeGroup end
 # multiprocessor (512 of 2048 threads), instead of packing 16 slabs into one
 # 256-thread block. Beyond a warp there is nothing to gain.
 @inline DataLayouts.partition(::ThisBlock) = ThisWarp()
-@inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x
-@inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x
+# The thread and block indices and dimensions of CUDA (and the lane index, see
+# ThisSubBlock below) are converted to UInt32s where they are read, so that all
+# rank arithmetic is unsigned: ranks and counts are positive, and dividing an
+# unsigned integer by a power of two (like the size of a sub-block) takes a
+# shift or a mask, while a signed division has to allow for negative values,
+# which the compiler cannot always rule out for a thread index.
+@inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x % UInt32
+@inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x % UInt32
 @inline DataLayouts.synchronize(::ThisBlock) = CUDA.sync_threads()
 
 # Equal sizes invariant: two static shared-memory allocations are given the
@@ -177,25 +188,25 @@ const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 # with the lanes of a warp, which thread_rank and synchronize below rely on.
 @inline DataLayouts.partition(::ThisSubBlock{N}) where {N} =
     N <= MIN_THREADS_PER_SUBBLOCK ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2}()
-@inline DataLayouts.num_threads(::ThisSubBlock{N}) where {N} = N
+@inline DataLayouts.num_threads(::ThisSubBlock{N}) where {N} = N % UInt32
 @inline DataLayouts.static_num_threads(::ThisSubBlock{N}) where {N} = N
-@inline DataLayouts.thread_rank(::ThisSubBlock{N}) where {N} =
-    N > THREADS_PER_WARP ? (DataLayouts.thread_rank(ThisBlock()) - 1) % N + 1 :
-    N < THREADS_PER_WARP ? (CUDA.laneid() - 1) % N + 1 : CUDA.laneid()
+# A sub-block holds consecutive ranks of its block, or of its warp when it is
+# no larger than a warp, so its ranks are remainders of those ranks.
+@inline function DataLayouts.thread_rank(::ThisSubBlock{N}) where {N}
+    N == THREADS_PER_WARP && return CUDA.laneid() % UInt32
+    rank = DataLayouts.thread_rank(N > THREADS_PER_WARP ? ThisBlock() : ThisWarp())
+    return rem(rank - one(rank), N % UInt32) + one(rank)
+end
 @inline DataLayouts.synchronize(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? DataLayouts.synchronize(ThisBlock()) : CUDA.sync_warp()
 
 @inline DataLayouts.partition(::ThisKernel) =
     ThisSubBlock{MAX_SUBBLOCK_LAUNCH_THREADS}()
 @inline DataLayouts.is_subscope(::ThisBlock, ::ThisKernel) = true
-@inline DataLayouts.num_subscopes(::ThisBlock, ::ThisKernel) = CUDA.gridDim().x
-@inline DataLayouts.subscope_rank(::ThisBlock, ::ThisKernel) = CUDA.blockIdx().x
+@inline DataLayouts.num_subscopes(::ThisBlock, ::ThisKernel) = CUDA.gridDim().x % UInt32
+@inline DataLayouts.subscope_rank(::ThisBlock, ::ThisKernel) = CUDA.blockIdx().x % UInt32
 
 @inline DataLayouts.is_subscope(::ThisSubBlock, ::ThisBlock) = true
-@inline DataLayouts.num_subscopes(::ThisSubBlock{N}, ::ThisBlock) where {N} =
-    cld(CUDA.blockDim().x, N)
-@inline DataLayouts.subscope_rank(::ThisSubBlock{N}, ::ThisBlock) where {N} =
-    cld(CUDA.threadIdx().x, N)
 
 # Largest block that a slice loop assigning every slice to this subscope may be
 # launched with, before DataLayouts.subscope_launch_threads rounds it down to a
@@ -252,6 +263,12 @@ Adapt.@adapt_structure DataLayouts.StridedCartesianIndices
 # measurably slower: with bounds checks forced, it inflates the launch latency
 # by ~20% (the per-point index conversion is repeated multiple times per loop).
 DataLayouts.simd_over_indices(::DataLayouts.StridedCartesianIndices) = false
+# The strided subsets of points that device threads iterate (with UInt32 ranks)
+# are iterated by value (see DataLayouts.index_positions), and @simd would count
+# positions instead, dividing out the subset's length in every thread. Host
+# thread pools iterate StridedRange{Int} subsets, which keep @simd: without it,
+# CPU pointwise broadcasts do not vectorize.
+DataLayouts.simd_over_indices(::DataLayouts.StridedRange{UInt32}) = false
 DataLayouts.simd_over_indices(
     ::SubArray{
         <:Any,
