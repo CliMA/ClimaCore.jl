@@ -42,6 +42,10 @@ field_vars(::Type{FT}) where {FT} = (;
     ᶠu³ = Geometry.Contravariant3Vector(FT(0)),
     ᶠuₕ³ = Geometry.Contravariant3Vector(FT(0)),
     ᶠw = Geometry.Covariant3Vector(FT(0)),
+    s1 = FT(0),
+    s2 = FT(0),
+    s3 = FT(0),
+    s4 = FT(0),
 )
 
 function set_value_bcs(c)
@@ -173,6 +177,15 @@ bcs_tested(c, ::typeof(op_div_interp_FF!)) =
     ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
     ((; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),)
+# Nested and fused expressions fix their boundary conditions internally.
+bcs_tested(c, ::typeof(op_nest_interp_4!)) = ((;),)
+bcs_tested(c, ::typeof(op_nest_interp_8!)) = ((;),)
+bcs_tested(c, ::typeof(op_nest_costly_8!)) = ((;),)
+bcs_tested(c, ::typeof(op_biharmonic!)) = ((;),)
+bcs_tested(c, ::typeof(op_wide_sum_8!)) = ((;),)
+bcs_tested(c, ::typeof(op_diffusion_like!)) = ((;),)
+bcs_tested(c, ::typeof(op_advection_like!)) = ((;),)
+bcs_tested(c, ::typeof(op_atmos_like!)) = ((;),)
 
 function short_name(key)
     to_short = (
@@ -349,6 +362,15 @@ function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compi
         op_div_interp_CC!,
         op_div_interp_FF!,
         op_divgrad_uₕ!,
+        #### Nested and fused expressions
+        op_nest_interp_4!,
+        op_nest_interp_8!,
+        op_nest_costly_8!,
+        op_biharmonic!,
+        op_wide_sum_8!,
+        op_diffusion_like!,
+        op_advection_like!,
+        op_atmos_like!,
     ]
 
     @info "Benchmarking $name operators, this may take a minute or two..."
@@ -397,6 +419,14 @@ function test_results_column(t_min, device = ClimaComms.device())
     [(op_div_interp_CC!, :SetValue, :SetValue, :none), 18.372*μs*buffer],
     [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 18.020*μs*buffer],
     [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 19.292*μs*buffer],
+    [(op_nest_interp_4!, :none), 18.1*μs*buffer],
+    [(op_nest_interp_8!, :none), 20.5*μs*buffer],
+    [(op_nest_costly_8!, :none), 141.0*μs*buffer],
+    [(op_biharmonic!, :none), 20.8*μs*buffer],
+    [(op_wide_sum_8!, :none), 27.7*μs*buffer],
+    [(op_diffusion_like!, :none), 20.6*μs*buffer],
+    [(op_advection_like!, :none), 20.6*μs*buffer],
+    [(op_atmos_like!, :none), 31.9*μs*buffer],
     ]
     results_cpu = [
     [(op_GradientF2C!, :none), 253.100*ns*buffer],
@@ -478,6 +508,14 @@ function test_results_sphere(
         [(op_div_interp_CC!, :SetValue, :SetValue, :none), 911.6*μs*buffer],
         [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 892.1*μs*buffer],
         [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1272.0*μs*buffer],
+        [(op_nest_interp_4!, :none), 505.0*μs*buffer],
+        [(op_nest_interp_8!, :none), 621.0*μs*buffer],
+        [(op_nest_costly_8!, :none), 3410.0*μs*buffer],
+        [(op_biharmonic!, :none), 1910.0*μs*buffer],
+        [(op_wide_sum_8!, :none), 1890.0*μs*buffer],
+        [(op_diffusion_like!, :none), 1580.0*μs*buffer],
+        [(op_advection_like!, :none), 1260.0*μs*buffer],
+        [(op_atmos_like!, :none), 4820.0*μs*buffer],
         ],
         (DataLayouts.VIJHF, Float64) => [
         [(op_GradientF2C!, :none), 376.6*μs*buffer],
@@ -507,6 +545,14 @@ function test_results_sphere(
         [(op_div_interp_CC!, :SetValue, :SetValue, :none), 906.0*μs*buffer],
         [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 810.8*μs*buffer],
         [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1256.0*μs*buffer],
+        [(op_nest_interp_4!, :none), 482.0*μs*buffer],
+        [(op_nest_interp_8!, :none), 601.0*μs*buffer],
+        [(op_nest_costly_8!, :none), 3340.0*μs*buffer],
+        [(op_biharmonic!, :none), 1700.0*μs*buffer],
+        [(op_wide_sum_8!, :none), 1770.0*μs*buffer],
+        [(op_diffusion_like!, :none), 1620.0*μs*buffer],
+        [(op_advection_like!, :none), 1230.0*μs*buffer],
+        [(op_atmos_like!, :none), 5310.0*μs*buffer],
         ],
         (DataLayouts.VIJFH, Float32) => [
         [(op_GradientF2C!, :none), 472.7*μs*buffer],
@@ -536,6 +582,14 @@ function test_results_sphere(
         [(op_div_interp_CC!, :SetValue, :SetValue, :none), 879.1*μs*buffer],
         [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 875.9*μs*buffer],
         [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1182.0*μs*buffer],
+        [(op_nest_interp_4!, :none), 570.0*μs*buffer],
+        [(op_nest_interp_8!, :none), 686.0*μs*buffer],
+        [(op_nest_costly_8!, :none), 2130.0*μs*buffer],
+        [(op_biharmonic!, :none), 2040.0*μs*buffer],
+        [(op_wide_sum_8!, :none), 1930.0*μs*buffer],
+        [(op_diffusion_like!, :none), 1760.0*μs*buffer],
+        [(op_advection_like!, :none), 1410.0*μs*buffer],
+        [(op_atmos_like!, :none), 4550.0*μs*buffer],
         ],
         (DataLayouts.VIJHF, Float32) => [
         [(op_GradientF2C!, :none), 484.6*μs*buffer],
@@ -565,6 +619,14 @@ function test_results_sphere(
         [(op_div_interp_CC!, :SetValue, :SetValue, :none), 869.8*μs*buffer],
         [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 863.5*μs*buffer],
         [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1256.0*μs*buffer],
+        [(op_nest_interp_4!, :none), 554.0*μs*buffer],
+        [(op_nest_interp_8!, :none), 671.0*μs*buffer],
+        [(op_nest_costly_8!, :none), 2140.0*μs*buffer],
+        [(op_biharmonic!, :none), 1880.0*μs*buffer],
+        [(op_wide_sum_8!, :none), 1840.0*μs*buffer],
+        [(op_diffusion_like!, :none), 1750.0*μs*buffer],
+        [(op_advection_like!, :none), 1390.0*μs*buffer],
+        [(op_atmos_like!, :none), 4590.0*μs*buffer],
         ],
     )
     results_cpu = [
