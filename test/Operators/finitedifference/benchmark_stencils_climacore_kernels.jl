@@ -125,6 +125,133 @@ function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
 end
 n_reads_writes(::Type{typeof(op_divUpwind3rdOrderBiasedProductC2F!)}) = -1 # todo
 
+#### Nested and fused expressions (boundary conditions fixed inside each op)
+function op_nest_interp_4!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y = ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(c.x))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_interp_4!)}) = -1 # todo
+function op_nest_interp_8!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y = ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(c.x))))))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_interp_8!)}) = -1 # todo
+costly(x) = exp(sin(x))
+function op_nest_costly_8!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y = ᶜinterp(
+        costly(
+            ᶠinterp(
+                costly(
+                    ᶜinterp(
+                        costly(
+                            ᶠinterp(
+                                costly(
+                                    ᶜinterp(
+                                        costly(
+                                            ᶠinterp(
+                                                costly(
+                                                    ᶜinterp(costly(ᶠinterp(costly(c.x)))),
+                                                ),
+                                            ),
+                                        ),
+                                    )),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_costly_8!)}) = -1 # todo
+function op_biharmonic!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    @. c.y = ᶜdiv(ᶠgrad(ᶜdiv(ᶠgrad(c.x))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_biharmonic!)}) = -1 # todo
+function op_wide_sum_8!(c, f, bcs)
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y =
+        ᶜinterp(f.x) + ᶜinterp(f.y) + ᶜinterp(f.D) + ᶜinterp(f.U) +
+        ᶜinterp(f.s1) + ᶜinterp(f.s2) + ᶜinterp(f.s3) + ᶜinterp(f.s4)
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_wide_sum_8!)}) = 9 # 1 write + 8 reads (0 metric terms)
+function op_diffusion_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    @. c.y = ᶜdiv(ᶠinterp(c.s1) * ᶠgrad(c.x))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_diffusion_like!)}) = -1 # todo
+function op_advection_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    CT3 = Geometry.Contravariant3Vector
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜdiv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(CT3(FT(0))),
+        top = Operators.SetValue(CT3(FT(0))),
+    )
+    @. c.y = -(ᶜdiv(ᶠinterp(c.D) * f.ᶠu³ * ᶠinterp(c.U)))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_advection_like!)}) = -1 # todo
+function op_atmos_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    CT3 = Geometry.Contravariant3Vector
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(CT3(FT(0))),
+        top = Operators.SetValue(CT3(FT(0))),
+    )
+    ᶠupwind3 = Operators.Upwind3rdOrderBiasedProductC2F()
+    @. c.y =
+        -(ᶜdiv(ᶠinterp(c.D) * f.ᶠu³ * ᶠinterp(c.U))) - ᶜdiv(ᶠupwind3(f.w, c.x)) +
+        ᶜdiv(ᶠinterp(c.s1) * ᶠgrad(c.s2))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_atmos_like!)}) = -1 # todo
+
 function op_broadcast_example0!(c, f, bcs)
     Fields.bycolumn(axes(f.ᶠu³)) do colidx
         @. f.ᶠu³[colidx] = f.ᶠu³[colidx] + f.ᶠu³[colidx]
