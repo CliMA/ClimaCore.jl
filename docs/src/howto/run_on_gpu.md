@@ -67,7 +67,6 @@ tuned for A100- and H100-class GPUs and rarely need changing:
 | Variable                     | Effect                                                            |
 |:---------------------------- |:----------------------------------------------------------------- |
 | `CLIMA_CUDA_MAX_WAVES`       | Upper bound on the number of thread-block waves per kernel launch |
-| `CLIMA_FD_MAX_THREADS`       | Threads per block for finite-difference (column) kernels          |
 | `CLIMA_DSS_MAX_THREADS`      | Threads per block for the DSS kernels                             |
 | `CLIMA_COLLECT_KERNEL_STATS` | Record launch statistics for kernel-configuration sweeps          |
 

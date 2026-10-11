@@ -134,15 +134,17 @@ end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
-    # Note: The round-off error of StationaryIterativeSolve can be much larger
-    # on GPUs, so n_iters often has to be increased when USING_CUDA is true.
+    # Note: Each iteration of StationaryIterativeSolve updates x in place with an
+    # expression that reads x at neighboring levels, so n_iters depends on how
+    # many levels of x are updated before they are read. Columns are evaluated
+    # before they are updated on both CPUs and GPUs.
 
     for alg in (
         MatrixFields.BlockDiagonalSolve(),
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = 28),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -220,7 +222,7 @@ end
         (
             "no (identity matrix)",
             MatrixFields.StationaryIterativeSolve(;
-                n_iters = USING_CUDA ? 10 : 7,
+                n_iters = 10,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3777
         (
@@ -229,14 +231,14 @@ end
                 P_alg = MatrixFields.CustomPreconditioner(
                     scaled_identity_matrix(FT(1.12)),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 8,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2294
         (
             "Jacobi (diagonal)",
             MatrixFields.StationaryIterativeSolve(;
                 P_alg = MatrixFields.MainDiagonalPreconditioner(),
-                n_iters = USING_CUDA ? 8 : 6,
+                n_iters = 8,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3241
         (
@@ -246,7 +248,7 @@ end
                     scaled_identity_matrix(FT(1.08)),
                     MatrixFields.MainDiagonalPreconditioner(),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 8,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2249
         (

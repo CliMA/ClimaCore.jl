@@ -167,9 +167,24 @@ Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
     end
     converted = Base.to_indices(array, indices)
     @boundscheck checkbounds(array, converted...)
-    reshaped = Base._maybe_reshape_parent(array, Base.index_ndims(converted...))
-    return Base.unsafe_view(reshaped, converted...)
+    return converted_view(array, converted)
 end
+
+"""
+    unchecked_stable_view(array, indices...)
+
+Like [`stable_view`](@ref) for one index per dimension of `array`, but without
+the bounds check, for callers whose indices are valid by construction (e.g., the
+indices of a loop over the slices of `array`). Julia 1.10 keeps the code of a
+check that `@inbounds` makes unreachable in the optimized IR of every caller, so
+code that slices arrays inside loops uses this to avoid carrying it.
+"""
+@inline unchecked_stable_view(array::AbstractArray, indices...) =
+    converted_view(array, Base.to_indices(array, indices))
+@inline converted_view(array, converted) = Base.unsafe_view(
+    Base._maybe_reshape_parent(array, Base.index_ndims(converted...)),
+    converted...,
+)
 
 """
     unionall_type(T)
@@ -218,7 +233,7 @@ Return a statically inferrable analogue of `Val.(fieldtypes(T))`. Functions of
 outputs.
 """
 @inline fieldtype_vals(::Type{T}) where {T} =
-    ntuple(Val ∘ Base.Fix1(fieldtype, T), Val(fieldcount(T)))
+    ntuple(i -> Val(fieldtype(T, i)), Val(fieldcount(T)))
 
 # :new may be called with uninitialized fields as of JuliaLang/julia#52169, but
 # this leads to segfaults or other compiler errors for immutable DataType fields
@@ -230,7 +245,7 @@ outputs.
     if T isa Union{Union, UnionAll}
         throw(ArgumentError("Cannot allocate value of ambiguous type $T"))
     else
-        mutable_flags = ntuple(Base.Fix1(!isconst, T), Val(fieldcount(T)))
+        mutable_flags = ntuple(i -> !isconst(T, i), Val(fieldcount(T)))
         flags_and_type_vals = zip(mutable_flags, fieldtype_vals(T))
         mutable || unrolled_all(can_alloc_uninitialized, flags_and_type_vals)
     end
@@ -279,13 +294,14 @@ julia> new(@NamedTuple{a::DataType, b::Int, c::Complex{Int}}, (Int, 1, 1 + 2im))
 @inline nested_new(::Val{T}) where {names, T <: NamedTuple{names}} =
     NamedTuple{names}(unrolled_map(maybe_nested_new, fieldtype_vals(T)))
 
-struct InferenceError <: Exception
-    f::Any
-    args_type::Type{<:Tuple}
-end
-function Base.showerror(io::IO, (; f, args_type)::InferenceError)
+# The function and argument types are type parameters, so that throwing this
+# exception allocates nothing and can be compiled in GPU kernels.
+struct InferenceError{F, T <: Tuple} <: Exception end
+InferenceError(::F, ::Type{T}) where {F, T} = InferenceError{F, T}()
+function Base.showerror(io::IO, ::InferenceError{F, T}) where {F, T}
     println(io, "Concrete type of result could not be inferred:\n")
-    InteractiveUtils.code_warntype(io, f, args_type)
+    Base.issingletontype(F) ? InteractiveUtils.code_warntype(io, F.instance, T) :
+    print(io, "Function of type $F with arguments of types $T")
 end
 
 """

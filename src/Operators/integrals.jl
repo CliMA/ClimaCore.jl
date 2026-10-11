@@ -9,8 +9,8 @@ broadcast_zero(field) = zero(eltype(Base.broadcastable(field)))
 Set `````ϕ_top```{}= \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^{z_{top}}\\, ```ᶜ∂ϕ∂z```(z)\\,ΔA(z)\\,dz +{}```ϕ_bot`````, where ``z_{bot}`` and ``z_{top}`` are
 the values of `z` at the bottom and top of the domain, and where `ΔA` is the
 area differential `J/Δz`, with `J` denoting the metric Jacobian. The input
-`ᶜ∂ϕ∂z` must be a cell-center `Field` or `AbstractBroadcasted`, and the output
-`ϕ_top` must be a horizontal `Field`. The default value of `ϕ_bot` is 0.
+`ᶜ∂ϕ∂z` must be a cell-center `Field` or `LazyField`, and the output `ϕ_top`
+must be a horizontal `Field`. The default value of `ϕ_bot` is 0.
 """
 function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = broadcast_zero(ϕ_top))
     ᶜJ = Fields.local_geometry_field(axes(ᶜ∂ϕ∂z)).J
@@ -28,8 +28,8 @@ end
 Set `````ᶠϕ```(z) = \\frac{1}{ΔA(z_{bot})}\\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\, ΔA(z')\\,dz' +{}```ϕ_bot`````, where ``z_{bot}`` is the value of `z` at the bottom
 of the domain, and where `ΔA` is the area differential `J/Δz`, with `J` denoting
 the metric Jacobian. The input `ᶜ∂ϕ∂z` must be a cell-center `Field` or
-`AbstractBroadcasted`, and the output `ᶠϕ` must be a cell-face `Field`. The
-default value of `ϕ_bot` is 0.
+`LazyField`, and the output `ᶠϕ` must be a cell-face `Field`. The default value
+of `ϕ_bot` is 0.
 
     column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
@@ -80,12 +80,9 @@ end
 
 ################################################################################
 
-const PointwiseOrColumnwiseBroadcasted = Union{
-    Base.Broadcast.Broadcasted{
-        <:Union{Fields.FieldStyle, AbstractStencilStyle},
-    },
-    StencilBroadcasted,
-}
+# The input of a single column reduction or accumulation, with every operator
+# evaluated by the one thread that processes the column.
+column_input(input) = apply_operators(DataLayouts.reassign(input, DataLayouts.ThisThread()))
 
 """
     UnspecifiedInit()
@@ -98,12 +95,12 @@ struct UnspecifiedInit end
     column_reduce!(f, output, input; [init], [transform], [reverse])
 
 Apply `reduce` to `input` along the vertical direction, storing the result in
-`output`. The `input` can be either a `Field` or an `AbstractBroadcasted` that
-performs pointwise or columnwise operations on `Field`s. Each reduced value is
-computed by iteratively applying `f` to the values in `input`, starting from the
-bottom of each column and moving upward, and the result of the final iteration
-is passed to the `transform` function before being stored in `output`. If `init`
-is specified, it is used as the initial value of the iteration; otherwise, the
+`output`. The `input` can be either a `Field`, or a `LazyField` that involves
+pointwise or columnwise operations on `Field`s. Each reduced value is computed
+by iteratively applying `f` to the values in `input`, starting from the bottom
+of each column and moving upward, and the result of the final iteration is
+passed to the `transform` function before being stored in `output`. If `init` is
+specified, it is used as the initial value of the iteration; otherwise, the
 value at the starting boundary of each column in `input` is used as the initial
 value. By default, reduction starts at the bottom boundary and proceeds upward.
 When `reverse = true`, it starts at the top boundary and proceeds downward.
@@ -131,7 +128,7 @@ of `input`, the default reduction in each column can be summarized as follows:
 function column_reduce!(
     f::F,
     output::Fields.Field,
-    input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
+    input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
     reverse::Bool = false,
@@ -182,12 +179,13 @@ function single_column_reduce!(
     space,
     reverse,
 ) where {F, T}
+    input = column_input(_input)
     first_level = left_idx(space)
     last_level = right_idx(space)
     start_level, stop_level, direction =
         reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
     @inbounds if init == UnspecifiedInit()
-        reduced_value = getidx(_input, start_level, (1, 1, 1))
+        reduced_value = input[level_index(space, start_level)]
         next_level = start_level + direction
     else
         reduced_value = init
@@ -196,7 +194,7 @@ function single_column_reduce!(
     n_steps = direction * (stop_level - next_level) + 1
     @inbounds for i in 1:n_steps
         level = next_level + direction * (i - 1)
-        reduced_value = f(reduced_value, getidx(_input, level, (1, 1, 1)))
+        reduced_value = f(reduced_value, input[level_index(space, level)])
     end
     Fields.field_values(_output)[] = transform(reduced_value)
     return nothing
@@ -206,12 +204,11 @@ end
     column_accumulate!(f, output, input; [init], [transform], [reverse])
 
 Apply `accumulate` to `input` along the vertical direction, storing the result
-in `output`. The `input` can be either a `Field` or an `AbstractBroadcasted`
-that performs pointwise or columnwise operations on `Field`s. By default, each
-accumulated value is computed by iteratively applying `f` to the values in
-`input`, starting from the bottom of each column and moving upward, and the
-result of each iteration is passed to the `transform` function before being
-stored in `output`.
+in `output`. The `input` can be either a `Field`, or a `LazyField` that involves
+pointwise or columnwise operations on `Field`s. By default, each accumulated
+value is computed by iteratively applying `f` to the values in `input`, starting
+from the bottom of each column and moving upward, and the result of each
+iteration is passed to the `transform` function before being stored in `output`.
 The `init` value is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
 When `reverse = true`, accumulation starts at the top boundary and proceeds
@@ -266,7 +263,7 @@ of `input`, the default accumulation in each column can be summarized as follows
 function column_accumulate!(
     f::F,
     output::Fields.Field,
-    input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
+    input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};
     init = UnspecifiedInit(),
     transform::T = identity,
     reverse::Bool = false,
@@ -321,6 +318,7 @@ function single_column_accumulate!(
     space,
     reverse,
 ) where {F, T}
+    input = column_input(_input)
     first_level = left_idx(space)
     last_level = right_idx(space)
     is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
@@ -333,12 +331,12 @@ function single_column_accumulate!(
     stagger = reverse ? -half : half
     @inbounds if init == UnspecifiedInit()
         @assert !is_c2f
-        accumulated_value = getidx(_input, start_level, (1, 1, 1))
+        accumulated_value = input[level_index(space, start_level)]
         next_level = start_level + direction
         init_output_level = is_c2c_or_f2f ? start_level : nothing
     else
         accumulated_value =
-            is_f2c ? f(init, getidx(_input, start_level, (1, 1, 1))) : init
+            is_f2c ? f(init, input[level_index(space, start_level)]) : init
         next_level = is_f2c ? start_level + direction : start_level
         init_output_level = is_c2f ? start_level - stagger : nothing
     end
@@ -349,7 +347,7 @@ function single_column_accumulate!(
     @inbounds for i in 1:n_steps
         level = next_level + direction * (i - 1)
         accumulated_value =
-            f(accumulated_value, getidx(_input, level, (1, 1, 1)))
+            f(accumulated_value, input[level_index(space, level)])
         output_level =
             is_c2c_or_f2f ? level : (is_c2f ? level + stagger : level - stagger)
         Fields.level(output, output_level)[] = transform(accumulated_value)

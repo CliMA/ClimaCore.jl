@@ -4,6 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Finite difference operators are now applied
+  through the same `Operators.apply_operator` API as spectral element operators,
+  one column at a time. A broadcast over several finite difference operators is
+  evaluated in a single pass over each column whenever possible: operators whose
+  arguments contain no other stencils are evaluated wherever they are read, and
+  all other operators are evaluated once per column into registers instead of
+  being recomputed at every point that reads them. Linear operators are applied
+  as products with their band matrices. The CUDA extension no longer contains
+  any finite difference kernels, so GPU evaluation goes through the generic slice
+  loops with static shared memory, and the `CLIMA_FD_MAX_THREADS` environment
+  variable has been removed. Internal stencil methods no longer take horizontal
+  indices, and `Operators.getidx`, the three-argument
+  `Geometry.LocalGeometry(space, idx, hidx)`, `Geometry.mul_with_projection` and
+  `Geometry.mul_return_type` have been removed.
+
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of
   GPU kernels launched from the host and is swapped out at the start of each

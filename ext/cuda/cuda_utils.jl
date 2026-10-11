@@ -3,6 +3,11 @@ import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.Utilities
 
+# Kernels receive every Ref(T) of a type T (like the eps(FT) in an @. expression)
+# as a CuRefType{T} <: Ref{DataType}, whose eltype is DataType instead of Type{T};
+# using Type{T} lets kernels infer the same broadcast eltypes as the host.
+Utilities.unsafe_eltype(::CUDA.CuRefType{T}) where {T} = Type{T}
+
 function uncached_device_attributes()
     device = CUDA.device()
     get_attr(code) = Int(CUDA.attribute(device, code))
@@ -233,14 +238,21 @@ function uncached_launch_configuration(
     )
 end
 
-const LAUNCH_CONFIGURATION_CACHE =
-    IdDict{Any, @NamedTuple{threads::Int, blocks::Int, limit::Symbol}}()
+# Launch configurations keyed by function handles and normalized arguments, so
+# that looking one up allocates nothing. The functions are kept alive alongside,
+# so that their handles are never reused by other functions.
+const LAUNCH_CONFIGURATION_CACHE = Dict{
+    Tuple{CUDA.CUfunction, Bool, Int, Int, Int, Int, Int},
+    @NamedTuple{threads::Int, blocks::Int, limit::Symbol},
+}()
+const LAUNCH_CONFIGURATION_FUNCTIONS = CUDA.CuFunction[]
 const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
 
 """
     launch_configuration(f, args; max_waves = nothing)
     launch_configuration(f, args, max_threads; strict = true, max_waves = nothing)
     launch_configuration(f, args, max_threads_per_block, max_blocks; max_waves = nothing)
+    launch_configuration(kernel::CUDA.HostKernel, config_args...; kwargs...)
 
 Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
 which maximizes occupancy across the entire device instead of just one
@@ -286,32 +298,54 @@ also returns a symbol identifying the dominant factor that limits occupancy:
 
 Computing a launch configuration requires querying the C driver for the kernel's
 register pressure and shared memory requirements, which adds measurable latency
-if done more than once per kernel, so the result is cached in an `IdDict`. A
-lock is used to prevent multiple threads from updating the cache simultaneously,
-since an `IdDict` should never be read as it is being rehashed.
+if done more than once per kernel, so the result is cached in a `Dict`. A lock
+is used to prevent multiple threads from updating the cache simultaneously,
+since a `Dict` should never be read as it is being rehashed. A kernel that was
+already compiled for its arguments can be passed in place of `f` and `args`,
+which avoids converting the arguments and looking up the kernel a second time
+(see the `config` keyword argument of `auto_launch!`).
 """
+function launch_configuration(f::F, args, config_args...; kwargs...) where {F}
+    kernel = CUDA.@cuda always_inline = true launch = false f(args...)
+    return launch_configuration(kernel, config_args...; kwargs...)
+end
 function launch_configuration(
-    f::F,
-    args,
+    kernel::CUDA.HostKernel,
     config_args...;
     strict = true,
     max_waves = nothing,
     granularity = nothing,
-) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
+)
+    cu_func = kernel.fun
     # The default is resolved before the cache key is built, so that changing
     # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
     # cache instead of returning configurations computed for the old value.
     max_waves = something(max_waves, MAX_WAVES[])
-    cache_key = (cu_func, strict, max_waves, granularity, config_args...)
+    cache_key = (
+        cu_func.handle,
+        strict,
+        max_waves,
+        something(granularity, 0),
+        length(config_args),
+        get(config_args, 1, 0),
+        get(config_args, 2, 0),
+    )
     lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
-    try
-        return get!(LAUNCH_CONFIGURATION_CACHE, cache_key) do
-            uncached_launch_configuration(cache_key...)
-        end
-    finally
-        unlock(LAUNCH_CONFIGURATION_CACHE_LOCK)
-    end
+    config = get(LAUNCH_CONFIGURATION_CACHE, cache_key, nothing)
+    unlock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+    isnothing(config) || return config
+    config = uncached_launch_configuration(
+        cu_func,
+        strict,
+        max_waves,
+        granularity,
+        config_args...,
+    )
+    lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+    LAUNCH_CONFIGURATION_CACHE[cache_key] = config
+    push!(LAUNCH_CONFIGURATION_FUNCTIONS, cu_func)
+    unlock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+    return config
 end
 
 threads_via_occupancy(f::F, args) where {F} = launch_configuration(f, args).threads
@@ -390,14 +424,12 @@ function _getenv_int(
 end
 
 # Refs to hold settings read from environment variables in __init__: kernel
-# naming from stack traces, per-launch kernel statistics, the wave count used
-# by the launch-configuration search, and the block-size cap of the eager FD
-# kernel.
+# naming from stack traces, per-launch kernel statistics, and the wave count
+# used by the launch-configuration search.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
 const COLLECT_KERNEL_STATS =
     _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
 const MAX_WAVES = Ref{Int}(1)
-const FD_MAX_THREADS = Ref{Int}(128)
 const DSS_MAX_THREADS = Ref{Int}(256)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
@@ -406,9 +438,8 @@ function __init__()
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
     MAX_WAVES[] = _getenv_int("CLIMA_CUDA_MAX_WAVES", 1)
-    # 1024 is CUDA's threads-per-block limit; these caps feed block sizes
+    # 1024 is CUDA's threads-per-block limit; this cap feeds block sizes
     # directly, so a larger value would fail at the first kernel launch.
-    FD_MAX_THREADS[] = _getenv_int("CLIMA_FD_MAX_THREADS", 128; max = 1024)
     DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
 end
 
@@ -424,9 +455,16 @@ const IGNORE_MODULES = (
     :ClimaCoreCUDAExt,
 )
 
-# Functions withing ClimaCore to ignore when determining relevant stack frames
-const CLIMACORE_IGNORE_FUNCS =
-    (:materialize, :materialize!, :foreach, :unrolled_foreach, Symbol("macro expansion"))
+# Functions within ClimaCore to ignore when determining relevant stack frames
+# (copyto! is the broadcast entry point that launches every fused kernel)
+const CLIMACORE_IGNORE_FUNCS = (
+    :materialize,
+    :materialize!,
+    :copyto!,
+    :foreach,
+    :unrolled_foreach,
+    Symbol("macro expansion"),
+)
 # Helper function to check if a stack frame is relevant
 @inline function is_relevant_frame(frame::Base.StackTraces.StackFrame)
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
@@ -457,6 +495,7 @@ end
         blocks_s,
         always_inline = true,
         shmem = 0,
+        config = nothing,
     )
 
 Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
@@ -464,6 +503,9 @@ to determine the number of threads/blocks.
 
 Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
 to benchmark compare against auto-determined threads/blocks (if `auto=false`).
+Alternatively, `config` can be a function that computes the threads and blocks
+from the compiled kernel (e.g., with `launch_configuration`), so that
+the arguments are only converted and the kernel is only looked up once.
 """
 function auto_launch!(
     f!::F!,
@@ -475,6 +517,7 @@ function auto_launch!(
     always_inline = true,
     caller = :unknown,
     shmem = 0,
+    config = nothing,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -548,15 +591,39 @@ function auto_launch!(
             # Note: `name = nothing` here will revert to default behavior
             kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
                 false f!(args...)
-            config = launch_configuration(f!, args)
-            threads = min(nitems, config.threads)
+            threads = min(nitems, launch_configuration(kernel).threads)
             blocks = cld(nitems, threads)
             kernel(args...; threads, blocks) # This knows to use always_inline from above.
         end
     else
-        kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+        # Expansion of CUDA.@cuda that also passes the compiled kernel to config.
+        # Closures over isbits values (like the operators, flags, and constants
+        # captured by DataLayouts loops) are left unconverted: Adapt only replaces
+        # arrays and other non-isbits values, and its rule for closures cannot be
+        # inferred, which would make the kernel's type unknown at compile time.
+        kernel = GC.@preserve f! args begin
+            kernel_f = isbitstype(F!) ? f! : CUDA.cudaconvert(f!)
+            kernel_args = map(CUDA.cudaconvert, args)
+            kernel_tt = Tuple{map(Core.Typeof, kernel_args)...}
+            # Pass name only when it is a String, so that the keyword arguments
+            # are concretely typed (a Union-typed keyword makes the call a
+            # dynamic Core.kwcall, which the fused-broadcast JET tests reject).
+            compiled_kernel =
+                isnothing(kernel_name) ?
+                CUDA.cufunction(kernel_f, kernel_tt; always_inline) :
+                CUDA.cufunction(kernel_f, kernel_tt; name = kernel_name, always_inline)
+            (; threads, blocks) =
+                isnothing(config) ? (; threads = threads_s, blocks = blocks_s) :
+                config(compiled_kernel)
+            compiled_kernel(
+                kernel_args...;
+                threads,
+                blocks,
+                shmem,
+                convert = Val(false),
+            )
+            compiled_kernel
+        end
     end
 
     if collect_kernel_stats() # only for development use
@@ -565,7 +632,7 @@ function auto_launch!(
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-            config = launch_configuration(f!, args)
+            config = launch_configuration(kernel)
             threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
             blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
             # Collect the launch information for inspection.

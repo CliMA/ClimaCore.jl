@@ -6,7 +6,7 @@ has_inferred_slice_size(op::O, arg) where {O} =
     end
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
-DataLayouts._foreach_slice(
+@inline DataLayouts._foreach_slice(
     scope::ThisHost,
     op::O,
     f::F,
@@ -46,25 +46,37 @@ DataLayouts._foreach_slice(
             # partially populated sub-block skips its missing threads' points
             # (see the whole subscopes invariant in subscope_launch_threads).
             max_slices = length(DataLayouts.each_slice_index(op, first(args)))
+            check_index_count(max_slices)
             subblock_threads = Int(DataLayouts.num_threads(subscope))
             max_block_threads = DataLayouts.subscope_launch_threads(
                 subscope,
                 max_subblock_launch_threads(subscope),
             )
-            slices_per_block = max_block_threads ÷ subblock_threads
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_block_threads,
-                cld(max_slices, slices_per_block); granularity = subblock_threads,
-            )
+            max_blocks = cld(max_slices, max_block_threads ÷ subblock_threads)
+            config =
+                kernel -> launch_configuration(
+                    kernel, max_block_threads, max_blocks;
+                    granularity = subblock_threads,
+                )
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_points; strict = false,
-            )
+            check_index_count(max_points)
+            config = kernel -> launch_configuration(kernel, max_points; strict = false)
         end
-        auto_launch!(kernel_function, compact_args; threads_s = threads, blocks_s = blocks)
+        auto_launch!(kernel_function, compact_args; config)
     end
+
+# Kernels divide their indices among UInt32 thread and block ranks, and the sum
+# of an index and the number of threads has to fit in 32 bits (see
+# DataLayouts.strided_range).
+check_index_count(n) =
+    n <= typemax(Int32) ||
+    throw(
+        ArgumentError(
+            "GPU loops over more than $(typemax(Int32)) indices are not supported",
+        ),
+    )
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))

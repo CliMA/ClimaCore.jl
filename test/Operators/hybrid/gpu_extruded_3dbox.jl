@@ -14,7 +14,7 @@ import ClimaCore:
     Quadratures
 using Test
 
-function get_space(context)
+function get_space(context; zelem = 10)
     FT = Float64
 
     # Define vert domain and mesh
@@ -23,7 +23,7 @@ function get_space(context)
         Geometry.ZPoint{FT}(1.0);
         boundary_names = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
 
     # Define vert topology and space
     verttopology = Topologies.IntervalTopology(context, vertmesh)
@@ -179,4 +179,24 @@ end
     # Test DSS
     @test parent(Spaces.weighted_dss!(wdiv.(grad.(f_cpu)))) ≈
           Array(parent(Spaces.weighted_dss!(wdiv.(grad.(f_gpu)))))
+end
+
+@testset "GPU extruded 3d hybrid box nested vertical operators" begin
+    # With a power-of-two number of levels, each column of centers is evaluated
+    # by as many threads as it has points, so the column of faces of the inner
+    # interpolation has one point too many for its threads to evaluate it in
+    # lockstep. Its argument must then not be read from the registers of other
+    # threads, or the thread with the extra point waits for them indefinitely.
+    interp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    div = Operators.DivergenceF2C()
+    results = map((ClimaComms.CPUSingleThreaded(), ClimaComms.CUDADevice())) do device
+        space = get_space(ClimaComms.SingletonCommsContext(device); zelem = 16)
+        coords = Fields.coordinate_field(space)
+        f = @. sin(coords.x + 2 * coords.y + 3 * coords.z)
+        @. div(Geometry.WVector(interp(f * f)))
+    end
+    @test parent(results[1]) ≈ Array(parent(results[2]))
 end

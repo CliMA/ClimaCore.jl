@@ -21,7 +21,6 @@ stencil_left_boundary
 stencil_right_boundary
 left_interior_idx
 right_interior_idx
-fd_shmem_is_supported
 ```
 
 ```@docs
@@ -31,6 +30,13 @@ apply_operator
 register_similar
 buffer_similar
 materialize_buffer
+cached_arg
+cached_values
+register_values
+recomputable
+recomputable_node
+recomputable_operator
+requires_lockstep
 DGConnectivity
 dg_connectivity
 dg_ghost_connectivity
@@ -47,6 +53,9 @@ RegisterArray
 DataLayouts.register_similar
 DataLayouts.buffer_similar
 static_num_threads
+stored_in_scope_registers
+DataLayouts.requires_lockstep
+update_points!
 ```
 
 ## Geometry
@@ -57,8 +66,8 @@ CurrentModule = ClimaCore.Geometry
 
 ```@docs
 bilinear_interpolate
-mul_with_projection
-mul_return_type
+project_for_mul
+projection_metric
 ```
 
 ## Meshes

@@ -24,7 +24,13 @@ right-hand side compiles to one kernel that, for each element, reads `θ` and
 `ρ` at the element's nodes, applies the differentiation matrix, multiplies,
 applies the weak divergence, and writes `dydt`. Finite-difference operators
 fuse the same way, column by column: `@. dydt = div(κ * grad(θ))` with
-`GradientC2F` and `DivergenceF2C` is one pass over each column.
+`GradientC2F` and `DivergenceF2C` is one pass over each column. An operator
+whose arguments contain no other stencils, like the gradient here, is
+evaluated wherever the next operator reads it; an operator whose arguments
+contain stencils is first evaluated over the whole column, in registers, so
+that no value is recomputed for every point that reads it. Linear
+finite-difference operators are applied as products with their band matrices
+(see below).
 
 Operators are matrix-free. The action of an operator on a field is defined
 directly; no global matrix is assembled. When a matrix is needed, for an

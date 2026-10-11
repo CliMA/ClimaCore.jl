@@ -99,14 +99,23 @@ Return whether `subscope` is equal to the [`DataScope`](@ref) `scope`, or is a
 @noinline throw_invalid_subscope(subscope, scope) =
     throw(InvalidSubscopeError(subscope, scope))
 
-@inline num_subscopes(subscope, scope) =
-    subscope == scope ? 1 :
-    is_subscope(subscope, scope) ? cld(num_threads(scope), num_threads(subscope)) :
+# Ranks and counts keep the integer type of the scope's threads (UInt32 on GPUs,
+# which emulate 64-bit integer arithmetic, and whose unsigned divisions by a
+# power of two are shifts), so the literals here take that type.
+@inline function num_subscopes(subscope, scope)
+    n = num_threads(scope)
+    subscope == scope && return one(n)
+    is_subscope(subscope, scope) &&
+        return fld(n - one(n), oftype(n, num_threads(subscope))) + one(n)
     throw_invalid_subscope(subscope, scope)
-@inline subscope_rank(subscope, scope) =
-    subscope == scope ? 1 :
-    is_subscope(subscope, scope) ? fld(thread_rank(scope) - 1, num_threads(subscope)) + 1 :
+end
+@inline function subscope_rank(subscope, scope)
+    rank = thread_rank(scope)
+    subscope == scope && return one(rank)
+    is_subscope(subscope, scope) &&
+        return fld(rank - one(rank), oftype(rank, num_threads(subscope))) + one(rank)
     throw_invalid_subscope(subscope, scope)
+end
 
 """
     num_threads(scope)
@@ -156,9 +165,11 @@ Return the number of partitions (results of [`partition`](@ref)) in a
 Return an integer between 1 and [`num_threads`](@ref) that identifies the calling
 thread within a [`DataScope`](@ref).
 """
-@inline thread_rank(scope) =
-    (partition_rank(scope) - 1) * num_threads(partition(scope)) +
-    thread_rank(partition(scope))
+@inline function thread_rank(scope)
+    partition_rank_ = partition_rank(scope)
+    return (partition_rank_ - one(partition_rank_)) * num_threads(partition(scope)) +
+           thread_rank(partition(scope))
+end
 
 """
     partition_rank(scope)
@@ -296,7 +307,9 @@ end
 # loop body a single shared method instance, which is what keeps compile time
 # from scaling with the number of distinct loops. It costs one dynamic call per
 # loop launch, which is negligible beside the Threads.@spawn calls below.
-@noinline function launch_pool_threads(@nospecialize(f), n::Int)
+# @nospecialize alone only shares the compiled code; inference still infers one
+# instance per loop body type, so @nospecializeinfer shares the inference too.
+Base.@nospecializeinfer @noinline function launch_pool_threads(@nospecialize(f), n::Int)
     tasks = Vector{Task}(undef, n)
     for rank in Base.OneTo(n)
         @inbounds tasks[rank] = Threads.@spawn :default begin
@@ -344,7 +357,7 @@ thread_rank(::ThisThreadPool) = max(pool_thread_info()[1], 1)
 # per loop launch rather than once per slice, so its dynamic dispatch is
 # amortized against the Threads.@spawn calls that immediately follow it, while
 # the compile-time saving applies to every distinct loop in the program.
-@noinline parallelize_over(@nospecialize(f), ::ThisThreadPool) =
+Base.@nospecializeinfer @noinline parallelize_over(@nospecialize(f), ::ThisThreadPool) =
     iszero(pool_thread_info()[1]) ? launch_pool_threads(f, pool_loop_threads()) :
     throw(ArgumentError("Nested loops over ThisThreadPool are not supported"))
 
@@ -462,50 +475,103 @@ Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
     return subscope_index_view(scope, indices, view_range)
 end
 
-# AbstractRange of len Ints beginning at start and increasing by step, with its
-# length stored rather than derived from its endpoints. Base's StepRange
-# divides its endpoints by its step every time its length is read, which a
-# slice loop does several times per nested loop, and only the outermost loop's
+# AbstractRange of the integers start, start + step, start + 2 step, ... that
+# are at most stop (the Ints of start:step:stop), stored by its bound rather
+# than by its length. Base's StepRange divides its endpoints by its step when it
+# is constructed and every time its length is read, and a slice loop reads the
+# length of its range at least once per nested loop; only the outermost loop's
 # step is not a compile-time constant -- the loop every other one runs inside.
 # GPUs have no integer division unit, so each such division expands into a long
-# emulation sequence; hosts divide out of order and once per slice rather than
-# per point, which is why the divisions are invisible in CPU timings.
-struct StridedRange <: AbstractRange{Int}
-    start::Int
-    step::Int
-    len::Int
+# emulation sequence (about twenty instructions for 32 bits, over a hundred for
+# 64), which is as much as the rest of a single-operator kernel; hosts divide
+# out of order and once per slice rather than per point, which is why the
+# divisions are invisible in CPU timings. Iterating the range (see iterate
+# below) compares each value with the bound instead of counting, so the length
+# is only divided out where a caller asks for it (bounds checks and nested
+# subsets). Keeping the bound rather than the length also lets the compiler
+# bound the trip count of the loops of a slice with no more points than its
+# scope has threads: every thread then reaches the bound after its first point,
+# which turns such a loop into straight-line code.
+#
+# Invariants: start >= 1, step >= 1, stop >= 0, and stop + step fits in the
+# integer type (see the strided_range constructor below), so that the arithmetic
+# in iterate is exact.
+struct StridedRange{I <: Integer} <: AbstractRange{I}
+    start::I
+    step::I
+    stop::I
 end
 @inline Base.first(range::StridedRange) = range.start
 @inline Base.step(range::StridedRange) = range.step
-@inline Base.length(range::StridedRange) = range.len
-@inline Base.size(range::StridedRange) = (range.len,)
-@inline Base.last(range::StridedRange) = range.start + (range.len - 1) * range.step
-Base.@propagate_inbounds function Base.getindex(range::StridedRange, i::Int)
+@inline Base.isempty(range::StridedRange) = range.start > range.stop
+# The number of values, divided out of the bound; the step is never zero, so
+# the division skips the zero check of ÷, which adds a branch to an exception
+# (the offset is nonnegative, so an unsigned division is exact).
+@inline function strided_length(range::StridedRange{I}) where {I}
+    isempty(range) && return zero(I)
+    return Base.udiv_int(range.stop - range.start, range.step) + one(I)
+end
+@inline Base.length(range::StridedRange) = Int(strided_length(range))
+@inline Base.size(range::StridedRange) = (length(range),)
+@inline Base.last(range::StridedRange{I}) where {I} =
+    range.start + (strided_length(range) - one(I)) * range.step
+Base.@propagate_inbounds function Base.getindex(
+    range::StridedRange{I},
+    i::Integer,
+) where {I}
     @boundscheck checkbounds(range, i)
-    return range.start + (i - 1) * range.step
+    return range.start + (i % I - one(I)) * range.step
+end
+# Iteration without the length: a value is followed by the next one unless
+# that exceeds the bound.
+@inline Base.iterate(range::StridedRange) =
+    isempty(range) ? nothing : (range.start, range.start)
+@inline function Base.iterate(range::StridedRange{I}, i::I) where {I}
+    next = i + range.step
+    next <= range.stop || return nothing
+    return (next, next)
 end
 
 # Range subsets of strided ranges, taken by nested slice loops and views of
 # views. Every range subindex must be covered by one of these methods: a missed
 # pair falls back to the generic AbstractArray getindex, which allocates a
 # Vector and interpolates an error string, neither of which is GPU-compilable.
+# The subsets keep the integer type of the strided range, whose values all fit
+# in it, so that index arithmetic stays in 32 bits on GPUs. The bound of a
+# subset is the bound of the positions it selects (which for a strided subset
+# is its own bound, so that nested loops need no division), mapped into the
+# range and clipped to the range's bound; the product is formed in 64 bits
+# because an unclipped bound can exceed the integer type.
+@inline position_bound(sub::StridedRange) = sub.stop
+@inline position_bound(sub::AbstractRange) = last(sub)
 Base.@propagate_inbounds function Base.getindex(
-    range::StridedRange, sub::AbstractRange{<:Integer},
-)
+    range::StridedRange{I}, sub::AbstractRange{<:Integer},
+) where {I}
     @boundscheck checkbounds(range, sub)
-    start = range.start + (first(sub) - 1) * range.step
-    return StridedRange(start, range.step * step(sub), length(sub))
+    start = range.start + (first(sub) % I - one(I)) * range.step
+    unclipped_stop = Int(range.start) + (Int(position_bound(sub)) - 1) * Int(range.step)
+    stop = max(min(unclipped_stop, Int(range.stop)), 0) % I
+    return StridedRange(start, range.step * (step(sub) % I), stop)
 end
+# Restricted to the unit range types of CartesianIndices and views (an
+# AbstractUnitRange signature is ambiguous with BlockArrays' blocked ranges).
 Base.@propagate_inbounds function Base.getindex(
-    range::AbstractUnitRange{<:Integer}, sub::StridedRange,
-)
+    range::Union{Base.OneTo{<:Integer}, UnitRange{<:Integer}}, sub::StridedRange{I},
+) where {I}
     @boundscheck checkbounds(range, sub)
-    return StridedRange(first(range) + sub.start - 1, sub.step, sub.len)
+    offset = first(range) % I - one(I)
+    stop = max(min(sub.stop + offset, last(range) % I), zero(I))
+    return StridedRange(sub.start + offset, sub.step, stop)
 end
 
-# The strided subset rank:n:n_indices, whose length is computed once here.
+# The strided subset rank:n:n_indices, in the integer type of rank and n. GPU
+# scopes have UInt32 ranks, and their launches check that the number of indices
+# fits in 31 bits, which leaves room for the step (see the invariants of
+# StridedRange).
+@inline strided_range(rank::I, n::I, n_indices) where {I <: Integer} =
+    StridedRange(rank, n, n_indices % I)
 @inline strided_range(rank, n, n_indices) =
-    StridedRange(rank, n, rank > n_indices ? 0 : (n_indices - rank) ÷ n + 1)
+    strided_range(promote(rank, n)..., n_indices)
 # Return a view by default, so iterating over it is as efficient as iterating
 # over the original indices. GPU scopes must override this, since a strided view
 # of CartesianIndices is a ReshapedArray with GPU-incompatible bounds checks.
@@ -519,5 +585,24 @@ end
 StridedCartesianIndices(indices::CartesianIndices{N}, view_range) where {N} =
     StridedCartesianIndices{N, typeof(indices), typeof(view_range)}(indices, view_range)
 Base.size(strided::StridedCartesianIndices) = (length(strided.view_range),)
-Base.@propagate_inbounds Base.getindex(strided::StridedCartesianIndices, n::Int) =
-    strided.indices[strided.view_range[n]]
+Base.@propagate_inbounds Base.getindex(strided::StridedCartesianIndices, n::Integer) =
+    single_axis_cartesian_index(strided.indices, strided.view_range[n])
+
+# Linear-to-Cartesian conversion without divisions when at most one axis has
+# more than one index (every loop over the points of a column or over levels):
+# the linear index is the position along that axis. In kernels, the axis
+# lengths come from the layout types and are compile-time constants, so the
+# test folds; otherwise, this falls back to Base's division per axis.
+@inline function single_axis_cartesian_index(indices::CartesianIndices, index)
+    ranges = indices.indices
+    unrolled_sum(range -> Int(!isone(length(range))), ranges) <= 1 ||
+        return @inbounds indices[cartesian_index_from_linear(size(indices), index)]
+    return CartesianIndex(
+        unrolled_map(
+            range ->
+                isone(length(range)) ? first(range) :
+                Int(first(range) % typeof(index) + index - one(index)),
+            ranges,
+        ),
+    )
+end

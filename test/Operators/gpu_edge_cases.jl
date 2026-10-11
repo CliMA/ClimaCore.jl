@@ -20,7 +20,8 @@ import ClimaCore:
     Operators,
     MatrixFields,
     Quadratures
-import ClimaCore.CommonSpaces: MultiColumnSpace, CellCenter
+import ClimaCore.CommonSpaces:
+    MultiColumnSpace, ColumnSpace, ExtrudedCubedSphereSpace, CellCenter
 
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
@@ -182,6 +183,28 @@ function fd_pointwise_advection_results(center_space, face_space)
     )
 end
 
+# Fluxes of a NamedTuple-valued field under divergences whose SetValue
+# conditions impose plain vectors, which apply to every component of the flux.
+# On GPUs, a divergence caches its operand, where every imposed value must have
+# the NamedTuple type of the flux.
+tracer_densities(x) = (; tot = x, liq = x / 10, ice = x / 5)
+function fd_tuple_flux_results(center_space, face_space)
+    (; FT, x, u³) = fd_advection_inputs(center_space, face_space)
+    ρq = tracer_densities.(x)
+    zero_flux = Operators.SetValue(Geometry.Contravariant3Vector(FT(0)))
+    div_sv = Operators.DivergenceF2C(bottom = zero_flux, top = zero_flux)
+    div_sv_ex =
+        Operators.DivergenceF2C(bottom = zero_flux, top = Operators.Extrapolate())
+    lvl = Operators.LinVanLeerC2F(
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    up3 = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    return ((@. div_sv(lvl(u³, ρq, FT(0.5)))), (@. div_sv_ex(up3(u³, ρq))))
+end
+
 @testset "boundary-only column, Nv = 1 (device vs CPU) [$FT]" for FT in (
     Float32,
     Float64,
@@ -196,11 +219,10 @@ end
         @test all(isfinite, Array(parent(field)))
     end
 
-    # Center-to-face stencils on a column whose interior window is empty:
-    # `Operators.window_bounds` used to reject these, but it now clamps the
-    # overlapping boundary windows (boundary handling is dispatched per index,
-    # with the left window taking precedence), so both faces are computed with
-    # their boundary rows.
+    # Center-to-face stencils on a column whose interior window is empty: the
+    # boundary windows overlap (boundary handling is dispatched per index, with
+    # the left window taking precedence), so both faces are computed with their
+    # boundary rows.
     for (field, field_cpu) in
         zip(fd_c2f_results(spaces...), fd_c2f_results(spaces_cpu...))
         @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
@@ -416,5 +438,50 @@ end
     )
         @test device_matches_cpu(field, field_cpu; rtol)
         @test all(isfinite, Array(parent(field)))
+    end
+end
+
+@testset "NamedTuple fluxes, vector boundary values (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # The columns of the extruded space are short enough for a divergence to
+    # keep its cached operand in registers (read with warp shuffles), and those
+    # of the column space are too tall, so it is cached in shared memory.
+    tuple_flux_spaces(device) = map(
+        center_space -> (center_space, Spaces.face_space(center_space)),
+        (
+            ColumnSpace(
+                FT;
+                z_elem = 40,
+                z_min = 0,
+                z_max = 1,
+                device,
+                context = ClimaComms.SingletonCommsContext(device),
+                staggering = CellCenter(),
+            ),
+            ExtrudedCubedSphereSpace(
+                FT;
+                z_elem = 10,
+                z_min = 0,
+                z_max = 1,
+                radius = 10,
+                h_elem = 2,
+                n_quad_points = 3,
+                device,
+                context = ClimaComms.SingletonCommsContext(device),
+                staggering = CellCenter(),
+            ),
+        ),
+    )
+    for (spaces, spaces_cpu) in
+        zip(tuple_flux_spaces(test_device), tuple_flux_spaces(cpu_device))
+        for (field, field_cpu) in zip(
+            fd_tuple_flux_results(spaces...),
+            fd_tuple_flux_results(spaces_cpu...),
+        )
+            @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+            @test all(isfinite, Array(parent(field)))
+        end
     end
 end

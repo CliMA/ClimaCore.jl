@@ -40,73 +40,6 @@ integration by parts (e.g. [`Divergence{WeakForm}`](@ref Divergence),
 """
 struct WeakForm <: FormType end
 
-"""
-    materialize_buffer(arg)
-
-Materialize `arg` like `Base.materialize(arg)`, but store the result of a lazy
-`Broadcasted` expression in a buffer from [`buffer_similar`](@ref) that every
-thread in the argument's scope can read; register-resident `Field`s (see
-[`register_similar`](@ref)) are also copied into such a buffer, and other
-arguments are returned unchanged. On GPUs two
-buffers of equal byte size can share memory, so callers must keep their
-lifetimes disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
-"""
-@inline materialize_buffer(arg) = arg
-@inline function materialize_buffer(bc::Base.Broadcast.Broadcasted)
-    dest = buffer_similar(bc, drop_auto_broadcasters(Utilities.safe_eltype(bc)))
-    copyto_slab!(dest, bc)
-    return constant_field(dest)
-end
-@inline materialize_buffer(arg::Fields.Field) =
-    DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
-    materialize_buffer(Base.broadcasted(identity, arg)) : arg
-
-# Like materialize_buffer, but leaving arg lazy when it is a shallow Broadcasted
-# over materialized values and a single thread owns the data (cross-thread
-# scopes must publish through shared memory). Per benchmark_ops.jl, fusing
-# Gradient's basis products wins; Divergence/Curl's deeper ones are 2x slower.
-@inline fused_buffer(arg) = arg
-@inline fused_buffer(bc::Base.Broadcast.Broadcasted) =
-    has_private_buffers(bc) &&
-    unrolled_all(arg -> !(arg isa Base.Broadcast.Broadcasted), bc.args) ? bc :
-    materialize_buffer(bc)
-
-"""
-    has_private_buffers(arg)
-
-Return whether a buffer allocated for `arg` is private to the allocating thread,
-which holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
-[`DataLayouts.ThisThread`](@ref) (as on CPUs); otherwise buffers live in shared
-memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
-"""
-@inline has_private_buffers(arg) =
-    DataLayouts.DataScope(arg) == DataLayouts.ThisThread()
-
-"""
-    register_similar(arg, T)
-
-Allocate a `Field` like `Base.similar(arg, T)`, but with its data in each
-thread's registers; used for every [`apply_operator`](@ref) destination, which only its
-own thread reads and writes. This lets two applications in one fused expression
-be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
-"""
-register_similar(arg, ::Type{T}) where {T} = Fields.Field(
-    DataLayouts.register_similar(Fields.field_values(Base.broadcastable(arg)), T),
-    axes(arg),
-)
-
-"""
-    buffer_similar(arg, T)
-
-Allocate a `Field` like `Base.similar(arg, T)`, but always through the argument's
-[`DataLayouts.DataScope`](@ref) (shared memory on GPUs), never in per-thread
-registers; used for every buffer whose values cross a thread boundary.
-"""
-@inline buffer_similar(arg, ::Type{T}) where {T} = Fields.Field(
-    DataLayouts.buffer_similar(Fields.field_values(arg), T),
-    axes(arg),
-)
-
 # Lazy expression applying the component extractor f to each value of arg, with
 # lg narrowed to just the metric f reads (at most one 3x3 tensor per point).
 @inline function components_broadcasted(f::F, basis, arg, lg) where {F}
@@ -117,32 +50,30 @@ registers; used for every buffer whose values cross a thread boundary.
 end
 
 # Multiply arg by, or divide dest by, the Jacobian factor for the given form:
-# J for StrongForm, WJ for WeakForm. The weighted values are read exactly once,
-# at their own point, so they never cross a thread boundary and are only
-# materialized when has_private_buffers holds.
+# J for StrongForm, WJ for WeakForm. The weighted values are read at their own
+# points, once per horizontal dimension, so they never cross a thread boundary
+# and are evaluated only once (see own_point_values).
 jacobian_weight(::StrongForm, arg) = Fields.local_geometry_field(arg).J
 jacobian_weight(::WeakForm, arg) = Fields.local_geometry_field(arg).WJ
 @inline materialize_jacobian_weighted(form::FormType, arg) =
-    maybe_private_buffer(Base.broadcasted(*, arg, jacobian_weight(form, arg)))
+    own_point_values(Base.broadcasted(*, arg, jacobian_weight(form, arg)))
 @inline jacobian_unweighted(form, dest) =
     Base.broadcasted(/, dest, jacobian_weight(form, dest))
 
-# materialize_buffer for values never read across a thread boundary, applied
-# only when has_private_buffers holds; a shared buffer would only replace a
-# register with a shared memory round trip.
-@inline maybe_private_buffer(arg) =
-    has_private_buffers(arg) ? materialize_buffer(arg) : arg
-
 # Lazily multiply arg by, or divide dest by, the quadrature weights W = WJ / J
 # for WeakForm operators; a no-op for StrongForm. In both forms arg is
-# materialized first via maybe_private_buffer, which must be skipped when
-# buffers are shared: the buffer stays live for the whole application, and its
-# byte size can equal the per-dimension intermediate's, so on GPUs the first
-# dimension's intermediate would overwrite arg.
-@inline materialize_quadrature_weighted(::StrongForm, arg) =
-    maybe_private_buffer(arg)
+# evaluated once via own_point_values, which never uses a shared buffer: the
+# buffer would stay live for the whole application, and its byte size can
+# equal the per-dimension intermediate's, so on GPUs the first dimension's
+# intermediate would overwrite arg. A single thread materializes arg before
+# weighting it, while a scope with registers evaluates the weighted argument
+# there.
+@inline materialize_quadrature_weighted(::StrongForm, arg) = own_point_values(arg)
 @inline function materialize_quadrature_weighted(::WeakForm, arg)
     (; WJ, J) = Fields.local_geometry_field(arg)
+    has_private_buffers(arg) || return own_point_values(
+        Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J)),
+    )
     return Base.broadcasted(
         *, maybe_private_buffer(arg), Base.broadcasted(/, WJ, J),
     )
@@ -172,21 +103,6 @@ interp_matrix(::StrongForm, dest, arg) = Quadratures.interpolation_matrix(
 )
 interp_matrix(::WeakForm, dest, arg) = interp_matrix(StrongForm(), arg, dest)'
 
-# When dest's data is thread-local (single-thread DataScope, or a
-# RegisterArray), copy it into an immutable StaticArrays.SArray, which is
-# always stack-allocated (an MArray heap-allocates unless every read and write
-# is inlined). GPUs only have stack memory, so this is what allows GPU
-# compilation without full inlining; it also cuts CPU compile time.
-@inline function constant_field(dest)
-    data = Fields.field_values(dest)
-    is_thread_local =
-        has_private_buffers(data) ||
-        DataLayouts.parent_type(data) <: DataLayouts.RegisterArray
-    return is_thread_local ?
-           Fields.Field(DataLayouts.rebuild(data, StaticArrays.SArray), axes(dest)) :
-           dest
-end
-
 # Tuple of the horizontal dimensions covered by a Field: (1, 2), (1,), (2,),
 # or () (e.g., for a point or column Field).
 function horizontal_dims(arg)
@@ -194,14 +110,6 @@ function horizontal_dims(arg)
     Nq = DataLayouts.nquadpoints(arg)
     return Nq == 1 ? () : Ni == Nj ? (1, 2) : (Ni == Nq ? 1 : 2,)
 end
-
-# Broadcasting requires use of spectral-element operations.
-struct SpectralStyle <: Fields.AbstractFieldStyle end
-
-Broadcast.BroadcastStyle(::SpectralStyle, ::Fields.FieldStyle) = SpectralStyle()
-
-# A SpectralStyle broadcast expression with an operator of type F.
-const SpectralBroadcasted{F} = Broadcast.Broadcasted{SpectralStyle, <:Any, F}
 
 """
     SpectralElementOperator
@@ -214,131 +122,13 @@ abstract type SpectralElementOperator <: AbstractOperator end
 slab(op::SpectralElementOperator, _...) = op
 level(op::SpectralElementOperator, _...) = op
 
-function Broadcast.broadcasted(op::SpectralElementOperator, args...)
-    args′ = unrolled_map(Broadcast.broadcastable, args)
-    style = Broadcast.result_style(SpectralStyle(), Broadcast.combine_styles(args′...))
-    return Broadcast.broadcasted(style, op, args′...)
-end
+struct SpectralStyle <: OperatorStyle end
 
-# As in Fields.sliced_broadcasted, but keeping the SpectralStyle so slab-level
-# operator nodes are still recognized by apply_operators.
-@inline Fields.sliced_broadcasted(op::SpectralElementOperator, args, axes) =
-    Broadcast.Broadcasted(
-        Broadcast.result_style(SpectralStyle(), Broadcast.combine_styles(args...)),
-        op,
-        args,
-        axes,
-    )
+OperatorStyle(::SpectralElementOperator) = SpectralStyle()
+slice_operator(::SpectralStyle) = slab
 
-# Apply size primitives to an operator-free pointwise equivalent of bc.
-for f in (:size, :length, :ndims)
-    @eval Base.$f(bc::SpectralBroadcasted) = $f(drop_operators(bc))
-end
-for f in (:shape_params, :inferred_size, :nelems)
-    @eval DataLayouts.$f(bc::SpectralBroadcasted) = DataLayouts.$f(drop_operators(bc))
-end
-
-drop_operators(arg) = arg
-drop_operators(bc::SpectralBroadcasted) =
-    Fields.sliced_broadcasted(bc.f, unrolled_map(drop_operators, bc.args), nothing)
-drop_operators(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
-    Fields.sliced_broadcasted(
-        Returns(new(eltype(bc))), unrolled_map(drop_operators, bc.args), nothing,
-    )
-
-# Allocate materialized results from the broadcast's own data; the space-based
-# LazyField fallback would allocate through coordinate data whose kernel-wide
-# scope has no allocation method inside a fused slice loop.
-Base.similar(bc::SpectralBroadcasted, ::Type{T}) where {T} =
-    similar(drop_operators(bc), T)
-
-# Copy one slab of an operator-free expression into one slab of the destination.
-# Broadcast expressions skip .= to avoid inferring the per-slab point loop into
-# both of its materialize! layers; other arguments are rare enough to keep .=.
-@inline copyto_slab!(dest, bc::Fields.LazyField) = copyto!(
-    Fields.field_values(dest),
-    Base.Broadcast.instantiate(Fields.field_values(bc)),
-    Spaces.get_mask(axes(dest)),
-)
-@inline copyto_slab!(dest, arg) = (dest .= arg)
-
-# Evaluate copyto! slab by slab, replacing operator broadcasts with pointwise ones.
-function Base.copyto!(
-    dest::Fields.Field,
-    bc::SpectralBroadcasted,
-    mask::DataLayouts.DataMask = DataLayouts.NoMask(),
-)
-    # A mask cannot skip slabs: a slab is live whenever any of its columns is
-    # active, and a spectral operator reads every point of its slab.
-    DataLayouts.foreach_slab(dest, bc) do dest_slab, bc_slab
-        copyto_slab!(dest_slab, apply_operators(bc_slab))
-    end
-    call_post_op_callback() && post_op_callback(dest, dest, bc; mask)
-    return dest
-end
-
-"""
-    apply_operator(op, args...)
-
-Eagerly evaluate the [`SpectralElementOperator`](@ref) `op` over one slab of
-slab `Field`s and/or lazy pointwise broadcasts over slabs.
-
-# Notes
-
-**Buffer reuse invariant.** On GPUs, buffers of equal byte size can be assigned to the same shared memory
-(see `DataLayouts.scoped_static_array`), so each `apply_operator` method keeps
-at most one buffer of each size live at a time, separating every reuse from the
-previous use with a `DataLayouts.synchronize`. The destination stays live for
-the whole application and may alias a *different* live application's destination
-(as in `@. wdiv(grad(a)) + wdiv(grad(b))`), so it lives in per-thread registers
-([`register_similar`](@ref)), as do temporaries materialized inside a fused
-slice loop; [`materialize_buffer`](@ref) republishes register-resident values
-whenever an operator must read them across threads. Two configurations rely on
-their allocation sites compiling into one unit (equal-size globals merge only
-across separately compiled functions): interpolation to an equal or lower
-degree gives a buffered argument and `sequential_muladd_slab!`'s partial result
-the same byte size, and `SplitDivergence`'s buffered second argument stays live
-across its equal-size per-dimension intermediates. Both are pinned by GPU value
-tests in `test/Operators/spectralelement/gpu_rectilinear.jl`.
-"""
-function apply_operator end
-
-# Replace every spectral operator broadcast in bc with the result of the
-# corresponding apply_operator call, which is evaluated eagerly.
-apply_operators(arg) = arg
-apply_operators(bc::SpectralBroadcasted) =
-    Broadcast.broadcasted(bc.f, unrolled_map(apply_operators, bc.args)...)
-apply_operators(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
-    scoped_apply_operator(
-        DataLayouts.DataScope(bc),
-        Val(inlined_buffer_bytes(bc) <= MAX_INLINED_BUFFER_BYTES),
-        bc,
-    )
-
-# Upper bound on the per-thread shared memory that inlining ONE broadcast
-# expression's operator applications requests: each application is charged
-# 2 buffers of its largest eltype sizeof. Assumes each slice's scope has at
-# least as many threads as points; halving that doubles every buffer (see
-# DataLayouts.slice_subscope).
-inlined_buffer_bytes(arg) = 0
-inlined_buffer_bytes(bc::Union{Broadcast.Broadcasted, SpectralBroadcasted}) =
-    unrolled_sum(inlined_buffer_bytes, bc.args)
-inlined_buffer_bytes(bc::SpectralBroadcasted{<:SpectralElementOperator}) =
-    2 * unrolled_maximum(sizeof ∘ eltype, (bc, bc.args...)) +
-    unrolled_sum(inlined_buffer_bytes, bc.args)
-
-# Inline each operator unless its expression asks a block for more than CUDA's
-# 48 KB of static shared memory (a compilation error). The budget is 192 bytes
-# per thread of a 256-thread block; launched blocks hold at most 128 threads
-# (MAX_SUBBLOCK_LAUNCH_THREADS in ext/cuda/scopes.jl), so an at-budget
-# expression reserves at most half of the 48 KB and two fit per kernel;
-# RESIDUAL RISK: three or more still overflow, signaled only by the ptxas
-# error.
-const MAX_INLINED_BUFFER_BYTES = 48 * 1024 ÷ 256
-@inline scoped_apply_operator(scope, ::Val{true}, bc) =
-    apply_operator(bc.f, unrolled_map(apply_operators, bc.args)...)
-@noinline scoped_apply_operator(scope, ::Val{false}, bc) =
-    apply_operator(bc.f, unrolled_map(apply_operators, bc.args)...)
+const SpectralBroadcasted{F} = Broadcast.Broadcasted{SpectralStyle, <:Any, F}
+const SpectralOperatorBroadcasted{Op <: SpectralElementOperator} = SpectralBroadcasted{Op}
 
 # The muladd_slab! variants loop over DataLayouts instead of Fields so slicing
 # does not construct a new space type per distinct argument type. Instantiate so
@@ -373,43 +163,40 @@ sum_value(matrix, arg_value::F, dim::Union{Val{:i}, Val{:j}}, i, j) where {F} =
 # All threads that materialize arg must be synchronized before this is called.
 # A single thread owning the whole slab (as on CPUs) visits a slice as a unit;
 # otherwise each thread may only write the destination points in its own
-# registers (see register_similar), so it visits them one at a time.
+# registers (see register_similar), so it visits them one at a time, with every
+# thread reading arg in lockstep (see cached_arg).
 @inline muladd_slab!(dest, matrix, arg, dim) =
     has_private_buffers(dest) ? sliced_muladd_slab!(dest, matrix, arg, dim) :
     pointwise_muladd_slab!(dest, matrix, arg, dim)
 
-@inline function pointwise_muladd_slab!(dest, matrix, arg, dim, clip = Val(false))
+@inline function pointwise_muladd_slab!(dest, matrix, arg, dim)
     arg_data = slab_data(arg)
-    DataLayouts.foreach_column(
-        slab_data(dest); enumerate = Val(true),
-    ) do dest_index, dest_point
+    DataLayouts.update_points!(+, slab_data(dest), column) do dest_index
         (i, j, _) = Tuple(dest_index)
         arg_value(i′, j′) = arg_point_value(arg_data, i′, j′)
-        in_bounds = if clip isa Val{true}
-            (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
-            Nq = size(matrix, 1)
-            dim isa Val{:i} ? (i <= Nq && j <= Nj) : (i <= Ni && j <= Nq)
-        else
-            true
-        end
-        in_bounds && @inbounds dest_point[] += unrolled_sum(
+        @inbounds unrolled_sum(
             sum_value(matrix, arg_value, dim, i, j),
             summed_indices(matrix),
         )
-        nothing
     end
 end
 
 # Destination indices come from each_slice_index so their bounds checks are
 # still elided under --check-bounds: an index of unproven provenance lets
 # dest's MArray escape into the check's error path, moving it to the heap.
+# The point-read closure is inlined explicitly: reading a slab view through
+# its parent array (see parent_array_and_index_args) costs more in the
+# inliner's model than the threshold, and a non-inlined closure passes the
+# lazy argument (see fused_buffer) through memory at every point, which keeps
+# LLVM from folding its constants (3-4x slower CPU gradients).
 @inline function sliced_muladd_slab!(dest, matrix, arg, dim)
     (arg_data, dest_data) = (slab_data(arg), slab_data(dest))
     n′s = summed_indices(matrix)
     indices = DataLayouts.each_slice_index(column, dest_data)
     ordered(k, n) = dim isa Val{:i} ? (k, n) : (n, k)
     @inbounds for n in axes(indices, dim isa Val{:i} ? 2 : 1)
-        values = unrolled_map(n′ -> arg_point_value(arg_data, ordered(n′, n)...), n′s)
+        @inline point_value(n′) = arg_point_value(arg_data, ordered(n′, n)...)
+        values = unrolled_map(point_value, n′s)
         for k in axes(indices, dim isa Val{:i} ? 1 : 2)
             column(dest_data, Tuple(indices[ordered(k, n)..., 1])...)[] +=
                 unrolled_sum(n′ -> matrix[k, n′] * values[n′], n′s)
@@ -419,9 +206,26 @@ end
 
 # Like muladd_slab!, but skipping output points beyond the size of arg along
 # the non-sliced dimension or of matrix along the sliced one; either can occur
-# in sequential_muladd_slab!, where partial_result has the larger size.
-@inline clipped_muladd_slab!(dest, matrix, arg, dim) =
-    pointwise_muladd_slab!(dest, matrix, arg, dim, Val(true))
+# in sequential_muladd_slab!, where partial_result has the larger size. Since
+# the skipped points do not read arg, it must be readable by every thread
+# without reading in lockstep.
+@inline function clipped_muladd_slab!(dest, matrix, arg, dim)
+    arg_data = slab_data(arg)
+    DataLayouts.foreach_column(
+        slab_data(dest); enumerate = Val(true),
+    ) do dest_index, dest_point
+        (i, j, _) = Tuple(dest_index)
+        arg_value(i′, j′) = arg_point_value(arg_data, i′, j′)
+        (; Ni, Nj) = DataLayouts.vijh_params(arg_data)
+        Nq = size(matrix, 1)
+        in_bounds = dim isa Val{:i} ? (i <= Nq && j <= Nj) : (i <= Ni && j <= Nq)
+        in_bounds && @inbounds dest_point[] += unrolled_sum(
+            sum_value(matrix, arg_value, dim, i, j),
+            summed_indices(matrix),
+        )
+        nothing
+    end
+end
 
 # Set dest_slice[n] .+= (matrix * Fₙ)[n] for each 1D i or j slice of the inputs,
 # where Fₙ = (arg1[n] + arg1) * (arg2[n] + arg2) / 2 is a slice of the symmetric
@@ -429,16 +233,14 @@ end
 @inline function split_muladd_slab!(dest, matrix, arg1, arg2, dim)
     arg1_data = slab_data(arg1)
     arg2_data = slab_data(arg2)
-    DataLayouts.foreach_column(
-        slab_data(dest); enumerate = Val(true),
-    ) do dest_index, dest_point
+    DataLayouts.update_points!(+, slab_data(dest), column) do dest_index
         (i, j, _) = Tuple(dest_index)
         arg1_value(i′, j′) = arg_point_value(arg1_data, i′, j′)
         arg2_value(i′, j′) = arg_point_value(arg2_data, i′, j′)
         flux_value(i′, j′) =
             @inbounds (arg1_value(i, j) + arg1_value(i′, j′)) *
                       (arg2_value(i, j) + arg2_value(i′, j′)) / 2
-        @inbounds dest_point[] += unrolled_sum(
+        @inbounds unrolled_sum(
             sum_value(matrix, flux_value, dim, i, j),
             summed_indices(matrix),
         )
@@ -459,7 +261,7 @@ end
         # points), so it must be a shared buffer, never registers.
         partial_result =
             DataLayouts.nquadpoints(dest) > DataLayouts.nquadpoints(arg) ?
-            buffer_similar(dest, eltype(dest)) : buffer_similar(arg, eltype(arg))
+            buffer_similar(dest) : buffer_similar(arg)
         muladd_slab_init!(partial_result)
         clipped_muladd_slab!(partial_result, matrix, arg, Val(:i))
         DataLayouts.synchronize(DataLayouts.DataScope(partial_result))
@@ -494,13 +296,14 @@ end
 
 # Contravariant component along horizontal dimension h of a Jacobian-weighted
 # argument, and the covariant basis vector eʰ that Gradient multiplies by.
-@inline materialize_contravariant(::Val{h}, arg, lg) where {h} = materialize_buffer(
+@inline materialize_contravariant(::Val{h}, arg, lg) where {h} = cached_arg(
     components_broadcasted(
         h == 1 ? Geometry.contravariant1 : Geometry.contravariant2,
         Geometry.Contravariant(),
         arg,
         lg,
     ),
+    Val(true),
 )
 @inline covariant_basis_vector(::Val{h}) where {h} =
     h == 1 ? Geometry.Covariant1Vector(true) : Geometry.Covariant2Vector(true)
@@ -521,7 +324,7 @@ end
         )
     term(V, f) =
         Base.broadcasted(V, components_broadcasted(f, Geometry.Covariant(), arg, lg))
-    return materialize_buffer(Base.broadcasted(-, term(V₁, f₁), term(V₂, f₂)))
+    return cached_arg(Base.broadcasted(-, term(V₁, f₁), term(V₂, f₂)), Val(true))
 end
 
 """
@@ -604,7 +407,7 @@ where ``W`` is the diagonal matrix of quadrature weights.
 struct Divergence{F <: FormType} <: SpectralElementOperator end
 Divergence() = Divergence{StrongForm}()
 
-return_space(::Divergence, space) = space
+return_space(::Divergence, arg) = axes(arg)
 return_eltype(::Divergence, arg) = Geometry.divergence_result_type(eltype(arg))
 
 # Strong form is J⁻¹ ∑ₕ Dₕ J argʰ;
@@ -730,9 +533,11 @@ sequentially along each dimension.
 """
 struct SplitDivergence <: SpectralElementOperator end
 
-return_space(::SplitDivergence, space, _) = space
-return_eltype(::SplitDivergence, arg1, arg2) =
-    Geometry.mul_return_type(Geometry.divergence_result_type(eltype(arg1)), eltype(arg2))
+return_space(::SplitDivergence, arg1, _) = axes(arg1)
+return_eltype(::SplitDivergence, arg1, arg2) = Utilities.return_type(
+    *,
+    Tuple{Geometry.divergence_result_type(eltype(arg1)), eltype(arg2)},
+)
 
 # Split form at index n is J⁻¹ ∑ₕ [Dₕ - Diag(Dₕ)] Fʰ[n, :], where F[n, :] is a
 # slice of the tensor F[n, m] = (arg1[n] + arg1[m]) * (arg2[n] + arg2[m]) / 2.
@@ -740,7 +545,7 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
     dims = horizontal_dims(arg1)
     lg = Fields.local_geometry_field(arg1)
     arg1′ = materialize_jacobian_weighted(StrongForm(), arg1)
-    arg2′ = materialize_buffer(arg2)
+    arg2′ = cached_arg(arg2, Val(true))
     dest = register_similar(arg1, return_eltype(op, arg1, arg2))
     matrix = if isempty(dims)
         nothing
@@ -825,7 +630,7 @@ which reduces to
 struct Gradient{F <: FormType} <: SpectralElementOperator end
 Gradient() = Gradient{StrongForm}()
 
-return_space(::Gradient, space) = space
+return_space(::Gradient, arg) = axes(arg)
 return_eltype(::Gradient, arg) =
     Geometry.gradient_result_type(Val(horizontal_dims(arg)), eltype(arg))
 
@@ -933,7 +738,7 @@ which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
 struct Curl{F <: FormType} <: SpectralElementOperator end
 Curl() = Curl{StrongForm}()
 
-return_space(::Curl, space) = space
+return_space(::Curl, arg) = axes(arg)
 return_eltype(::Curl, arg) =
     Geometry.curl_result_type(Val(horizontal_dims(arg)), eltype(arg))
 
@@ -953,13 +758,6 @@ function apply_operator(op::Curl{F}, arg) where {F}
 end
 
 abstract type TensorOperator <: SpectralElementOperator end
-
-# A TensorOperator's result is shaped by its target space, not its argument's.
-# The constant is broadcasted over a Field (not its layout) so the node keeps
-# the FieldStyle that the size and scope queries expect.
-drop_operators(bc::SpectralBroadcasted{<:TensorOperator}) = Fields.sliced_broadcasted(
-    Returns(new(eltype(bc))), (Fields.local_geometry_field(bc.f.space),), nothing,
-)
 
 return_space(op::TensorOperator, _) = op.space
 return_eltype(::TensorOperator, arg) = eltype(arg)
@@ -1042,7 +840,9 @@ function tensor_weighted(::Restrict, arg)
              materialize its argument outside the fused loop",
         ),
     )
-    return materialize_jacobian_weighted(WeakForm(), arg)
+    return maybe_private_buffer(
+        Base.broadcasted(*, arg, jacobian_weight(WeakForm(), arg)),
+    )
 end
 tensor_unweighted(::Interpolate, dest) = dest
 tensor_unweighted(::Restrict, dest) = jacobian_unweighted(WeakForm(), dest)
@@ -1165,9 +965,9 @@ return_eltype(::LumpedRestriction, arg) = eltype(arg)
 # the space has: a different quadrature with the same number of points would
 # give the coarse buffer the byte size of the weighted argument's buffer (see
 # the buffer reuse invariant), so it is rejected rather than handled.
-function return_space(op::LumpedRestriction, space)
-    check_coarse_quadrature(op, space)
-    return space
+function return_space(op::LumpedRestriction, arg)
+    check_coarse_quadrature(op, axes(arg))
+    return axes(arg)
 end
 check_coarse_quadrature(op, space) = nothing
 function check_coarse_quadrature(
@@ -1477,15 +1277,7 @@ function rmatmul2(W, S, i, j)
     return r
 end
 
-# Disabling constant propagation here cuts about a quarter of the inference
-# allocation of a spectral expression (keeping the one-process test suite inside
-# a 16 GB runner). The @inline annotations on the buffer helpers, weighting
-# functions, and per-dimension closures are load-bearing for CPU runtime:
-# without them, buffer Fields cross through memory and combine_axes runs per
-# slab, adding 30-120% to a fused expression's runtime. Inlining apply_operator(s)
-# as well gains about 10% and roughly doubles LLVM time and memory.
+# Disable constant propagation to reduce heap allocations during type inference.
 @drop_constprop apply_operator, muladd_slab!, muladd_slab_dims!,
-lumped_restrict_slab!, prolong_slab!,
-materialize_buffer, maybe_private_buffer, materialize_jacobian_weighted,
-materialize_quadrature_weighted, jacobian_unweighted,
-quadrature_unweighted, fused_buffer, register_similar, buffer_similar
+lumped_restrict_slab!, prolong_slab!, materialize_jacobian_weighted,
+materialize_quadrature_weighted, jacobian_unweighted, quadrature_unweighted

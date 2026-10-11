@@ -310,7 +310,6 @@ end
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/994
-# TODO: make this test more low-level / granular (test `getidx`).
 @testset "Spatially varying BC with Grad [$FT]" for FT in (Float32, Float64)
     zmin = FT(1.0)
     zmax = FT(2.0)
@@ -598,6 +597,24 @@ end
               [ref₂[1:n]..., zero(FT)]
     end
 
+    @testset "CurlC2F element type" begin
+        # The vertical curl only has horizontal components, so a lazy curl
+        # has the same element type as its result
+        zᶜ = Fields.coordinate_field(cs).z
+        uᶜ = @. Geometry.Covariant12Vector(zᶜ, 1)
+        curl = Operators.CurlC2F(;
+            bottom = Operators.SetCurl(Geometry.Contravariant12Vector(FT(0), FT(0))),
+            top = Operators.SetCurl(Geometry.Contravariant12Vector(FT(0), FT(0))),
+        )
+        lazy_curl = Base.Broadcast.broadcasted(curl, uᶜ)
+        @test Operators.return_eltype(curl, uᶜ) == Geometry.Contravariant12Vector{FT}
+        @test eltype(lazy_curl) == Geometry.Contravariant12Vector{FT}
+        @test eltype(Base.materialize(lazy_curl)) == Geometry.Contravariant12Vector{FT}
+        # Horizontal curls keep the full vector type
+        @test Geometry.curl_result_type(Val((1, 2)), eltype(uᶜ)) ==
+              Geometry.Contravariant123Vector{FT}
+    end
+
     @testset "UpwindBiasedProductC2F with a prescribed boundary value" begin
         # U(v,x)[1/2] uses x₀ on the outside of the boundary
         ref = [
@@ -853,6 +870,41 @@ end
         p1 = cpu(ψ1)
         @test cpu(Geometry.WVector.(Operators.GradientF2C().(ψ1))) ≈
               [p1[2] - p1[1]]
+    end
+end
+
+@testset "Extrapolation of any order on interpolations and divergences" begin
+    # Only the boundary rows of these operators read ghost points (or replicate
+    # an interior output), where every order of extrapolation is equivalent
+    for FT in (Float32, Float64), nelems in (2, 3, 10)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0),
+            Geometry.ZPoint{FT}(1);
+            boundary_names = (:bottom, :top),
+        )
+        topology = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(device),
+            Meshes.IntervalMesh(domain; nelems),
+        )
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+        ᶜz = Fields.coordinate_field(center_space).z
+        ᶠz = Fields.coordinate_field(face_space).z
+        ᶜx = @. sin(7 * ᶜz) + ᶜz^3
+        ᶜJ = Fields.local_geometry_field(center_space).J
+        ᶠu = @. Geometry.WVector(cos(5 * ᶠz) + ᶠz^2)
+        bcs(order) = (;
+            bottom = Operators.Extrapolate(order),
+            top = Operators.Extrapolate(order),
+        )
+        for order in (1, 2)
+            interp(order) = Operators.InterpolateC2F(; bcs(order)...)
+            winterp(order) = Operators.WeightedInterpolateC2F(; bcs(order)...)
+            div(order) = Operators.DivergenceF2C(; bcs(order)...)
+            @test parent(interp(order).(ᶜx)) == parent(interp(0).(ᶜx))
+            @test parent(winterp(order).(ᶜJ, ᶜx)) == parent(winterp(0).(ᶜJ, ᶜx))
+            @test parent(div(order).(ᶠu)) == parent(div(0).(ᶠu))
+        end
     end
 end
 

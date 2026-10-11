@@ -108,9 +108,10 @@ end
 ActiveColumnIndices(mask) =
     ActiveColumnIndices(mask, Base.OneTo(Int(@inbounds mask.N[1])))
 Base.size(inds::ActiveColumnIndices) = (length(inds.indices),)
-Base.@propagate_inbounds function Base.getindex(inds::ActiveColumnIndices, n::Int)
-    (; i_map, j_map, h_map) = inds.mask
-    real_n = inds.indices[n]
+Base.@propagate_inbounds Base.getindex(inds::ActiveColumnIndices, n::Int) =
+    active_column_index(inds.mask, inds.indices[n])
+@inline function active_column_index(mask, real_n)
+    (; i_map, j_map, h_map) = mask
     @inbounds CartesianIndex(i_map[real_n], j_map[real_n], h_map[real_n])
 end
 Adapt.@adapt_structure ActiveColumnIndices
@@ -127,12 +128,11 @@ ActivePointIndices{Nv}(mask, indices) where {Nv} =
 ActivePointIndices{Nv}(mask) where {Nv} =
     ActivePointIndices{Nv}(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])))
 Base.size(inds::ActivePointIndices) = (length(inds.indices),)
-Base.@propagate_inbounds function Base.getindex(
-    inds::ActivePointIndices{Nv},
-    n::Int,
-) where {Nv}
-    (; i_map, j_map, h_map) = inds.mask
-    (n_zero, v_zero) = divrem(inds.indices[n] - 1, Nv)
+Base.@propagate_inbounds Base.getindex(inds::ActivePointIndices{Nv}, n::Int) where {Nv} =
+    active_point_index(Val(Nv), inds.mask, inds.indices[n])
+@inline function active_point_index(::Val{Nv}, mask, real_n) where {Nv}
+    (; i_map, j_map, h_map) = mask
+    (n_zero, v_zero) = divrem(real_n - 1, Nv)
     (v, col) = (v_zero + 1, n_zero + 1)
     @inbounds CartesianIndex(v, i_map[col], j_map[col], h_map[col])
 end

@@ -12,7 +12,9 @@ using UnrolledUtilities
 
 import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
-import ..Utilities: stable_view, unionall_type, replace_type_parameter, safe_mapreduce
+import ..Utilities:
+    stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
+import ..Utilities: safe_mapreduce
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -233,18 +235,42 @@ converting its parent array to some type `A`, or replacing it with another
 The new array can be stored on a different device (e.g., `Array` vs `CuArray`),
 so the [`DataScope`](@ref) is modified if it is inconsistent with the new array.
 """
-@inline rebuild(data, ::Type{A}, ::Type{T} = eltype(data); params...) where {A, T} =
-    rebuild(data, A(parent(data)), T; params...)
-@inline function rebuild(data, array, ::Type{T} = eltype(data); params...) where {T}
+Base.@propagate_inbounds rebuild(
+    data,
+    ::Type{A},
+    ::Type{T} = eltype(data);
+    params...,
+) where {A, T} = rebuild(data, A(parent(data)), T; params...)
+Base.@propagate_inbounds function rebuild(
+    data,
+    array,
+    ::Type{T} = eltype(data);
+    params...,
+) where {T}
     scope = DataScope(array)
     scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
     return layout_constructor(scoped_data, T; params...)(array)
 end
 
+# Like rebuild, for an array that is a slice of the parent array of data, which
+# makes a valid layout by construction: the constructor (and its parent check,
+# see check_parent) is bypassed, since slice loops take such slices under
+# @inbounds, and Julia 1.10 keeps the code of a check that @inbounds makes
+# unreachable in the optimized IR of every loop.
+@inline function unchecked_rebuild(data, array; params...)
+    scope = DataScope(array)
+    scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
+    return layout_constructor(scoped_data; params...){typeof(array)}(array)
+end
+
 Adapt.adapt_structure(to, data::DataLayout) = rebuild(data, Adapt.adapt(to, parent(data)))
 
 Base.copy(data::DataLayout) = rebuild(data, copy(parent(data)))
-Base.reinterpret(::Type{T}, data::DataLayout) where {T} = rebuild(data, parent(data), T)
+# Propagates @inbounds to the parent check of the rebuilt layout (see
+# check_parent), for callers that reinterpret to a type with the same number of
+# entries per value.
+Base.@propagate_inbounds Base.reinterpret(::Type{T}, data::DataLayout) where {T} =
+    rebuild(data, parent(data), T)
 
 # Add MPICommsContext method to disambiguate from gather(::MPICommsContext, array).
 for T in (:(ClimaComms.AbstractCommsContext), :(ClimaComms.MPICommsContext))
@@ -259,6 +285,9 @@ ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
+@inline drop_f_dim(dims, ::Val{F}) where {F} =
+    isnothing(F) ? dims :
+    ntuple(d -> d < F ? dims[d] : dims[d + 1], Val(length(dims) - 1))
 
 function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
@@ -274,7 +303,9 @@ function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
         has_inferred_size(data) ?
         scoped_static_array(DataScope(data), B, array_size) :
         scoped_array(DataScope(data), B, array_size)
-    return rebuild(data, array, T)
+    # The new array is allocated with the layout's canonical size, so the
+    # parent check in the constructor is skipped.
+    return @inbounds rebuild(data, array, T)
 end
 
 Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
@@ -319,7 +350,9 @@ end
     is_valid_basetype(eltype(parent(data)), fieldtype(T, i)) ||
         return Broadcast.broadcasted(Base.Fix2(getfield, i), data)
     array = @inbounds struct_field_view(parent(data), T, Val(i), Val(f_dim(data)))
-    return rebuild(data, array, fieldtype(T, i))
+    # A field view keeps the canonical size of its parent along every axis of
+    # the layout, so the parent check in the constructor is skipped.
+    return @inbounds rebuild(data, array, fieldtype(T, i))
 end
 
 @inline Base.getproperty(data::DataLayout, i::Integer) = property_view(data, Val(i))
@@ -336,9 +369,25 @@ end
 
 # Check that a parent array has the canonical size for its layout. Arrays with
 # other shapes must be explicitly reshaped before they are wrapped in layouts.
-@inline check_parent(array, array_size...) =
-    size(array) == array_size ? array :
+# The check is a bounds check: constructors are called under @inbounds wherever
+# the array is known to have the canonical size by construction (slice views,
+# field views, and buffers allocated for a layout), which keeps these checks
+# out of GPU kernels, where every layout is rebuilt from an array that was
+# already checked on the host.
+Base.@propagate_inbounds function check_parent(array, array_size...)
+    @boundscheck check_parent_size(array, array_size)
+    return array
+end
+# The check stays inlined on every array: after it, the compiler knows that the
+# array has the layout's static extents, which CPU point loops need in order to
+# vectorize (CPU pointwise broadcasts were 33% slower with a non-inlined check).
+@inline check_parent_size(array, array_size) =
+    size(array) == array_size || throw_parent_size_mismatch()
+@noinline throw_parent_size_mismatch() =
     throw(DimensionMismatch("Array size is not consistent with layout type"))
+
+# The arrays of layouts whose point loops can be vectorized by the compiler.
+const CPUArray = Union{Array, SubArray{<:Any, <:Any, <:Array}}
 
 """
     DataF{T, [S]}(A)
@@ -356,7 +405,7 @@ end
 DataF{T}(array) where {T} = DataF{T, typeof(DataScope(array))}(array)
 DataF{T, S}(::Type{A}) where {T, S, A} =
     DataF{T, S}(similar(A, num_basetypes(eltype(A), T)))
-function DataF{T, S}(array) where {T, S}
+Base.@propagate_inbounds function DataF{T, S}(array) where {T, S}
     check_basetype(eltype(array), T)
     check_parent(array, num_basetypes(eltype(array), T))
     return DataF{T, S, typeof(array)}(array)
@@ -412,7 +461,9 @@ function VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(
     array = similar(A, add_f_dim((Nv, Ni, Nj, Nh_dynamic), Nf, Val(F))...)
     return VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(array)
 end
-function VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(array) where {T, Nv, Ni, Nj, Nh, F, S}
+Base.@propagate_inbounds function VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(
+    array,
+) where {T, Nv, Ni, Nj, Nh, F, S}
     check_basetype(eltype(array), T)
     @assert (Ni == Nj || isone(Nj)) && (isnothing(Nh) || Nh isa Integer)
     Nf = num_basetypes(eltype(array), T)
@@ -435,16 +486,45 @@ end
 
 @propagate_inbounds function level_view(data::VIJHWithF, v)
     array = stable_view(parent(data), add_f_dim((v:v, :, :, :), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1)
+    return unchecked_rebuild(data, array; Nv = 1)
 end
 @propagate_inbounds function slab_view(data::VIJHWithF, v, h)
     array = stable_view(parent(data), add_f_dim((v:v, :, :, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return unchecked_rebuild(data, array; Nv = 1, Nh = 1)
 end
 @propagate_inbounds function column_view(data::VIJHWithF, i, j, h)
     array = stable_view(parent(data), add_f_dim((:, i:i, j:j, h:h), :, Val(f_dim(data)))...)
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return unchecked_rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
 end
+
+# The slices that slice loops take at their own (valid) indices, with the same
+# special cases as level, slab and column, but without the bounds check of the
+# parent array's view (see slice_arg).
+@inline unchecked_slice_view(data::VIJHWithF, indices; params...) = unchecked_rebuild(
+    data,
+    unchecked_stable_view(parent(data), add_f_dim(indices, :, Val(f_dim(data)))...);
+    params...,
+)
+@inline function slice_arg(::typeof(level), data::VIJHWithF, v)
+    (; Nv, Ni, Nj, Nh) = vijh_params(data)
+    Ni == Nj == Nh == 1 && return @inbounds view(data, CartesianIndex(v, 1, 1, 1))
+    Nv == 1 && return data
+    return unchecked_slice_view(data, (v:v, :, :, :); Nv = 1)
+end
+@inline function slice_arg(::typeof(slab), data::VIJHWithF, v, h)
+    (; Nv, Ni, Nj, Nh) = vijh_params(data)
+    Ni == Nj == 1 && return @inbounds view(data, CartesianIndex(v, 1, 1, h))
+    Nv == Nh == 1 && return data
+    return unchecked_slice_view(data, (v:v, :, :, h:h); Nv = 1, Nh = 1)
+end
+@inline function slice_arg(::typeof(column), data::VIJHWithF, i, j, h)
+    (; Nv, Ni, Nj, Nh) = vijh_params(data)
+    Nv == 1 && return @inbounds view(data, CartesianIndex(1, i, j, h))
+    Ni == Nj == Nh == 1 && return data
+    return unchecked_slice_view(data, (:, i:i, j:j, h:h); Ni = 1, Nj = 1, Nh = 1)
+end
+@inline slice_arg(::typeof(column), data::VIJHWithF, i, h) =
+    slice_arg(column, data, i, 1, h)
 
 """
     VIH1{T, Nv, Ni, Nh, [S]}(A, [Nh_dynamic])
@@ -468,7 +548,7 @@ VIH1{T, Nv, Ni, Nh}(array, Nh_dynamic...) where {T, Nv, Ni, Nh} =
 VIH1{T, Nv, Ni, Nh, S}(::Type{A}, Nh_dynamic = Nh) where {T, Nv, Ni, Nh, S, A} =
     check_Nh_dynamic(Nh_dynamic) &&
     VIH1{T, Nv, Ni, Nh, S}(similar(A, Nv, Ni * Nh_dynamic))
-function VIH1{T, Nv, Ni, Nh, S}(array) where {T, Nv, Ni, Nh, S}
+Base.@propagate_inbounds function VIH1{T, Nv, Ni, Nh, S}(array) where {T, Nv, Ni, Nh, S}
     check_basetype(eltype(array), T)
     @assert isnothing(Nh) || isone(Nh)
     Nh1 = isnothing(Nh) ? size(array, 2) ÷ Ni : Nh
@@ -486,15 +566,15 @@ nelems(data::VIH1{<:Any, <:Any, Ni}) where {Ni} = size(data, 2) ÷ Ni
 
 @propagate_inbounds function level_view(data::VIH1, v)
     array = stable_view(parent(data), v:v, :)
-    return rebuild(data, array; Nv = 1)
+    return @inbounds rebuild(data, array; Nv = 1)
 end
 @propagate_inbounds function slab_view(data::VIH1{<:Any, <:Any, Ni}, v, h) where {Ni}
     array = stable_view(parent(data), v:v, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (1:Ni))
-    return rebuild(data, array; Nv = 1, Nh = 1)
+    return @inbounds rebuild(data, array; Nv = 1, Nh = 1)
 end
 @propagate_inbounds function column_view(data::VIH1{<:Any, <:Any, Ni}, i, _, h) where {Ni}
     array = stable_view(parent(data), :, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (i:i))
-    return rebuild(data, array; Ni = 1, Nh = 1)
+    return @inbounds rebuild(data, array; Ni = 1, Nh = 1)
 end
 
 """
@@ -519,7 +599,7 @@ IH1JH2{T, Ni, Nj, Nh}(array, Nh_dynamic...) where {T, Ni, Nj, Nh} =
 IH1JH2{T, Ni, Nj, Nh, S}(::Type{A}, Nh_dynamic = Nh) where {T, Ni, Nj, Nh, S, A} =
     check_Nh_dynamic(Nh_dynamic) &&
     IH1JH2{T, Ni, Nj, Nh, S}(similar(A, Ni * Nh_dynamic, Nj))
-function IH1JH2{T, Ni, Nj, Nh, S}(array) where {T, Ni, Nj, Nh, S}
+Base.@propagate_inbounds function IH1JH2{T, Ni, Nj, Nh, S}(array) where {T, Ni, Nj, Nh, S}
     check_basetype(eltype(array), T)
     @assert (Ni == Nj || isone(Nj)) && (isnothing(Nh) || isone(Nh))
     Nh1 = isnothing(Nh) ? size(array, 1) ÷ Ni : Nh
@@ -539,7 +619,7 @@ nelems(data::IH1JH2{<:Any, Ni, Nj}) where {Ni, Nj} = length(data) ÷ (Ni * Nj)
 @propagate_inbounds function slab_view(data::IH1JH2{<:Any, Ni, Nj}, _, h) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (1:Ni), Nj * (h2 - 1) .+ (1:Nj))
-    return rebuild(data, array; Nh = 1)
+    return @inbounds rebuild(data, array; Nh = 1)
 end
 @propagate_inbounds function column_view(
     data::IH1JH2{<:Any, Ni, Nj},
@@ -549,7 +629,7 @@ end
 ) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
-    return rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return @inbounds rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
 end
 
 include("broadcast.jl")
@@ -565,10 +645,10 @@ include("registers.jl")
 # missing exemption only shows up several call layers away.
 @drop_recursion_limits @__MODULE__
 
-# The loop entry points only: the loop bodies and operator internals keep
-# constant propagation, since turning it off there shifts kernel codegen
-# enough to flip cases near the sm_60 register brink.
-@drop_constprop foreach_pool_slice, unfused_slice_loop,
+# The loop entry points only: the loop bodies keep constant propagation, since
+# turning it off there shifts kernel codegen enough to flip cases near the
+# sm_60 register brink.
+@drop_constprop _foreach_slice, unfused_slice_loop,
 foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
 Base.fill!, Base.copyto!
 

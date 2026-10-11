@@ -15,10 +15,9 @@ entries; the parametric constructor takes `key => entry` pairs. `T` is either
     operation as a `FieldMatrix` (e.g. when both appear in the same broadcast
     expression, or when both are passed to a [`FieldMatrixSolver`](@ref)).
 
-A `FieldNameDict` is "lazy" when its entries include `AbstractBroadcasted`
-objects that become `Field`s on materialization. Internal operations produce
-lazy `FieldNameDict`s so that a chain of operations materializes once, in a
-single call to `materialize!`.
+A `FieldNameDict` is "lazy" when its entries include `LazyField`s that become
+`Field`s on materialization. Internal operations produce lazy `FieldNameDict`s
+so a chain of operations materializes once, in a single call to `materialize!`.
 
 `dict[key]` returns the entry at `key`, including entries nested inside a
 stored entry (e.g. a component of a vector-valued entry); `dict[set]` returns a
@@ -101,9 +100,9 @@ check_entry(::Type{FieldNamePair}, ::ColumnwiseBandMatrixField) = true
 
 is_field_broadcasted(bc) =
     Base.Broadcast.BroadcastStyle(typeof(bc)) isa Fields.AbstractFieldStyle
-check_entry(::Type{FieldName}, entry::Base.AbstractBroadcasted) =
+check_entry(::Type{FieldName}, entry::Fields.LazyField) =
     is_field_broadcasted(entry)
-check_entry(::Type{FieldNamePair}, entry::Base.AbstractBroadcasted) =
+check_entry(::Type{FieldNamePair}, entry::Fields.LazyField) =
     is_field_broadcasted(entry) && eltype(entry) <: BandMatrixRow
 
 is_diagonal_matrix_entry(::ScalingFieldMatrixEntry) = true
@@ -662,11 +661,10 @@ end
 """
     is_lazy(dict)
 
-Return whether the `FieldNameDict` `dict` has any `AbstractBroadcasted`
-entries, i.e. entries that have not been materialized.
+Return whether the `FieldNameDict` `dict` has any `LazyField` entries, i.e.
+entries that have not been materialized.
 """
-is_lazy(dict) =
-    unrolled_any(Base.Fix2(isa, Base.AbstractBroadcasted), values(dict))
+is_lazy(dict) = unrolled_any(Base.Fix2(isa, Fields.LazyField), values(dict))
 
 """
     lazy_main_diagonal(matrix)
@@ -1087,10 +1085,9 @@ function summary_string(field::Fields.Field, indent_level)
         string(typeof(axes(field).staggering).name.name) : "Single Level"
     return "$("    "^indent_level)Field{$(eltype(field)), $staggering_string}"
 end
-function summary_string(bc::Base.AbstractBroadcasted, indent_level)
-    func = bc isa Operators.OperatorBroadcasted ? bc.op : bc.f
+function summary_string(bc::Fields.LazyField, indent_level)
     arg_strings = map(arg -> summary_string(arg, indent_level + 1), bc.args)
     tab = "    "^indent_level
-    return "$(tab)Broadcasted{$func}(\n$(join(arg_strings, ",\n")),\n$tab)"
+    return "$(tab)Broadcasted{$bc.f}(\n$(join(arg_strings, ",\n")),\n$tab)"
 end
 =#

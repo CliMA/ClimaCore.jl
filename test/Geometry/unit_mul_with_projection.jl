@@ -4,34 +4,46 @@ import Random
 using StaticArrays: @SMatrix
 
 import ClimaCore.Geometry
-import ClimaCore.Geometry: mul_with_projection, mul_return_type
-import ClimaCore.Utilities: add_auto_broadcasters
+import ClimaCore.Utilities: add_auto_broadcasters, return_type
 
 nested_type(value) = nested_type(value, value, value)
 nested_type(value1, value2, value3) =
     (; a = (), b = value1, c = (value2, (; d = (value3,)), (;)))
 
+# The product of x and y with y projected for it, as in the rows of band matrix
+# products, using either all of the local geometry or only the metric that the
+# projection reads from it (as in MatrixFields.projected_operand).
+function mul_with_projection(x, y, lg)
+    axes = Geometry._dual_axes_for_projection(typeof(x))
+    return x * Geometry.project_for_mul(axes, y, lg)
+end
+function mul_with_projection_metric(x, y, lg)
+    axes = Geometry._dual_axes_for_projection(typeof(x))
+    metric = Geometry.projection_metric(axes, typeof(y), lg)
+    return x * Geometry.project_for_mul(axes, y, metric)
+end
+
 function test_mul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
-    result = mul_with_projection(x, y, lg)
-    result_type = mul_return_type(X, Y)
+    for f in (mul_with_projection, mul_with_projection_metric)
+        result = f(x, y, lg)
+        result_type = return_type(f, Tuple{X, Y, typeof(lg)})
 
-    # Compute the maximum error as an integer multiple of machine epsilon.
-    FT = Geometry.undertype(typeof(lg))
-    object2tuple(obj) =
-        reinterpret(NTuple{sizeof(obj) ÷ sizeof(FT), FT}, [obj])[1]
-    max_error = maximum(
-        ((value, expected_value),) ->
-            Int(abs(value - expected_value) / eps(expected_value)),
-        zip(object2tuple(result), object2tuple(expected_result)),
-    )
+        # Compute the maximum error as an integer multiple of machine epsilon.
+        FT = Geometry.undertype(typeof(lg))
+        object2tuple(obj) =
+            reinterpret(NTuple{sizeof(obj) ÷ sizeof(FT), FT}, [obj])[1]
+        max_error = maximum(
+            ((value, expected_value),) ->
+                Int(abs(value - expected_value) / eps(expected_value)),
+            zip(object2tuple(result), object2tuple(expected_result)),
+        )
 
-    @test max_error <= 1                                   # correctness
-    @test (@allocated mul_with_projection(x, y, lg)) == 0  # allocations
-    @test_opt mul_with_projection(x, y, lg)                # type instabilities
+        @test max_error <= 1                     # correctness
+        @test (@allocated f(x, y, lg)) == 0      # allocations
+        @test_opt f(x, y, lg)                    # type instabilities
 
-    @test result_type == typeof(result)                    # correctness
-    @test (@allocated mul_return_type(X, Y)) == 0          # allocations
-    @test_opt mul_return_type(X, Y)                        # type instabilities
+        @test result_type == typeof(result)      # inferred type
+    end
 end
 
 @testset "mul_with_projection Unit Tests" begin
@@ -146,7 +158,7 @@ end
     )
 end
 
-@testset "mul_return_type promotes the storage type with the element type" begin
+@testset "Products with Dual numbers promote the storage type" begin
     import ForwardDiff
     for FT in (Float32, Float64)
         D = ForwardDiff.Dual{Nothing, FT, 2}
@@ -162,15 +174,13 @@ end
         for x in tensors
             X = typeof(x)
             # A `Dual` scalar times a `Float` tensor is a `Dual` tensor whose storage is
-            # `Dual` as well: the return type has to be the type `*` actually produces.
-            @test mul_return_type(D, X) == typeof(d * x)
-            @test mul_return_type(X, D) == typeof(x * d)
+            # `Dual` as well, and the inferred type is the type `*` actually produces.
+            @test return_type(*, Tuple{D, X}) == typeof(d * x)
+            @test return_type(*, Tuple{X, D}) == typeof(x * d)
             @test eltype(parent(d * x)) == D
             # No promotion, no change: the existing result types are untouched.
-            @test mul_return_type(FT, X) == X
-            @test mul_return_type(X, FT) == X
-            @test (@allocated mul_return_type(D, X)) == 0
-            @test_opt mul_return_type(D, X)
+            @test return_type(*, Tuple{FT, X}) == X
+            @test return_type(*, Tuple{X, FT}) == X
         end
     end
 end

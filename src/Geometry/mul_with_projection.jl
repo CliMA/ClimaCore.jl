@@ -1,42 +1,47 @@
-import LinearAlgebra: Adjoint
 import ..Utilities: fieldtype_vals
 
 const SingleValue = Union{Number, AbstractTensor}
 
 """
-    mul_with_projection(x, y, lg)
+    project_for_mul(axes, y, lg)
 
-Compute `x * y`, projecting `y` first so that `Tensor` operands do not raise
-`DimensionMismatch` errors. For example, if `x` is a covector along the `Covariant3Axis`
-(e.g., `Covariant3Vector(1)'`), then `y` is projected onto the `Contravariant3Axis`. In
-general, the first axis of `y` is projected onto the dual of the last axis of `x`, using
-the local geometry `lg`. When `x` is not a `Tensor{2}`, this is `x * y`.
+Project `y` so that multiplying it by a value of type `X` does not raise a
+`DimensionMismatch` error, where `axes` is `_dual_axes_for_projection(X)`. For example,
+if `X` is a covector along the `Covariant3Axis` (e.g., the type of
+`Covariant3Vector(1)'`), then `y` is projected onto the `Contravariant3Axis`. In general,
+the first axis of every tensor in `y` is projected onto the dual of the last axis of the
+corresponding component of `X`, using `lg`, which is a `LocalGeometry` or the part of one
+returned by [`projection_metric`](@ref). Values that are not tensors are left unchanged,
+as is all of `y` when `axes` is `nothing`.
 """
-mul_with_projection(x, y, _) = x * y
-mul_with_projection(x::Tensor{2}, y::AbstractTensor, lg) =
-    x * project(dual(axes(x, 2)), y, lg)
+@inline project_for_mul(::Nothing, y, _) = y
+@inline project_for_mul(::Components, y, _) = y
+@inline project_for_mul(axis::Components, y::AbstractTensor, lg) = project(axis, y, lg)
 
-# Construct a Tensor type from element type and bases tuple type
-tensor_type(::Type{T}, ::Type{Tuple{B1}}) where {T, B1 <: Components} =
-    Tensor{1, T, Tuple{B1}, SVector{length(B1.instance), T}}
-function tensor_type(
-    ::Type{T},
-    ::Type{Tuple{B1, B2}},
-) where {T, B1 <: Components, B2 <: Components}
-    N1 = length(B1.instance)
-    N2 = length(B2.instance)
-    return Tensor{2, T, Tuple{B1, B2}, SMatrix{N1, N2, T, N1 * N2}}
-end
-# Covector storage uses Adjoint{T, SVector} rather than SMatrix{1, N}
-function tensor_type(
-    ::Type{T}, ::Type{Tuple{ScalarComponents, B2}},
-) where {T, B2 <: Components}
-    N2 = length(B2.instance)
-    return Tensor{2, T, Tuple{ScalarComponents, B2}, Adjoint{T, SVector{N2, T}}}
+"""
+    projection_metric(axes, Y, lg)
+
+Return the part of `lg` (a `LocalGeometry`, or a `Field` of them) that
+[`project_for_mul`](@ref)`(axes, y, lg)` reads for values `y` of type `Y`. This is the
+metric that every projected tensor in `y` needs (see `metric_for_components_type`), or
+`nothing` when none of them needs a metric, or all of `lg` when they need different
+metrics.
+"""
+@inline function projection_metric(axes, ::Type{Y}, lg) where {Y}
+    metric = projected_metric(axes, Val(Y), lg)
+    return isnothing(metric) ? nothing : something(metric)
 end
 
-basis1(::Type{<:AbstractTensor{2, <:Any, <:Tuple{B, Any}}}) where {B} = B
-basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
+# The metric that project_for_mul reads for every tensor in a value of type Y,
+# wrapped in a Some, or nothing when no tensor is projected. Metrics are only
+# compared by their types, which differ for the different fields of lg.
+@inline projected_metric(::Nothing, _, _) = nothing
+@inline projected_metric(::Components, _, _) = nothing
+@inline projected_metric(axis::Components, ::Val{Y}, lg) where {Y <: AbstractTensor} =
+    Some(metric_for_components_type(components_type(axis), Y, lg))
+@inline combine_projected_metrics(metric1, metric2, lg) =
+    isnothing(metric1) ? metric2 :
+    isnothing(metric2) || typeof(metric1) == typeof(metric2) ? metric1 : Some(lg)
 
 """
     _dual_axes_for_projection(X)
@@ -44,13 +49,13 @@ basis2(::Type{<:AbstractTensor{2, <:Any, <:Tuple{Any, B}}}) where {B} = B
 Return the axes that the second operand of a multiplication must be projected onto for
 entries of type `X` in the first operand, or `nothing` if no projection is
 needed. For entries with multiple components that do not all share one axis, the
-result is a `Tuple` of axes that pairs componentwise with the entry, with
-`nothing` for the components that need no projection.
+result is a `Tuple` (or a `NamedTuple`, for `NamedTuple` entries) of axes that pairs
+componentwise with the entry, with `nothing` for the components that need no
+projection. See [`project_for_mul`](@ref) for the projection itself.
 
-The result must reduce to a compile-time constant: the eager finite difference
-GPU kernel branches on `isnothing` of it (see `project_row2_for_mul` in
-`ext/cuda/operators_fd_eager.jl`), and a runtime branch there makes the whole
-projection dynamically dispatched, which fails to compile. The recursion stays
+The result must reduce to a compile-time constant, since it is a type parameter of the
+broadcast expression that projects the second operand of a band matrix product (see
+`MatrixFields.projected_operand`). The recursion stays
 foldable because components are traversed as `Val`s of their field types
 (`fieldtype_vals`), which inference specializes unconditionally instead of
 hitting its recursion limiter; new methods for new entry types (see
@@ -63,9 +68,9 @@ information.
     dual(tensor_axes(X)[2])
 # Entries with multiple components (Tuples or NamedTuples, and AutoBroadcasters
 # of them; see auto_broadcaster_methods.jl) pair componentwise in a
-# multiplication, like the AutoBroadcaster methods of `mul_with_projection`, so
-# the dual axes form a matching Tuple, with `nothing` for components that need
-# no projection. When no component needs projection, the result is `nothing`.
+# multiplication, so the dual axes form a matching Tuple or NamedTuple, with
+# `nothing` for components that need no projection. When no component needs
+# projection, the result is `nothing`.
 @inline function _dual_axes_for_projection(
     ::Type{X},
 ) where {X <: Union{Tuple, NamedTuple}}
@@ -73,90 +78,15 @@ information.
     unrolled_all(isnothing, axes) && return nothing
     # When every component projects onto the same axis, collapse the Tuple into
     # that single axis. Projecting every tensor leaf onto it is equivalent to
-    # pairing componentwise, and unlike the Tuple it also handles a second
-    # operand that is not itself multi-component (e.g. a NamedTuple of covectors
-    # multiplying a single vector, as in `(ᶜρχ, ᶠu₃)` blocks).
+    # pairing componentwise, and it also handles a second operand that is not
+    # itself multi-component without copying it for every component (e.g. a
+    # NamedTuple of covectors multiplying a single vector, as in `(ᶜρχ, ᶠu₃)`
+    # blocks).
     unrolled_allequal(axes) && return first(axes)
-    return axes
+    return X <: NamedTuple ? NamedTuple{fieldnames(X)}(axes) : axes
 end
 @inline function _dual_axes_for_projection(::Type{X}) where {X}
     Y = eltype(X)
     Y === X && return nothing
     return _dual_axes_for_projection(Y)
 end
-
-
-"""
-    mul_return_type(X, Y)
-
-Return the type of `mul_with_projection(x, y, lg)` for `x::X` and `y::Y`. Equivalent to
-`Base._return_type(mul_with_projection, Tuple{X, Y, LG})`, but explicit so that the
-`eltype` inference in `MatrixFields` always sees a concrete type; the internal
-`_return_type` can widen to `Union` or `Any` and is unstable across Julia versions.
-
-The methods cover six result shapes (scalar×scalar, scalar×tensor, covector×vector,
-vector×covector, 2-tensor×vector, 2-tensor×2-tensor) in which the output `ndims` goes
-up, down, or stays the same; no single formula fits all of them. The fallback method
-throws an error for unsupported type pairs.
-
-Future cleanup: try replacing with `Base._return_type` and keep only methods
-that fail; collapse the two `Tensor{2}*Tensor{N}` cases via
-`Base.tail(axes(Y))`; move `tensor_type`/`basis1`/`basis2` to `tensors.jl`.
-"""
-mul_return_type(::Type{X}, ::Type{Y}) where {X, Y} = error(
-    "Unable to infer return type: Multiplying an object of type $X with an \
-     object of type $Y will result in a method error",
-)
-# Note: If the behavior of * changes for any relevant types, the corresponding
-# methods below should be updated.
-
-# Methods from Base:
-mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
-    promote_type(X, Y)
-
-# Number * Tensor = Tensor (same bases, promoted element type)
-# The storage type is promoted along with the element type: `*` builds the result
-# from `components * a`, so a `Float64` tensor times a `Dual` has `Dual` storage.
-promote_storage_type(::Type{C}, ::Type{T}) where {C <: StaticArray, T} =
-    similar_type(C, T)
-promote_storage_type(
-    ::Type{<:Adjoint{<:Any, S}}, ::Type{T},
-) where {S <: StaticArray, T} = Adjoint{T, similar_type(S, T)}
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T, B, C, X <: Number, Y <: Tensor{<:Any, T, B, C}} = Tensor{
-    ndims(Y), promote_type(X, T), B, promote_storage_type(C, promote_type(X, T)),
-}
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T, B, C, X <: Tensor{<:Any, T, B, C}, Y <: Number} = Tensor{
-    ndims(X), promote_type(T, Y), B, promote_storage_type(C, promote_type(T, Y)),
-}
-
-# Covector * Vector = scalar (dot product)
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: Covector{T1}, Y <: Tensor{1, T2}} =
-    promote_type(T1, T2)
-
-# Vector * Covector = 2-tensor (outer product)
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {
-    T1, T2, B1, B2,
-    X <: Tensor{1, T1, Tuple{B1}},
-    Y <: Covector{T2, <:Tuple{<:Any, B2}},
-} =
-    tensor_type(promote_type(T1, T2), Tuple{B1, B2})
-
-# 2-Tensor * Vector = Vector
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: Tensor{2, T1}, Y <: Tensor{1, T2}} =
-    tensor_type(promote_type(T1, T2), Tuple{basis1(X)})
-
-# 2-Tensor * 2-Tensor = 2-Tensor
-mul_return_type(
-    ::Type{X}, ::Type{Y},
-) where {T1, T2, X <: Tensor{2, T1}, Y <: Tensor{2, T2}} =
-    tensor_type(promote_type(T1, T2), Tuple{basis1(X), basis2(Y)})

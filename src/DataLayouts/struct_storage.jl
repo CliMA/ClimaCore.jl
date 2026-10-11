@@ -137,14 +137,15 @@ end
     isnothing(F) ? single_component_struct_indices(index, Val(Nf)) :
     struct_indices(array, Val(Nf), index, prod(size(array)[1:(F - 1)]))
 
-@inline struct_index(i, array, index::Integer, stride::Integer) = index + (i - 1) * stride
+@inline struct_index(i, array, index::Integer, stride::Integer) =
+    index + (i - 1) % typeof(index) * stride
 
 # A StridedRange instead of range(index; step, length), a StepRange whose
 # length Base obtains by division once per view built from it (see the note on
 # StridedRange); the stride is not a compile-time constant when a slab is
 # spread over several threads, and a point view is taken once per point.
 @inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
-    (StridedRange(index, stride, Nf),)
+    (StridedRange{Int}(index, stride, index + (Nf - 1) * stride),)
 
 """
     set_struct!(array, value, [index, Val(F)])

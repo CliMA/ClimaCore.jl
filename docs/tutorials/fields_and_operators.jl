@@ -240,6 +240,38 @@ lines!(
 axislegend(ax)
 fig
 
+# ### 7.1 Columns of an extruded space
+#
+# Extruding the square along the column gives a three-dimensional space, with a
+# column of cells above every spectral-element node. Finite-difference operators
+# act on each column separately, so a broadcast over an extruded space is
+# evaluated one column at a time: the Laplacian below is computed in a single
+# pass over each column, which evaluates the gradient wherever the divergence
+# reads it instead of storing it for the whole column.
+
+extruded_space =
+    Spaces.ExtrudedFiniteDifferenceSpace(rectangle_space, column_center_space)
+extruded_sinz = sin.(Fields.coordinate_field(extruded_space).z)
+extruded_∇∇sinz = @. divf2c(gradc2f(extruded_sinz))
+
+# The same loop over columns is available for code that works on whole columns:
+# `DataLayouts.foreach_column(f, fields...)` calls `f` with the same column of
+# every field, and each column is itself a field on a column space, which
+# supports broadcasts, finite-difference operators, and reductions. Here, a
+# field with one value per column (the bottom level of a new field) records the
+# largest error of the Laplacian in each column.
+
+import ClimaCore.DataLayouts
+max_errors = Fields.level(similar(extruded_sinz), 1)
+DataLayouts.foreach_column(
+    max_errors,
+    extruded_∇∇sinz,
+    extruded_sinz,
+) do max_error, ∇∇sinz_column, sinz_column
+    max_error[] = maximum(abs, ∇∇sinz_column .+ sinz_column)
+end
+maximum(max_errors)
+
 # The next tutorials use these pieces to solve equations in time:
 # [Solve a column PDE](column_heat.md) and
 # [Shallow water on a plane](shallow_water_plane.md).

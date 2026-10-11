@@ -25,9 +25,18 @@ Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.AbstractArrayStyle{0}) = 
 Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = style
 Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
-# Enable automatic nested broadcasting over supported types of iterators.
-@inline Broadcast.broadcastable(data::DataLayout) =
-    reinterpret(add_auto_broadcasters(eltype(data)), data)
+# Enable automatic nested broadcasting over supported types of iterators. The
+# wrappers do not change the number of entries per value, so the reinterpreted
+# layout has the canonical parent size by construction. Its parent check is kept
+# for CPU arrays, since it tells the compiler the layout's static extents, which
+# point loops need in order to vectorize (CPU pointwise broadcasts were 33%
+# slower without it), and skipped for other arrays, since GPU kernels reach it
+# whenever they slice a nested broadcast.
+@inline function Broadcast.broadcastable(data::DataLayout)
+    T = add_auto_broadcasters(eltype(data))
+    return parent(data) isa CPUArray ? reinterpret(T, data) :
+           @inbounds reinterpret(T, data)
+end
 @inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 

@@ -288,6 +288,26 @@ Base.@propagate_inbounds slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
 Base.@propagate_inbounds column(space::ExtrudedFiniteDifferenceSpace, indices...) =
     FiniteDifferenceSpace(column(grid(space), indices...), space.staggering)
 
+# Slices of a space at indices that are known to be valid (the indices of a slice
+# loop over the space), without the checks of column(space, indices...) and
+# slab(space, v, h) (see DataLayouts.slice_arg).
+@inline unchecked_column(space, indices...) = @inbounds column(space, indices...)
+@inline unchecked_column(space::ExtrudedFiniteDifferenceSpace, indices...) =
+    FiniteDifferenceSpace(Grids.unchecked_column(grid(space), indices...), space.staggering)
+@inline DataLayouts.slice_arg(::typeof(column), space::AbstractSpace, indices...) =
+    unchecked_column(space, indices...)
+@inline DataLayouts.slice_arg(::typeof(slab), space::ExtrudedFiniteDifferenceSpace, v, h) =
+    SpectralElementSpaceSlab(
+        ClimaComms.context(space),
+        quadrature_style(space),
+        DataLayouts.slice_arg(
+            slab,
+            local_geometry_data(space),
+            integer_level_index(space, v),
+            h,
+        ),
+    )
+
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
     size(local_geometry_data(space), 1)
 

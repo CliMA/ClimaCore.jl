@@ -210,11 +210,7 @@ end
 
         ifelse_broadcast_allocating(a, b, c)
         p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
-        if VERSION ≥ v"1.11.0-beta"
-            TU.@test_allocations p_allocated == 0
-        else
-            @test_broken p_allocated == 0
-        end
+        TU.@test_allocations p_allocated == 0
 
         ifelse_broadcast_or(a, b, c)
         p_allocated = @allocated ifelse_broadcast_or(a, b, c)
