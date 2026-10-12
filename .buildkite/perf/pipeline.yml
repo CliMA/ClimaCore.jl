@@ -59,6 +59,31 @@ steps:
       slurm_ntasks: 1
       slurm_mem: 16GB
 
+  - label: "TEMP: profile flagship AMIP steps (PR vs main)"
+    key: "gpu_amip_profile"
+    # After the AMIP job, so that the two do not share the node's CPUs.
+    depends_on: "gpu_amip_progedmf_1M_land_he16"
+    allow_dependency_failure: true
+    soft_fail: true
+    command:
+      - echo "--- Profile with PR ClimaCore"
+      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP/ .buildkite/perf/profile_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_profile_pr"
+      - echo "--- Set up main ClimaCore (before the merge of this PR)"
+      # Replace the sources that the AMIP environment loads, so that it runs main's ClimaCore.
+      # 061753f02 is main before the merge of this PR.
+      - git fetch origin 061753f022e99eb26551dc4548eb5b6bfda37d65 && git checkout 061753f022e99eb26551dc4548eb5b6bfda37d65 -- src ext
+      - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.precompile()'
+      - echo "--- Profile with main ClimaCore"
+      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP/ .buildkite/perf/profile_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_profile_main"
+    env:
+      CLIMACOMMS_DEVICE: "CUDA"
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+    agents:
+      slurm_gpus_per_task: 1
+      slurm_cpus_per_task: 8
+      slurm_ntasks: 1
+      slurm_mem: 32GB
+
   - label: "init land :GPU:"
     key: "init_gpu_land_env"
     command:
