@@ -301,11 +301,11 @@ end
 Base.parent(x::Tensor) = x.components
 Base.axes(x::Tensor) = x.bases
 
-@inline _unwrap(t::UnionAll) = _unwrap(t.body)
-@inline _unwrap(t::DataType) = t
-
-@inline tensor_axes(::Type{T}) where {T <: Tensor} =
-    _unwrap(T).parameters[3].instance
+# The axes parameter is matched by the type system, which also works for a
+# `UnionAll` such as `UVVector` with free eltype and storage parameters (and
+# is inferable, unlike walking the parameters of the unwrapped type).
+@inline tensor_axes(::Type{<:(Tensor{N, T, A} where {N, T})}) where {A} =
+    A.instance
 
 Base.zero(x::Tensor) = zero(typeof(x))
 Base.one(x::Tensor) = one(typeof(x))
