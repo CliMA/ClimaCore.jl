@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.4
+-------
+
 - ![][badge-✨feature/enhancement] New `Limiters.PositivityLimiter`, the
   mean-preserving Zhang-Shu positivity limiter for DG states, applied with
   `apply_limiter!`. In each element it scales fields toward their means to
