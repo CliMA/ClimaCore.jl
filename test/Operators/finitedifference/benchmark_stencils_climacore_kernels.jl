@@ -67,20 +67,20 @@ function op_CurlC2F!(c, f, bcs = (;))
     @. f.curluₕ = curl(c.uₕ)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_CurlC2F!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_CurlC2F!)}) = 5 # 2 writes + 3 reads (1 metric term)
 #### Mixed/adaptive
 function op_UpwindBiasedProductC2F!(c, f, bcs = (;))
     upwind = Operators.UpwindBiasedProductC2F(bcs)
     @. f.contra3 = upwind(f.w, c.x)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_UpwindBiasedProductC2F!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_UpwindBiasedProductC2F!)}) = 4 # 1 write + 3 reads (1 metric term)
 function op_Upwind3rdOrderBiasedProductC2F!(c, f, bcs = (;))
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs)
     @. f.contra3 = upwind(f.w, c.x)
     return nothing
 end
-n_reads_writes(::Type{typeof(op_Upwind3rdOrderBiasedProductC2F!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_Upwind3rdOrderBiasedProductC2F!)}) = 4 # 1 write + 3 reads (1 metric term)
 #### Simple composed (non-exhaustive due to combinatorial explosion)
 function op_divgrad_CC!(c, f, bcs)
     grad = Operators.GradientC2F(bcs.inner)
@@ -102,28 +102,144 @@ function op_div_interp_CC!(c, f, bcs)
     @. c.y = div(interp(c.contra3))
     return nothing
 end
-n_reads_writes(::Type{typeof(op_div_interp_CC!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_div_interp_CC!)}) = 3 # 1 write, 2 reads (1 metric term)
 function op_div_interp_FF!(c, f, bcs)
     interp = Operators.InterpolateF2C(bcs.inner)
     div = Operators.DivergenceC2F(bcs.outer)
     @. f.y = div(interp(f.contra3))
     return nothing
 end
-n_reads_writes(::Type{typeof(op_div_interp_FF!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_div_interp_FF!)}) = 3 # 1 write, 2 reads (1 metric term)
 function op_divgrad_uₕ!(c, f, bcs)
     grad = Operators.GradientC2F(bcs.inner)
     div = Operators.DivergenceF2C(bcs.outer)
     @. c.uₕ2 = div(f.y * grad(c.uₕ))
     return nothing
 end
-n_reads_writes(::Type{typeof(op_divgrad_uₕ!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_divgrad_uₕ!)}) = 6 # 2 writes, 4 reads (1 metric term)
 function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs.inner)
     divf2c = Operators.DivergenceF2C(bcs.outer)
     @. c.y = divf2c(upwind(f.w, c.x))
     return nothing
 end
-n_reads_writes(::Type{typeof(op_divUpwind3rdOrderBiasedProductC2F!)}) = -1 # todo
+n_reads_writes(::Type{typeof(op_divUpwind3rdOrderBiasedProductC2F!)}) = 4 # 1 write, 3 reads (1 metric term)
+
+#### Nested and fused expressions (boundary conditions fixed inside each op)
+function op_nest_interp_4!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y = ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(c.x))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_interp_4!)}) = 2 # 1 write + 1 read (0 metric terms)
+function op_nest_interp_8!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y = ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(ᶜinterp(ᶠinterp(c.x))))))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_interp_8!)}) = 2 # 1 write + 1 read (0 metric terms)
+costly(x) = exp(sin(x))
+function op_nest_costly_8!(c, f, bcs)
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜinterp = Operators.InterpolateF2C()
+    #! format: off
+    @. c.y = ᶜinterp(costly(ᶠinterp(costly(ᶜinterp(costly(ᶠinterp(costly(
+        ᶜinterp(costly(ᶠinterp(costly(ᶜinterp(costly(ᶠinterp(costly(c.x))))))))))))))))
+    #! format: on
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_nest_costly_8!)}) = 2 # 1 write + 1 read (0 metric terms)
+function op_biharmonic!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    @. c.y = ᶜdiv(ᶠgrad(ᶜdiv(ᶠgrad(c.x))))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_biharmonic!)}) = 3 # 1 write + 2 reads (1 metric term)
+function op_wide_sum_8!(c, f, bcs)
+    ᶜinterp = Operators.InterpolateF2C()
+    @. c.y =
+        ᶜinterp(f.x) + ᶜinterp(f.y) + ᶜinterp(f.D) + ᶜinterp(f.U) +
+        ᶜinterp(f.s1) + ᶜinterp(f.s2) + ᶜinterp(f.s3) + ᶜinterp(f.s4)
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_wide_sum_8!)}) = 9 # 1 write + 8 reads (0 metric terms)
+# Based on ClimaAtmos's vertical diffusive flux divergence:
+# https://github.com/CliMA/ClimaAtmos.jl/blob/a7a377e5215c901d5a325a495ec5d52d30c0b404/src/prognostic_equations/eddy_diffusion_closures.jl#L800
+function op_diffusion_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    @. c.y = ᶜdiv(ᶠinterp(c.s1) * ᶠgrad(c.x))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_diffusion_like!)}) = 4 # 1 write + 3 reads (1 metric term)
+# Based on ClimaAtmos's centered vertical transport:
+# https://github.com/CliMA/ClimaAtmos.jl/blob/a7a377e5215c901d5a325a495ec5d52d30c0b404/src/prognostic_equations/implicit/implicit_tendency.jl#L127-L131
+function op_advection_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    CT3 = Geometry.Contravariant3Vector
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜdiv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(CT3(FT(0))),
+        top = Operators.SetValue(CT3(FT(0))),
+    )
+    @. c.y = -(ᶜdiv(ᶠinterp(c.D) * f.ᶠu³ * ᶠinterp(c.U)))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_advection_like!)}) = 5 # 1 write + 4 reads (1 metric term)
+# Combines ClimaAtmos's centered and third-order upwind vertical transport
+# with its vertical diffusive flux divergence. There is no physical meaning to this operator;
+# https://github.com/CliMA/ClimaAtmos.jl/blob/a7a377e5215c901d5a325a495ec5d52d30c0b404/src/prognostic_equations/implicit/implicit_tendency.jl#L127-L131
+# https://github.com/CliMA/ClimaAtmos.jl/blob/a7a377e5215c901d5a325a495ec5d52d30c0b404/src/prognostic_equations/implicit/implicit_tendency.jl#L144-L148
+# https://github.com/CliMA/ClimaAtmos.jl/blob/a7a377e5215c901d5a325a495ec5d52d30c0b404/src/prognostic_equations/eddy_diffusion_closures.jl#L800
+function op_atmos_like!(c, f, bcs)
+    FT = Spaces.undertype(axes(c))
+    CT3 = Geometry.Contravariant3Vector
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠgrad = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
+        top = Operators.SetGradient(Geometry.WVector(FT(0))),
+    )
+    ᶜdiv = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(CT3(FT(0))),
+        top = Operators.SetValue(CT3(FT(0))),
+    )
+    ᶠupwind3 = Operators.Upwind3rdOrderBiasedProductC2F()
+    @. c.y =
+        -(ᶜdiv(ᶠinterp(c.D) * f.ᶠu³ * ᶠinterp(c.U))) - ᶜdiv(ᶠupwind3(f.w, c.x)) +
+        ᶜdiv(ᶠinterp(c.s1) * ᶠgrad(c.s2))
+    return nothing
+end
+n_reads_writes(::Type{typeof(op_atmos_like!)}) = 9 # 1 write + 8 reads (1 metric term)
 
 function op_broadcast_example0!(c, f, bcs)
     Fields.bycolumn(axes(f.ᶠu³)) do colidx
