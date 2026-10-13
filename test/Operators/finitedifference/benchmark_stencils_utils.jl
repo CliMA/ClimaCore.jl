@@ -194,11 +194,12 @@ function short_name(key)
     )
     replace(string(key), to_short...)
 end
-function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile::Bool)
+function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile::Bool, baselines = nothing)
     device = ClimaComms.device(c)
     all_bcs = bcs_tested(c, fun)
     for (ibc,bcs) in enumerate(bcs_tested(c, fun))
         key = (fun, bc_name(bcs)...)
+        baseline_time_s = isnothing(baselines) ? nothing : get(baselines, key, nothing)
         if compile
             fun(c, f, bcs)
         else
@@ -211,7 +212,8 @@ function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile:
                 nreps=1,
                 caller=short_name(key),
                 n_reads_writes=n_reads_writes(typeof(fun)),
-                problem_size=size(cf)
+                problem_size=size(cf),
+                baseline_time_s,
             )
         end
         if haskey(trials, key)
@@ -306,10 +308,11 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "column"; compile)
+    baselines = baseline_lookup(reference_times_column(device))
+    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "column"; compile, baselines)
 
-    # Results are reported without assertions because the measurements are not yet
-    # stable enough for maintainable baselines.
+    # The regression checks live in `test_results_column`; the table shows
+    # the percent change from the reference timings when they exist.
     tabulate_benchmark(bm)
     return (; bm, trials, t_min)
 end
@@ -325,15 +328,16 @@ function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = fals
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "sphere"; compile)
+    baselines = baseline_lookup(reference_times_sphere(device; VIJH, float_type = FT))
+    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "sphere"; compile, baselines)
 
-    # Tests are removed since they're flaky. And maintaining
-    # them before they're converged is a bit of work..
+    # The regression checks live in `test_results_sphere`; the table shows
+    # the percent change from the reference timings when they exist.
     tabulate_benchmark(bm)
     return (; trials, t_min)
 end
 
-function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compile::Bool)
+function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compile::Bool, baselines = nothing)
     ops = [
         #### Core discrete operators
         op_GradientF2C!,
@@ -378,7 +382,7 @@ function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compi
         if uses_bycolumn(op) && axes(cfield) isa Spaces.FiniteDifferenceSpace
             continue
         end
-        benchmark_func!(bm, t_min, trials, op, cfield, ffield, #= verbose = =# false; compile)
+        benchmark_func!(bm, t_min, trials, op, cfield, ffield, #= verbose = =# false; compile, baselines)
     end
 
     return nothing
@@ -387,13 +391,43 @@ end
 const GPU_BUFFER_COLUMN = 1.3
 const GPU_BUFFER_SPHERE = 1.25
 
+# Reference timings are keyed by GPU model; CI pins the hardware with a `gres`
+# entry in .buildkite/pipeline.yml. Returns `nothing` for GPUs without
+# reference timings.
+function gpu_model(device_name)
+    occursin("P100", device_name) && return :P100
+    occursin("A100", device_name) && return :A100
+    return nothing
+end
+
+# Reference tables map a benchmark key to the measured minimum time (ns) on
+# the reference hardware. Returns a `Dict` of key => time in seconds for the
+# "% vs baseline" column of `tabulate_benchmark`, or `nothing`.
+baseline_lookup(::Nothing) = nothing
+baseline_lookup(results) = Dict(key => ref_time * 1e-9 for (key, ref_time) in results)
+
+# Select the `dev` column (e.g. `:P100`, `:A100`, `:CPU`) out of a reference
+# table of `[key, (; P100, A100, CPU)]` rows with times in μs. Rows without a
+# time for `dev` are skipped. Returns `[key, time_ns]` pairs, or `nothing` if
+# there are none.
+function select_device(table, dev)
+    isnothing(dev) && return nothing
+    μs = 10^3
+    results = [[key, getproperty(times, dev) * μs] for (key, times) in table if haskey(times, dev)]
+    return isempty(results) ? nothing : results
+end
+
 # Regressions fail the test on GPU (where CI pins the hardware) and only warn
-# on CPU.
-function check_regressions(t_min, results, device)
+# on CPU. `buffer` is the tolerance factor applied to the reference times.
+function check_regressions(t_min, results, device, buffer)
+    if isnothing(results)
+        @warn "No reference timings for $device_name; skipping regression checks."
+        return nothing
+    end
     for (params, ref_time) in results
-        passed = t_min[params] ≤ ref_time
+        passed = t_min[params] ≤ ref_time * buffer
         if !passed
-            @warn "Possible regression: $params, time=$(t_min[params]), ref_time=$ref_time"
+            @warn "Possible regression: $params, time=$(t_min[params]), ref_time=$ref_time, buffer=$buffer"
         end
         if device isa ClimaComms.CUDADevice
             @test passed
@@ -401,81 +435,67 @@ function check_regressions(t_min, results, device)
     end
 end
 
-function test_results_column(t_min, device = ClimaComms.device())
+function test_results_column(
+    t_min,
+    device = ClimaComms.device();
+    gpu = gpu_model(device_name),
+)
     # If these tests fail, just update the numbers (or the
     # buffer) so long its not an egregious regression.
     buffer = device isa ClimaComms.CUDADevice ? GPU_BUFFER_COLUMN : 2
-    ns = 1
-    μs = 10^3
-    results_gpu = [
-    [(op_GradientF2C!, :none), 17.634*μs*buffer],
-    [(op_GradientF2C!, :SetValue, :SetValue), 17.288*μs*buffer],
-    [(op_GradientC2F!, :SetGradient, :SetGradient), 17.764*μs*buffer],
-    [(op_DivergenceF2C!, :none), 18.716*μs*buffer],
-    [(op_DivergenceF2C!, :SetValue, :SetValue), 19.195*μs*buffer],
-    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 20.848*μs*buffer],
-    [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 19.584*μs*buffer],
-    [(op_InterpolateF2C!, :none), 16.874*μs*buffer],
-    [(op_InterpolateC2F!, :SetValue, :SetValue), 17.699*μs*buffer],
-    [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 17.200*μs*buffer],
-    [(op_broadcast_example2!, :none), 20.828*μs*buffer],
-    [(op_BottomBiasedC2F!, :SetValue), 17.169*μs*buffer],
-    [(op_BottomBiasedF2C!, :none), 17.240*μs*buffer],
-    [(op_BottomBiasedF2C!, :SetValue), 17.155*μs*buffer],
-    [(op_TopBiasedC2F!, :SetValue), 18.111*μs*buffer],
-    [(op_TopBiasedF2C!, :none), 17.523*μs*buffer],
-    [(op_TopBiasedF2C!, :SetValue), 17.974*μs*buffer],
-    [(op_CurlC2F!, :SetCurl, :SetCurl), 17.262*μs*buffer],
-    [(op_UpwindBiasedProductC2F!, :none), 18.260*μs*buffer],
-    [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 23.883*μs*buffer],
-    [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 19.380*μs*buffer],
-    [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 19.888*μs*buffer],
-    [(op_div_interp_CC!, :SetValue, :SetValue, :none), 18.918*μs*buffer],
-    [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 19.106*μs*buffer],
-    [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 20.160*μs*buffer],
-    [(op_nest_interp_4!, :none), 19.652*μs*buffer],
-    [(op_nest_interp_8!, :none), 22.908*μs*buffer],
-    [(op_nest_costly_8!, :none), 209.583*μs*buffer],
-    [(op_biharmonic!, :none), 22.044*μs*buffer],
-    [(op_wide_sum_8!, :none), 30.696*μs*buffer],
-    [(op_diffusion_like!, :none), 21.361*μs*buffer],
-    [(op_advection_like!, :none), 21.209*μs*buffer],
-    [(op_atmos_like!, :none), 38.611*μs*buffer],
+    results = reference_times_column(device; gpu)
+    check_regressions(t_min, results, device, buffer)
+end
+
+# Measured minimum times (ns) for the column benchmarks, or `nothing` when
+# there are no reference timings for this device.
+function reference_times_column(
+    device = ClimaComms.device();
+    gpu = gpu_model(device_name),
+)
+    # Measured minimum times in μs per device; rows without an entry for a
+    # device have no reference on it.
+    table = [
+        [(op_GradientF2C!, :none), (P100 = 16.051, A100 = 15.32, CPU = 0.2531)],
+        [(op_GradientF2C!, :SetValue, :SetValue), (P100 = 16.349, A100 = 15.31, CPU = 0.270448)],
+        [(op_GradientC2F!, :SetGradient, :SetGradient), (P100 = 16.743, A100 = 15.81, CPU = 0.242053)],
+        [(op_DivergenceF2C!, :none), (P100 = 18.231, A100 = 16.91, CPU = 1.005)],
+        [(op_DivergenceF2C!, :SetValue, :SetValue), (P100 = 18.444, A100 = 17.2, CPU = 1.076)],
+        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), (P100 = 19.164, A100 = 18.02, CPU = 1.076)],
+        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), (P100 = 18.834, A100 = 17.52, CPU = 0.878028)],
+        [(op_InterpolateF2C!, :none), (P100 = 16.215, A100 = 15.25, CPU = 0.254523)],
+        [(op_InterpolateC2F!, :SetValue, :SetValue), (P100 = 16.507, A100 = 15.13, CPU = 0.254241)],
+        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), (P100 = 16.316, A100 = 15.73, CPU = 0.241308)],
+        [(op_broadcast_example2!, :none), (P100 = 19.808, A100 = 18.96, CPU = 0.555039)],
+        [(op_BottomBiasedC2F!, :SetValue), (P100 = 16.748, A100 = 15.66, CPU = 0.207264)],
+        [(op_BottomBiasedF2C!, :none), (P100 = 16.273, A100 = 15.17, CPU = 0.137031)],
+        [(op_BottomBiasedF2C!, :SetValue), (P100 = 16.758, A100 = 15.91, CPU = 0.185135)],
+        [(op_TopBiasedC2F!, :SetValue), (P100 = 16.78, A100 = 16.08, CPU = 0.129971)],
+        [(op_TopBiasedF2C!, :none), (P100 = 16.462, A100 = 15.48, CPU = 0.14212)],
+        [(op_TopBiasedF2C!, :SetValue), (P100 = 16.366, A100 = 15.44, CPU = 0.141446)],
+        [(op_CurlC2F!, :SetCurl, :SetCurl), (P100 = 17.082, A100 = 15.71, CPU = 1.692)],
+        [(op_UpwindBiasedProductC2F!, :none), (P100 = 17.632, A100 = 16.6, CPU = 0.765401)],
+        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), (P100 = 22.962, A100 = 22.03, CPU = 2.54)],
+        # The CPU reference times of entries whose boundary conditions changed in
+        # the operator refactor (op_DivergenceF2C! above, op_divgrad_CC!,
+        # op_div_interp_FF!) were carried over from the closest pre-refactor
+        # entries rather than re-measured; they are within-buffer tripwires, not
+        # measurements.
+        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), (P100 = 18.584, A100 = 17.85, CPU = 0.924147)],
+        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 18.396, A100 = 16.91, CPU = 0.87651)],
+        [(op_div_interp_CC!, :SetValue, :SetValue, :none), (P100 = 18.087, A100 = 16.61, CPU = 0.721119)],
+        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 17.956, A100 = 17.57, CPU = 0.686581)],
+        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), (P100 = 19.73, A100 = 17.61, CPU = 5.047)],
+        [(op_nest_interp_4!, :none), (P100 = 18.851, A100 = 16.83)],
+        [(op_nest_interp_8!, :none), (P100 = 22.703, A100 = 19.41)],
+        [(op_nest_costly_8!, :none), (P100 = 205.037, A100 = 134.49)],
+        [(op_biharmonic!, :none), (P100 = 21.262, A100 = 19.14)],
+        [(op_wide_sum_8!, :none), (P100 = 30.356, A100 = 25.279)],
+        [(op_diffusion_like!, :none), (P100 = 20.566, A100 = 19.81)],
+        [(op_advection_like!, :none), (P100 = 21.363, A100 = 19.17)],
+        [(op_atmos_like!, :none), (P100 = 38.506, A100 = 31.29)],
     ]
-    results_cpu = [
-    [(op_GradientF2C!, :none), 253.100*ns*buffer],
-    [(op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
-    [(op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
-    [(op_DivergenceF2C!, :none), 1.005*μs*buffer],
-    [(op_DivergenceF2C!, :SetValue, :SetValue), 1.076*μs*buffer],
-    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
-    [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
-    [(op_InterpolateF2C!, :none), 254.523*ns*buffer],
-    [(op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
-    [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 241.308*ns*buffer],
-    [(op_broadcast_example2!, :none), 555.039*ns*buffer],
-    [(op_BottomBiasedC2F!, :SetValue), 207.264*ns*buffer],
-    [(op_BottomBiasedF2C!, :none), 137.031*ns*buffer],
-    [(op_BottomBiasedF2C!, :SetValue), 185.135*ns*buffer],
-    [(op_TopBiasedC2F!, :SetValue), 129.971*ns*buffer],
-    [(op_TopBiasedF2C!, :none), 142.120*ns*buffer],
-    [(op_TopBiasedF2C!, :SetValue), 141.446*ns*buffer],
-    [(op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
-    [(op_UpwindBiasedProductC2F!, :none), 765.401*ns*buffer],
-    [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 2.540*μs*buffer],
-    # The reference times of entries whose boundary conditions changed in the
-    # operator refactor (op_DivergenceF2C! above, op_divgrad_CC!,
-    # op_div_interp_FF!) were carried over from the closest pre-refactor
-    # entries rather than re-measured; they are within-buffer tripwires, not
-    # measurements.
-    [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 924.147*ns*buffer],
-    [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
-    [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
-    [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 686.581*ns*buffer],
-    [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
-    ]
-    results = device isa ClimaComms.CUDADevice ? results_gpu : results_cpu
-    check_regressions(t_min, results, device)
+    return select_device(table, device isa ClimaComms.CUDADevice ? gpu : :CPU)
 end
 
 function test_results_sphere(
@@ -483,203 +503,183 @@ function test_results_sphere(
     device = ClimaComms.device();
     VIJH = DataLayouts.VIJFH,
     float_type = Float64,
+    gpu = gpu_model(device_name),
 )
     # If these tests fail, just update the numbers (or the
     # buffer) so long its not an egregious regression.
     buffer = device isa ClimaComms.CUDADevice ? GPU_BUFFER_SPHERE : 2
-    μs = 10^3
-    ms = 10^6
-    results_gpu = Dict(
+    results = reference_times_sphere(device; VIJH, float_type, gpu)
+    check_regressions(t_min, results, device, buffer)
+end
+
+# Measured minimum times (ns) for the sphere benchmarks, or `nothing` when
+# there are no reference timings for this device / layout / float type.
+function reference_times_sphere(
+    device = ClimaComms.device();
+    VIJH = DataLayouts.VIJFH,
+    float_type = Float64,
+    gpu = gpu_model(device_name),
+)
+    # Measured minimum times in μs per device; rows without an entry for a
+    # device have no reference on it. The CPU times are layout-agnostic
+    # tripwires (buffer 2) and are stored once, under VIJFH.
+    dev = device isa ClimaComms.CUDADevice ? gpu : :CPU
+    dev === :CPU && (VIJH = DataLayouts.VIJFH)
+    tables = Dict(
         (DataLayouts.VIJFH, Float64) => [
-        [(op_GradientF2C!, :none), 499.0*μs*buffer],
-        [(op_GradientF2C!, :SetValue, :SetValue), 515.7*μs*buffer],
-        [(op_GradientC2F!, :SetGradient, :SetGradient), 641.2*μs*buffer],
-        [(op_DivergenceF2C!, :none), 1212.0*μs*buffer],
-        [(op_DivergenceF2C!, :SetValue, :SetValue), 1192.0*μs*buffer],
-        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1490.0*μs*buffer],
-        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 1296.0*μs*buffer],
-        [(op_InterpolateF2C!, :none), 496.4*μs*buffer],
-        [(op_InterpolateC2F!, :SetValue, :SetValue), 510.1*μs*buffer],
-        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 504.2*μs*buffer],
-        [(op_broadcast_example0!, :none), 197.9*μs*buffer],
-        [(op_broadcast_example1!, :none), 354.5*μs*buffer],
-        [(op_broadcast_example2!, :none), 351.7*μs*buffer],
-        [(op_BottomBiasedC2F!, :SetValue), 471.5*μs*buffer],
-        [(op_BottomBiasedF2C!, :none), 496.9*μs*buffer],
-        [(op_BottomBiasedF2C!, :SetValue), 507.2*μs*buffer],
-        [(op_TopBiasedC2F!, :SetValue), 508.6*μs*buffer],
-        [(op_TopBiasedF2C!, :none), 496.4*μs*buffer],
-        [(op_TopBiasedF2C!, :SetValue), 500.3*μs*buffer],
-        [(op_CurlC2F!, :SetCurl, :SetCurl), 817.6*μs*buffer],
-        [(op_UpwindBiasedProductC2F!, :none), 1081.0*μs*buffer],
-        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 1931.0*μs*buffer],
-        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 1162.0*μs*buffer],
-        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 1012.0*μs*buffer],
-        [(op_div_interp_CC!, :SetValue, :SetValue, :none), 913.9*μs*buffer],
-        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 895.2*μs*buffer],
-        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1296.0*μs*buffer],
-        [(op_nest_interp_4!, :none), 593.2*μs*buffer],
-        [(op_nest_interp_8!, :none), 738.5*μs*buffer],
-        [(op_nest_costly_8!, :none), 1944.0*μs*buffer],
-        [(op_biharmonic!, :none), 1542.0*μs*buffer],
-        [(op_wide_sum_8!, :none), 1584.0*μs*buffer],
-        [(op_diffusion_like!, :none), 1226.0*μs*buffer],
-        [(op_advection_like!, :none), 1227.0*μs*buffer],
-        [(op_atmos_like!, :none), 3872.0*μs*buffer],
-        ],
-        (DataLayouts.VIJHF, Float64) => [
-        [(op_GradientF2C!, :none), 425.4*μs*buffer],
-        [(op_GradientF2C!, :SetValue, :SetValue), 511.9*μs*buffer],
-        [(op_GradientC2F!, :SetGradient, :SetGradient), 629.2*μs*buffer],
-        [(op_DivergenceF2C!, :none), 1213.0*μs*buffer],
-        [(op_DivergenceF2C!, :SetValue, :SetValue), 1185.0*μs*buffer],
-        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1517.0*μs*buffer],
-        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 1274.0*μs*buffer],
-        [(op_InterpolateF2C!, :none), 430.7*μs*buffer],
-        [(op_InterpolateC2F!, :SetValue, :SetValue), 474.8*μs*buffer],
-        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 500.4*μs*buffer],
-        [(op_broadcast_example0!, :none), 498.9*μs*buffer],
-        [(op_broadcast_example1!, :none), 528.3*μs*buffer],
-        [(op_broadcast_example2!, :none), 528.1*μs*buffer],
-        [(op_BottomBiasedC2F!, :SetValue), 505.1*μs*buffer],
-        [(op_BottomBiasedF2C!, :none), 494.1*μs*buffer],
-        [(op_BottomBiasedF2C!, :SetValue), 500.3*μs*buffer],
-        [(op_TopBiasedC2F!, :SetValue), 505.2*μs*buffer],
-        [(op_TopBiasedF2C!, :none), 494.6*μs*buffer],
-        [(op_TopBiasedF2C!, :SetValue), 500.5*μs*buffer],
-        [(op_CurlC2F!, :SetCurl, :SetCurl), 803.5*μs*buffer],
-        [(op_UpwindBiasedProductC2F!, :none), 1062.0*μs*buffer],
-        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 1966.0*μs*buffer],
-        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 1141.0*μs*buffer],
-        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 990.1*μs*buffer],
-        [(op_div_interp_CC!, :SetValue, :SetValue, :none), 910.0*μs*buffer],
-        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 886.3*μs*buffer],
-        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1203.0*μs*buffer],
-        [(op_nest_interp_4!, :none), 602.5*μs*buffer],
-        [(op_nest_interp_8!, :none), 751.7*μs*buffer],
-        [(op_nest_costly_8!, :none), 1982.0*μs*buffer],
-        [(op_biharmonic!, :none), 1528.0*μs*buffer],
-        [(op_wide_sum_8!, :none), 1581.0*μs*buffer],
-        [(op_diffusion_like!, :none), 1212.0*μs*buffer],
-        [(op_advection_like!, :none), 1112.0*μs*buffer],
-        [(op_atmos_like!, :none), 4024.0*μs*buffer],
+        [(op_GradientF2C!, :none), (P100 = 357.7, A100 = 74.03, CPU = 1746.0)],
+        [(op_GradientF2C!, :SetValue, :SetValue), (P100 = 372.8, A100 = 80.46, CPU = 1754.0)],
+        [(op_GradientC2F!, :SetGradient, :SetGradient), (P100 = 487.9, A100 = 92.17, CPU = 1899.0)],
+        [(op_DivergenceF2C!, :none), (P100 = 1104.0, A100 = 377.1, CPU = 6792.0)],
+        [(op_DivergenceF2C!, :SetValue, :SetValue), (P100 = 1092.0, A100 = 374.9, CPU = 6776.0)],
+        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), (P100 = 1384.0, A100 = 397.5, CPU = 6776.0)],
+        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), (P100 = 1144.0, A100 = 392.9, CPU = 6720.0)],
+        [(op_InterpolateF2C!, :none), (P100 = 359.5, A100 = 73.36, CPU = 1701.0)],
+        [(op_InterpolateC2F!, :SetValue, :SetValue), (P100 = 372.1, A100 = 78.09, CPU = 1713.0)],
+        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), (P100 = 367.4, A100 = 73.18, CPU = 1698.0)],
+        [(op_broadcast_example0!, :none), (P100 = 196.3, A100 = 79.41, CPU = 1059.0)],
+        [(op_broadcast_example1!, :none), (P100 = 352.0, A100 = 129.3, CPU = 154330.0)],
+        [(op_broadcast_example2!, :none), (P100 = 352.7, A100 = 129.8, CPU = 152689.0)],
+        [(op_BottomBiasedC2F!, :SetValue), (P100 = 368.7, A100 = 73.29, CPU = 1758.0)],
+        [(op_BottomBiasedF2C!, :none), (P100 = 358.2, A100 = 73.57, CPU = 1711.0)],
+        [(op_BottomBiasedF2C!, :SetValue), (P100 = 366.5, A100 = 74.41, CPU = 1754.0)],
+        [(op_TopBiasedC2F!, :SetValue), (P100 = 369.1, A100 = 79.47, CPU = 1847.0)],
+        [(op_TopBiasedF2C!, :none), (P100 = 357.6, A100 = 73.06, CPU = 1582.0)],
+        [(op_TopBiasedF2C!, :SetValue), (P100 = 362.1, A100 = 77.17, CPU = 1551.0)],
+        [(op_CurlC2F!, :SetCurl, :SetCurl), (P100 = 649.0, A100 = 148.4, CPU = 4669.0)],
+        [(op_UpwindBiasedProductC2F!, :none), (P100 = 887.2, A100 = 140.5, CPU = 3432.0)],
+        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), (P100 = 1893.0, A100 = 423.2, CPU = 5650.0)],
+        # See the note in reference_times_column: the changed-BC entries' CPU
+        # reference times were carried over, not re-measured.
+        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), (P100 = 962.3, A100 = 221.9, CPU = 4474.0)],
+        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 824.8, A100 = 205.3, CPU = 4470.0)],
+        [(op_div_interp_CC!, :SetValue, :SetValue, :none), (P100 = 735.3, A100 = 157.9, CPU = 3566.0)],
+        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 718.8, A100 = 172.2, CPU = 3663.0)],
+        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), (P100 = 1116.0, A100 = 255.9, CPU = 7251.0)],
+        [(op_nest_interp_4!, :none), (P100 = 460.9, A100 = 86.52)],
+        [(op_nest_interp_8!, :none), (P100 = 597.2, A100 = 107.3)],
+        [(op_nest_costly_8!, :none), (P100 = 1733.0, A100 = 568.5)],
+        [(op_biharmonic!, :none), (P100 = 1443.0, A100 = 331.7)],
+        [(op_wide_sum_8!, :none), (P100 = 1483.0, A100 = 329.6)],
+        [(op_diffusion_like!, :none), (P100 = 1126.0, A100 = 270.5)],
+        [(op_advection_like!, :none), (P100 = 1019.0, A100 = 219.1)],
+        [(op_atmos_like!, :none), (P100 = 3607.0, A100 = 841.5)],
         ],
         (DataLayouts.VIJFH, Float32) => [
-        [(op_GradientF2C!, :none), 491.9*μs*buffer],
-        [(op_GradientF2C!, :SetValue, :SetValue), 507.3*μs*buffer],
-        [(op_GradientC2F!, :SetGradient, :SetGradient), 629.7*μs*buffer],
-        [(op_DivergenceF2C!, :none), 1037.0*μs*buffer],
-        [(op_DivergenceF2C!, :SetValue, :SetValue), 1082.0*μs*buffer],
-        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1267.0*μs*buffer],
-        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 1156.0*μs*buffer],
-        [(op_InterpolateF2C!, :none), 386.5*μs*buffer],
-        [(op_InterpolateC2F!, :SetValue, :SetValue), 499.0*μs*buffer],
-        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 496.9*μs*buffer],
-        [(op_broadcast_example0!, :none), 127.1*μs*buffer],
-        [(op_broadcast_example1!, :none), 238.9*μs*buffer],
-        [(op_broadcast_example2!, :none), 238.8*μs*buffer],
-        [(op_BottomBiasedC2F!, :SetValue), 498.8*μs*buffer],
-        [(op_BottomBiasedF2C!, :none), 488.4*μs*buffer],
-        [(op_BottomBiasedF2C!, :SetValue), 494.9*μs*buffer],
-        [(op_TopBiasedC2F!, :SetValue), 501.1*μs*buffer],
-        [(op_TopBiasedF2C!, :none), 488.4*μs*buffer],
-        [(op_TopBiasedF2C!, :SetValue), 491.5*μs*buffer],
-        [(op_CurlC2F!, :SetCurl, :SetCurl), 790.9*μs*buffer],
-        [(op_UpwindBiasedProductC2F!, :none), 1063.0*μs*buffer],
-        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 1580.0*μs*buffer],
-        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 1121.0*μs*buffer],
-        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 984.1*μs*buffer],
-        [(op_div_interp_CC!, :SetValue, :SetValue, :none), 881.2*μs*buffer],
-        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 877.3*μs*buffer],
-        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1275.0*μs*buffer],
-        [(op_nest_interp_4!, :none), 585.4*μs*buffer],
-        [(op_nest_interp_8!, :none), 724.1*μs*buffer],
-        [(op_nest_costly_8!, :none), 1714.0*μs*buffer],
-        [(op_biharmonic!, :none), 1435.0*μs*buffer],
-        [(op_wide_sum_8!, :none), 1524.0*μs*buffer],
-        [(op_diffusion_like!, :none), 1187.0*μs*buffer],
-        [(op_advection_like!, :none), 1083.0*μs*buffer],
-        [(op_atmos_like!, :none), 3002.0*μs*buffer],
+        [(op_GradientF2C!, :none), (P100 = 354.9, A100 = 65.39)],
+        [(op_GradientF2C!, :SetValue, :SetValue), (P100 = 369.2, A100 = 73.96)],
+        [(op_GradientC2F!, :SetGradient, :SetGradient), (P100 = 479.3, A100 = 87.3)],
+        [(op_DivergenceF2C!, :none), (P100 = 849.2, A100 = 217.8)],
+        [(op_DivergenceF2C!, :SetValue, :SetValue), (P100 = 889.2, A100 = 216.5)],
+        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), (P100 = 1058.0, A100 = 273.2)],
+        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), (P100 = 957.7, A100 = 233.9)],
+        [(op_InterpolateF2C!, :none), (P100 = 352.7, A100 = 65.36)],
+        [(op_InterpolateC2F!, :SetValue, :SetValue), (P100 = 361.2, A100 = 71.6)],
+        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), (P100 = 360.0, A100 = 68.56)],
+        [(op_broadcast_example0!, :none), (P100 = 126.9, A100 = 43.59)],
+        [(op_broadcast_example1!, :none), (P100 = 238.5, A100 = 79.14)],
+        [(op_broadcast_example2!, :none), (P100 = 238.4, A100 = 78.85)],
+        [(op_BottomBiasedC2F!, :SetValue), (P100 = 361.5, A100 = 66.56)],
+        [(op_BottomBiasedF2C!, :none), (P100 = 350.7, A100 = 65.06)],
+        [(op_BottomBiasedF2C!, :SetValue), (P100 = 357.2, A100 = 65.69)],
+        [(op_TopBiasedC2F!, :SetValue), (P100 = 362.8, A100 = 69.47)],
+        [(op_TopBiasedF2C!, :none), (P100 = 349.5, A100 = 64.81)],
+        [(op_TopBiasedF2C!, :SetValue), (P100 = 352.5, A100 = 70.16)],
+        [(op_CurlC2F!, :SetCurl, :SetCurl), (P100 = 625.4, A100 = 109.9)],
+        [(op_UpwindBiasedProductC2F!, :none), (P100 = 869.7, A100 = 138.9)],
+        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), (P100 = 1482.0, A100 = 317.9)],
+        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), (P100 = 926.4, A100 = 202.2)],
+        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 802.5, A100 = 174.6)],
+        [(op_div_interp_CC!, :SetValue, :SetValue, :none), (P100 = 706.8, A100 = 151.5)],
+        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 702.9, A100 = 151.6)],
+        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), (P100 = 1061.0, A100 = 220.9)],
+        [(op_nest_interp_4!, :none), (P100 = 439.4, A100 = 82.34)],
+        [(op_nest_interp_8!, :none), (P100 = 565.2, A100 = 99.67)],
+        [(op_nest_costly_8!, :none), (P100 = 1053.0, A100 = 426.1)],
+        [(op_biharmonic!, :none), (P100 = 1336.0, A100 = 297.0)],
+        [(op_wide_sum_8!, :none), (P100 = 1424.0, A100 = 279.6)],
+        [(op_diffusion_like!, :none), (P100 = 1086.0, A100 = 257.6)],
+        [(op_advection_like!, :none), (P100 = 982.3, A100 = 204.6)],
+        [(op_atmos_like!, :none), (P100 = 2916.0, A100 = 658.1)],
+        ],
+        (DataLayouts.VIJHF, Float64) => [
+        [(op_GradientF2C!, :none), (P100 = 356.2, A100 = 67.5)],
+        [(op_GradientF2C!, :SetValue, :SetValue), (P100 = 373.6, A100 = 75.81)],
+        [(op_GradientC2F!, :SetGradient, :SetGradient), (P100 = 478.7, A100 = 89.72)],
+        [(op_DivergenceF2C!, :none), (P100 = 1100.0, A100 = 370.0)],
+        [(op_DivergenceF2C!, :SetValue, :SetValue), (P100 = 1078.0, A100 = 366.5)],
+        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), (P100 = 1402.0, A100 = 374.2)],
+        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), (P100 = 1164.0, A100 = 370.2)],
+        [(op_InterpolateF2C!, :none), (P100 = 355.1, A100 = 67.52)],
+        [(op_InterpolateC2F!, :SetValue, :SetValue), (P100 = 367.7, A100 = 73.7)],
+        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), (P100 = 362.8, A100 = 68.85)],
+        [(op_broadcast_example0!, :none), (P100 = 361.3, A100 = 88.9)],
+        [(op_broadcast_example1!, :none), (P100 = 393.5, A100 = 122.4)],
+        [(op_broadcast_example2!, :none), (P100 = 392.9, A100 = 122.7)],
+        [(op_BottomBiasedC2F!, :SetValue), (P100 = 366.5, A100 = 69.6)],
+        [(op_BottomBiasedF2C!, :none), (P100 = 355.0, A100 = 67.67)],
+        [(op_BottomBiasedF2C!, :SetValue), (P100 = 362.3, A100 = 69.02)],
+        [(op_TopBiasedC2F!, :SetValue), (P100 = 366.7, A100 = 74.27)],
+        [(op_TopBiasedF2C!, :none), (P100 = 357.7, A100 = 66.54)],
+        [(op_TopBiasedF2C!, :SetValue), (P100 = 362.6, A100 = 74.94)],
+        [(op_CurlC2F!, :SetCurl, :SetCurl), (P100 = 635.9, A100 = 142.0)],
+        [(op_UpwindBiasedProductC2F!, :none), (P100 = 867.8, A100 = 137.7)],
+        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), (P100 = 1870.0, A100 = 417.9)],
+        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), (P100 = 943.6, A100 = 217.1)],
+        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 807.4, A100 = 197.1)],
+        [(op_div_interp_CC!, :SetValue, :SetValue, :none), (P100 = 732.1, A100 = 152.6)],
+        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 710.4, A100 = 166.5)],
+        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), (P100 = 1101.0, A100 = 244.2)],
+        [(op_nest_interp_4!, :none), (P100 = 455.7, A100 = 83.83)],
+        [(op_nest_interp_8!, :none), (P100 = 590.0, A100 = 111.2)],
+        [(op_nest_costly_8!, :none), (P100 = 1724.0, A100 = 578.2)],
+        [(op_biharmonic!, :none), (P100 = 1430.0, A100 = 300.0)],
+        [(op_wide_sum_8!, :none), (P100 = 1484.0, A100 = 314.3)],
+        [(op_diffusion_like!, :none), (P100 = 1112.0, A100 = 287.6)],
+        [(op_advection_like!, :none), (P100 = 1012.0, A100 = 219.8)],
+        [(op_atmos_like!, :none), (P100 = 3616.0, A100 = 935.6)],
         ],
         (DataLayouts.VIJHF, Float32) => [
-        [(op_GradientF2C!, :none), 449.3*μs*buffer],
-        [(op_GradientF2C!, :SetValue, :SetValue), 503.0*μs*buffer],
-        [(op_GradientC2F!, :SetGradient, :SetGradient), 619.3*μs*buffer],
-        [(op_DivergenceF2C!, :none), 1029.0*μs*buffer],
-        [(op_DivergenceF2C!, :SetValue, :SetValue), 1074.0*μs*buffer],
-        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1269.0*μs*buffer],
-        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 1131.0*μs*buffer],
-        [(op_InterpolateF2C!, :none), 484.0*μs*buffer],
-        [(op_InterpolateC2F!, :SetValue, :SetValue), 495.1*μs*buffer],
-        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 495.3*μs*buffer],
-        [(op_broadcast_example0!, :none), 496.8*μs*buffer],
-        [(op_broadcast_example1!, :none), 521.7*μs*buffer],
-        [(op_broadcast_example2!, :none), 521.3*μs*buffer],
-        [(op_BottomBiasedC2F!, :SetValue), 494.3*μs*buffer],
-        [(op_BottomBiasedF2C!, :none), 485.0*μs*buffer],
-        [(op_BottomBiasedF2C!, :SetValue), 490.1*μs*buffer],
-        [(op_TopBiasedC2F!, :SetValue), 498.7*μs*buffer],
-        [(op_TopBiasedF2C!, :none), 484.1*μs*buffer],
-        [(op_TopBiasedF2C!, :SetValue), 490.3*μs*buffer],
-        [(op_CurlC2F!, :SetCurl, :SetCurl), 778.7*μs*buffer],
-        [(op_UpwindBiasedProductC2F!, :none), 1054.0*μs*buffer],
-        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 1583.0*μs*buffer],
-        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 1112.0*μs*buffer],
-        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 968.5*μs*buffer],
-        [(op_div_interp_CC!, :SetValue, :SetValue, :none), 872.3*μs*buffer],
-        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 866.2*μs*buffer],
-        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 1257.0*μs*buffer],
-        [(op_nest_interp_4!, :none), 583.6*μs*buffer],
-        [(op_nest_interp_8!, :none), 716.2*μs*buffer],
-        [(op_nest_costly_8!, :none), 1705.0*μs*buffer],
-        [(op_biharmonic!, :none), 1362.0*μs*buffer],
-        [(op_wide_sum_8!, :none), 1510.0*μs*buffer],
-        [(op_diffusion_like!, :none), 1177.0*μs*buffer],
-        [(op_advection_like!, :none), 1072.0*μs*buffer],
-        [(op_atmos_like!, :none), 3007.0*μs*buffer],
+        [(op_GradientF2C!, :none), (P100 = 349.1, A100 = 63.88)],
+        [(op_GradientF2C!, :SetValue, :SetValue), (P100 = 363.4, A100 = 72.99)],
+        [(op_GradientC2F!, :SetGradient, :SetGradient), (P100 = 470.3, A100 = 86.89)],
+        [(op_DivergenceF2C!, :none), (P100 = 840.1, A100 = 208.9)],
+        [(op_DivergenceF2C!, :SetValue, :SetValue), (P100 = 883.3, A100 = 209.6)],
+        [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), (P100 = 1060.0, A100 = 269.9)],
+        [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), (P100 = 933.8, A100 = 228.2)],
+        [(op_InterpolateF2C!, :none), (P100 = 347.5, A100 = 63.05)],
+        [(op_InterpolateC2F!, :SetValue, :SetValue), (P100 = 356.1, A100 = 70.24)],
+        [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), (P100 = 355.8, A100 = 70.48)],
+        [(op_broadcast_example0!, :none), (P100 = 356.3, A100 = 80.13)],
+        [(op_broadcast_example1!, :none), (P100 = 379.8, A100 = 91.6)],
+        [(op_broadcast_example2!, :none), (P100 = 381.1, A100 = 91.08)],
+        [(op_BottomBiasedC2F!, :SetValue), (P100 = 356.5, A100 = 65.56)],
+        [(op_BottomBiasedF2C!, :none), (P100 = 346.2, A100 = 63.04)],
+        [(op_BottomBiasedF2C!, :SetValue), (P100 = 350.5, A100 = 64.6)],
+        [(op_TopBiasedC2F!, :SetValue), (P100 = 361.8, A100 = 68.54)],
+        [(op_TopBiasedF2C!, :none), (P100 = 345.6, A100 = 62.94)],
+        [(op_TopBiasedF2C!, :SetValue), (P100 = 353.6, A100 = 70.96)],
+        [(op_CurlC2F!, :SetCurl, :SetCurl), (P100 = 614.1, A100 = 108.7)],
+        [(op_UpwindBiasedProductC2F!, :none), (P100 = 862.7, A100 = 135.5)],
+        [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), (P100 = 1484.0, A100 = 316.0)],
+        [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), (P100 = 914.8, A100 = 199.6)],
+        [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 785.0, A100 = 172.4)],
+        [(op_div_interp_CC!, :SetValue, :SetValue, :none), (P100 = 698.4, A100 = 157.9)],
+        [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), (P100 = 693.0, A100 = 148.9)],
+        [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), (P100 = 1049.0, A100 = 216.2)],
+        [(op_nest_interp_4!, :none), (P100 = 438.6, A100 = 81.4)],
+        [(op_nest_interp_8!, :none), (P100 = 557.8, A100 = 98.0)],
+        [(op_nest_costly_8!, :none), (P100 = 1048.0, A100 = 458.7)],
+        [(op_biharmonic!, :none), (P100 = 1260.0, A100 = 276.2)],
+        [(op_wide_sum_8!, :none), (P100 = 1412.0, A100 = 272.4)],
+        [(op_diffusion_like!, :none), (P100 = 1076.0, A100 = 254.4)],
+        [(op_advection_like!, :none), (P100 = 973.3, A100 = 201.7)],
+        [(op_atmos_like!, :none), (P100 = 2930.0, A100 = 663.9)],
         ],
     )
-    results_cpu = [
-    [(op_GradientF2C!, :none), 1.746*ms*buffer],
-    [(op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
-    [(op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
-    [(op_DivergenceF2C!, :none), 6.792*ms*buffer],
-    [(op_DivergenceF2C!, :SetValue, :SetValue), 6.776*ms*buffer],
-    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
-    [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
-    [(op_InterpolateF2C!, :none), 1.701*ms*buffer],
-    [(op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],
-    [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 1.698*ms*buffer],
-    [(op_broadcast_example0!, :none), 1.059*ms*buffer],
-    [(op_broadcast_example1!, :none), 154.330*ms*buffer],
-    [(op_broadcast_example2!, :none), 152.689*ms*buffer],
-    [(op_BottomBiasedC2F!, :SetValue), 1.758*ms*buffer],
-    [(op_BottomBiasedF2C!, :none), 1.711*ms*buffer],
-    [(op_BottomBiasedF2C!, :SetValue), 1.754*ms*buffer],
-    [(op_TopBiasedC2F!, :SetValue), 1.847*ms*buffer],
-    [(op_TopBiasedF2C!, :none), 1.582*ms*buffer],
-    [(op_TopBiasedF2C!, :SetValue), 1.551*ms*buffer],
-    [(op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
-    [(op_UpwindBiasedProductC2F!, :none), 3.432*ms*buffer],
-    [(op_divUpwind3rdOrderBiasedProductC2F!, :none, :SetValue, :SetValue), 5.650*ms*buffer],
-    # See the note in test_results_column: the changed-BC entries' reference
-    # times were carried over, not re-measured.
-    [(op_divgrad_CC!, :SetGradient, :SetGradient, :none), 4.474*ms*buffer],
-    [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
-    [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
-    [(op_div_interp_FF!, :none, :SetDivergence, :SetDivergence), 3.663*ms*buffer],
-    [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
-    ]
-    results = if device isa ClimaComms.CUDADevice
-        results_gpu[(VIJH, float_type)]
-    else
-        if float_type === Float32
-            @info "No CPU Float32 reference times yet; skipping the checks."
-            return nothing
-        end
-        results_cpu
-    end
-    check_regressions(t_min, results, device)
+    table = get(tables, (VIJH, float_type), nothing)
+    isnothing(table) && return nothing
+    return select_device(table, dev)
 end
 
 #! format: on
