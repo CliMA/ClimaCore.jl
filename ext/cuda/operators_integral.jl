@@ -1,6 +1,6 @@
 import ClimaCore: DataLayouts, Spaces, Fields, level, column
+import ClimaCore.Grids: toggle_placeholder_grid
 import ClimaCore.Operators:
-    strip_space,
     column_reduce_device!,
     single_column_reduce!,
     column_accumulate_device!,
@@ -35,8 +35,8 @@ function column_reduce_device!(
         single_column_reduce!,
         f,
         transform,
-        strip_space(output, axes(output)), # The output space is irrelevant here
-        strip_space(input, space),
+        toggle_placeholder_grid(output, space),
+        toggle_placeholder_grid(input, space),
         init,
         space,
         mask,
@@ -80,8 +80,8 @@ function column_accumulate_device!(
         single_column_accumulate!,
         f,
         transform,
-        strip_space(output, space),
-        strip_space(input, space),
+        toggle_placeholder_grid(output, space),
+        toggle_placeholder_grid(input, space),
         init,
         space,
         mask,
@@ -104,14 +104,16 @@ function bycolumn_kernel!(
     single_column_function!::S,
     f::F,
     transform::T,
-    output,
-    input,
+    output′,
+    input′,
     init,
     space,
     mask,
     cart_inds,
     reverse,
 ) where {S, F, T}
+    output = toggle_placeholder_grid(output′, space)
+    input = toggle_placeholder_grid(input′, space)
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space, reverse)
     else

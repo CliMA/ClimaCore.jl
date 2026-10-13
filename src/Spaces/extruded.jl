@@ -18,7 +18,7 @@ The second constructor takes the `staggering` from `vertical_space`; `deep = tru
 selects deep-atmosphere spherical geometry.
 """
 struct ExtrudedFiniteDifferenceSpace{
-    G <: Grids.AbstractExtrudedFiniteDifferenceGrid,
+    G <: Union{Grids.AbstractExtrudedFiniteDifferenceGrid, Grids.PlaceholderGrid},
     S <: Staggering,
 } <: AbstractSpace
     grid::G

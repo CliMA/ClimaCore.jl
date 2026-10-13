@@ -10,7 +10,7 @@ import ..DataLayouts: FusedMultiBroadcast, @fused_direct
 import ..Domains
 import ..Topologies
 import ..Quadratures
-import ..Grids: ColumnIndex, local_geometry_type
+import ..Grids: Grids, ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Spaces: nlevels, ncolumns
 import ..Spaces: get_mask, set_mask!
@@ -323,6 +323,7 @@ Base.any(f, field::Field) = any(f, parent(field))
 Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
 Base.vec(field::Field) = vec(field_values(field))
 
+DataLayouts.DataScope(field::Field) = DataLayouts.DataScope(field_values(field))
 DataLayouts.reassign(field::Field, scope) =
     Field(DataLayouts.reassign(field_values(field), scope), axes(field))
 

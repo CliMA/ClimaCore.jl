@@ -1,5 +1,6 @@
 import ClimaCore
-import ClimaCore: Fields, Spaces, Operators, column
+import ClimaCore: Fields, Spaces, Grids, Operators
+import LazyBroadcast: lazy
 using ClimaComms
 ClimaComms.@import_required_backends
 @isdefined(TU) || include(
@@ -9,107 +10,60 @@ import .TestUtilities as TU;
 
 using Test
 
-@testset "placeholder_space" begin
+const PlaceholderGrid = Grids.PlaceholderGrid
+toggle(x, space) = Grids.toggle_placeholder_grid(x, space)
+
+@testset "toggle_placeholder_grid" begin
     FT = Float64
+    center_space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
+    face_space = Spaces.face_space(center_space)
+    column_space = TU.ColumnCenterFiniteDifferenceSpace(FT)
+    horizontal_space = Spaces.horizontal_space(center_space)
+    ᶜfield = ones(center_space)
+    ᶠfield = ones(face_space)
 
-    center_space = TU.ColumnCenterFiniteDifferenceSpace(FT)
-    face_space = TU.ColumnFaceFiniteDifferenceSpace(FT)
-    extruded_center_space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
-    extruded_face_space = TU.FaceExtrudedFiniteDifferenceSpace(FT)
-    hspace = Spaces.horizontal_space(extruded_center_space)
-
-    @test Operators.placeholder_space(center_space, center_space) ===
-          Operators.PlaceholderSpace()
-
-    @test Operators.placeholder_space(hspace, extruded_center_space) ===
-          Operators.LevelPlaceholderSpace()
-
-    @test Operators.placeholder_space(center_space, face_space) ===
-          Operators.CenterPlaceholderSpace()
-    @test Operators.placeholder_space(extruded_center_space, extruded_face_space) ===
-          Operators.CenterPlaceholderSpace()
-
-    @test Operators.placeholder_space(face_space, center_space) ===
-          Operators.FacePlaceholderSpace()
-    @test Operators.placeholder_space(extruded_face_space, extruded_center_space) ===
-          Operators.FacePlaceholderSpace()
-end
-
-@testset "slices of stripped broadcasts over level fields" begin
-    FT = Float64
-    # This runs a column kernel's body on the host, so its space has to be a CPU
-    # one even when the tests are run on a GPU.
-    space = TU.CenterExtrudedFiniteDifferenceSpace(
-        FT;
-        context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+    for (field, space) in (
+        (ᶜfield, center_space),
+        (ᶠfield, center_space),
+        (ones(column_space), column_space),
+        (ones(horizontal_space), horizontal_space),
     )
-    ᶜa = ones(space)
-    level_field = similar(Fields.level(ᶜa, 1))  # one value per column
-    fill!(parent(level_field), FT(3))
+        stripped = toggle(field, space)
+        @test Spaces.grid(axes(stripped)) === PlaceholderGrid()
+        @test Fields.field_values(stripped) === Fields.field_values(field)
+        @test toggle(stripped, space) === field
+    end
 
-    # As in the GPU column operators: strip the spaces, then slice inside the
-    # kernel, mixing LevelPlaceholderSpace and PlaceholderSpace arguments.
-    bc = Base.Broadcast.broadcasted(tuple, ᶜa, ᶜa, level_field)
-    stripped = Operators.strip_space(bc, space)
-    @test map(arg -> axes(arg), stripped.args) === (
-        Operators.PlaceholderSpace(),
-        Operators.PlaceholderSpace(),
-        Operators.LevelPlaceholderSpace(),
+    # Level and column grids keep their wrappers, along with their indices.
+    for field in (Fields.level(ᶜfield, 2), Fields.column(ᶜfield, 1, 1, 1))
+        stripped_grid = Spaces.grid(axes(toggle(field, center_space)))
+        @test stripped_grid.full_grid === PlaceholderGrid()
+        @test stripped_grid isa typeof(Spaces.grid(axes(field))).name.wrapper
+        @test toggle(toggle(field, center_space), center_space) === field
+    end
+
+    # A level destination uses the full grid of its level, so that a level
+    # field from a different level keeps its own level.
+    level_space = axes(Fields.level(ᶜfield, 1))
+    other_level_field = Fields.level(ᶜfield, 3)
+    @test toggle(toggle(other_level_field, level_space), level_space) ===
+          other_level_field
+
+    # Grids of other types are not replaced.
+    horizontal_field = ones(horizontal_space)
+    @test toggle(horizontal_field, center_space) === horizontal_field
+
+    # Every node of a broadcast is toggled, including the axes of pointwise
+    # nodes and the fields in boundary conditions.
+    interp = Operators.InterpolateC2F(;
+        bottom = Operators.SetValue(Fields.level(ᶜfield, 1)),
+        top = Operators.Extrapolate(),
     )
-    sliced = @inbounds column(stripped, 1, 1, 1)
-    @test axes(sliced) === Operators.PlaceholderSpace()
-end
-
-@testset "reconstruct_placeholder_space" begin
-    FT = Float64
-
-    center_space = TU.ColumnCenterFiniteDifferenceSpace(FT)
-    face_space = TU.ColumnFaceFiniteDifferenceSpace(FT)
-    extruded_center_space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
-    extruded_face_space = TU.FaceExtrudedFiniteDifferenceSpace(FT)
-
-    @test Operators.reconstruct_placeholder_space(
-        Operators.PlaceholderSpace(),
-        center_space,
-    ) == center_space
-
-    r_level = Operators.reconstruct_placeholder_space(
-        Operators.LevelPlaceholderSpace(),
-        center_space,
+    grad = Operators.GradientF2C()
+    bc = Base.Broadcast.instantiate(
+        @. lazy(grad(interp(ᶜfield * other_level_field) * ᶠfield))
     )
-    @test r_level == Spaces.level(center_space, Operators.left_idx(center_space))
-
-    @test Operators.reconstruct_placeholder_space(
-        Operators.CenterPlaceholderSpace(),
-        face_space,
-    ) isa Spaces.CenterFiniteDifferenceSpace
-    @test Operators.reconstruct_placeholder_space(
-        Operators.CenterPlaceholderSpace(),
-        extruded_face_space,
-    ) isa Spaces.CenterExtrudedFiniteDifferenceSpace
-    @test Operators.reconstruct_placeholder_space(
-        Operators.CenterPlaceholderSpace(),
-        center_space,
-    ) == center_space
-    @test Operators.reconstruct_placeholder_space(
-        Operators.CenterPlaceholderSpace(),
-        extruded_center_space,
-    ) == extruded_center_space
-
-    @test Operators.reconstruct_placeholder_space(
-        Operators.FacePlaceholderSpace(),
-        center_space,
-    ) isa Spaces.FaceFiniteDifferenceSpace
-    @test Operators.reconstruct_placeholder_space(
-        Operators.FacePlaceholderSpace(),
-        extruded_center_space,
-    ) isa Spaces.FaceExtrudedFiniteDifferenceSpace
-    @test Operators.reconstruct_placeholder_space(
-        Operators.FacePlaceholderSpace(),
-        face_space,
-    ) == face_space
-    @test Operators.reconstruct_placeholder_space(
-        Operators.FacePlaceholderSpace(),
-        extruded_face_space,
-    ) == extruded_face_space
+    stripped_bc = toggle(bc, center_space)
+    @test !occursin("ExtrudedFiniteDifferenceGrid", string(typeof(stripped_bc)))
+    @test toggle(stripped_bc, center_space) === bc
 end

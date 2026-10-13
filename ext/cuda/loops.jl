@@ -18,15 +18,18 @@ DataLayouts._foreach_slice(
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
     else
         check_device_assumptions()
-        kernel_function(args...) = DataLayouts.scoped_slice_loop(
-            DataLayouts.slice_subscope(ThisKernel(), op, args...),
-            ThisKernel(),
-            op,
-            f,
-            mask,
-            enumerate,
-            args...,
-        )
+        function kernel_function(compact_kernel_args...)
+            kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
+            DataLayouts.scoped_slice_loop(
+                DataLayouts.slice_subscope(ThisKernel(), op, kernel_args...),
+                ThisKernel(),
+                op,
+                f,
+                mask,
+                enumerate,
+                kernel_args...,
+            )
+        end
 
         # A rank can own no elements; there are then no slices to launch
         # over, and num_slice_points cannot slice an empty layout.
@@ -35,6 +38,7 @@ DataLayouts._foreach_slice(
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
         subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
+        compact_args = Grids.toggle_compact_args(args...)
         if subscope isa ThisSubBlock
             # Each sub-block gets one slice. The block size is capped at the
             # value that sizes the sub-blocks' shared memory (see
@@ -49,16 +53,17 @@ DataLayouts._foreach_slice(
             )
             slices_per_block = max_block_threads ÷ subblock_threads
             (; threads, blocks) = launch_configuration(
-                kernel_function, args, max_block_threads,
+                kernel_function, compact_args, max_block_threads,
                 cld(max_slices, slices_per_block); granularity = subblock_threads,
             )
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            (; threads, blocks) =
-                launch_configuration(kernel_function, args, max_points; strict = false)
+            (; threads, blocks) = launch_configuration(
+                kernel_function, compact_args, max_points; strict = false,
+            )
         end
-        auto_launch!(kernel_function, args; threads_s = threads, blocks_s = blocks)
+        auto_launch!(kernel_function, compact_args; threads_s = threads, blocks_s = blocks)
     end
 
 # Only save a reduction result to an array from one thread per reduction scope.

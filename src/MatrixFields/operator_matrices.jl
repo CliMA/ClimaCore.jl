@@ -66,8 +66,8 @@ operator_input_space(
     space::Spaces.MultiColumnFiniteDifferenceSpace,
 ) = Spaces.FaceMultiColumnFiniteDifferenceSpace(space)
 
-# A SetBoundaryOperator is space-preserving (`return_space(op, space) = space`), so its
-# operator matrix must be built on the argument's own space, whether center or face;
+# A SetBoundaryOperator is space-preserving, so its operator matrix must be
+# built on the argument's own space.
 operator_input_space(
     ::Operators.SetBoundaryOperator,
     space::Spaces.FiniteDifferenceSpace,
@@ -121,9 +121,6 @@ function FDOperatorMatrix(op::O) where {O}
                linear operator, so its boundary conditions will be zeroed out"
     return FDOperatorMatrix{O}(op)
 end
-
-Operators.strip_space(op::FDOperatorMatrix, parent_space) =
-    FDOperatorMatrix(Operators.strip_space(op.op, parent_space))
 
 struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
     op::O
@@ -552,8 +549,8 @@ Operators.right_interior_idx(
     args...,
 ) = Operators.right_interior_idx(space, op_matrix.op, bc, args...)
 
-Operators.return_space(op_matrix::FDOperatorMatrix, spaces...) =
-    Operators.return_space(op_matrix.op, spaces...)
+Operators.return_space(op_matrix::FDOperatorMatrix, args...) =
+    Operators.return_space(op_matrix.op, args...)
 
 function Operators.return_eltype(op_matrix::FDOperatorMatrix, args...)
     args′ = args[1:(end - 1)]
@@ -799,7 +796,7 @@ const εⁱʲ = Geometry.Tensor(
 
 Base.@propagate_inbounds ct3_data(velocity, space, idx, hidx) =
     Geometry.contravariant3(
-        Operators.getidx(space, velocity, idx, hidx),
+        Operators.getidx(velocity, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
 
@@ -905,8 +902,8 @@ Base.@propagate_inbounds function op_matrix_interior_row(
     hidx,
     weight,
 )
-    w⁻ = Operators.getidx(space, weight, idx - half, hidx)
-    w⁺ = Operators.getidx(space, weight, idx + half, hidx)
+    w⁻ = Operators.getidx(weight, idx - half, hidx)
+    w⁺ = Operators.getidx(weight, idx + half, hidx)
     denominator = w⁻ + w⁺
     return BidiagonalMatrixRow(w⁻ / denominator, w⁺ / denominator)
 end

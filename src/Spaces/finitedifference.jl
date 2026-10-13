@@ -16,7 +16,7 @@ One-dimensional finite-difference space, located at either
   - cell faces, where `staggering` is [`Grids.CellFace`](@ref).
 """
 struct FiniteDifferenceSpace{
-    G <: Grids.AbstractFiniteDifferenceGrid,
+    G <: Union{Grids.AbstractFiniteDifferenceGrid, Grids.PlaceholderGrid},
     S <: Staggering,
 } <: AbstractFiniteDifferenceSpace
     grid::G

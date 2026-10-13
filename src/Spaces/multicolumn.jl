@@ -54,7 +54,7 @@ horizontal spectral-element derivative operators evaluate to zero, as on a
 single column.
 """
 struct MultiColumnFiniteDifferenceSpace{
-    G <: Grids.AbstractExtrudedFiniteDifferenceGrid,
+    G <: Union{Grids.AbstractExtrudedFiniteDifferenceGrid, Grids.PlaceholderGrid},
     S <: Staggering,
 } <: AbstractSpace
     grid::G

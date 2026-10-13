@@ -98,6 +98,18 @@ dss_untransform
 dss_untransform!
 ```
 
+## Grids
+
+```@meta
+CurrentModule = ClimaCore.Grids
+```
+
+```@docs
+Grids.PlaceholderGrid
+Grids.toggle_placeholder_grid
+Grids.toggle_compact_args
+```
+
 ## Limiters
 
 ```@meta

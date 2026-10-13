@@ -510,7 +510,7 @@ end
 set_result!(result, bc) = (materialize!(result, bc); nothing)
 
 function call_getidx(space, bc, idx, hidx)
-    @inbounds Operators.getidx(space, bc, idx, hidx)
+    @inbounds Operators.getidx(bc, idx, hidx)
     return nothing
 end
 
@@ -535,7 +535,7 @@ function get_getidx_args(bc)
     space = axes(bc)
     # TODO: change this to idx_l, idx_i, idx_r
     # may need to define a helper
-    (li, lw, rw, ri) = Operators.window_bounds(space, bc)
+    (li, lw, rw, ri) = Operators.window_bounds(bc)
     idx_l, idx_r = if Topologies.isperiodic(space)
         li, ri
     else
