@@ -9,6 +9,16 @@ main
   the `create_function`/`call_function` helpers that LLVM.jl 10 removed; the
   generated code is unchanged.
   
+v1.0.4
+-------
+
+- ![][badge-✨feature/enhancement] New `Limiters.PositivityLimiter`, the
+  mean-preserving Zhang-Shu positivity limiter for DG states, applied with
+  `apply_limiter!`. In each element it scales fields toward their means to
+  enforce linear floors (e.g. `floors = (; ρ = 1e-6)`) and, optionally, a
+  concave constraint `g(U, aux) ≥ g_min` (e.g. pressure). Element means are
+  preserved exactly.
+
 - ![][badge-🐛bugfix] The `PlaceholderSpace` infrastructure is replaced by a
   simpler `PlaceholderGrid`, which only stands in for grids in the arguments of
   GPU kernels launched from the host and is swapped out at the start of each
