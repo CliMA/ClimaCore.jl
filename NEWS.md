@@ -8,7 +8,7 @@ main
   shared-memory allocations with `LLVM.Interop.@llvmgenerated`, which replaces
   the `create_function`/`call_function` helpers that LLVM.jl 10 removed; the
   generated code is unchanged.
-  
+
 v1.0.4
 -------
 
