@@ -6,8 +6,8 @@
 # presets in `TerrainFlow.TERRAIN_PRESETS` (default `agnesi`).
 
 using GLMakie
-include(joinpath(@__DIR__, "gui.jl"))
+import TerrainFlow
 
 grid = Symbol(get(ARGS, 1, "coarse"))
 terrain = Symbol(get(ARGS, 2, "agnesi"))
-run_demo(; grid, terrain)
+TerrainFlow.run_demo(; grid, terrain)

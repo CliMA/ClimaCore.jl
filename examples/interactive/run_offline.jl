@@ -7,8 +7,7 @@
 # `preset` is one of the keys of `TerrainFlow.TERRAIN_PRESETS` (default
 # `schar`), `hours` the physical run time (default 1).
 
-include(joinpath(@__DIR__, "model.jl"))
-using .TerrainFlow
+import TerrainFlow
 import ClimaCore
 using CairoMakie
 import ClimaCore.Visualize: fieldheatmap, fieldheatmap!

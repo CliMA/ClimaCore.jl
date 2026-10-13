@@ -9,9 +9,8 @@
 # state can be rebuilt on a new terrain, and the integrator can be advanced a
 # few steps at a time from a GUI loop.
 #
-# Nothing here depends on Makie: `run_offline.jl` drives it headlessly and
+# Nothing here uses Makie: `run_offline.jl` drives the model headlessly and
 # `gui.jl` drives it interactively.
-module TerrainFlow
 
 using LinearAlgebra
 import ClimaComms
@@ -469,6 +468,22 @@ end
 
 current_time(model::Model) = model.integrator.t
 
+"""
+    is_healthy(model)
+
+`false` once the run has blown up: a non-finite value anywhere in the state,
+or a non-positive density or temperature. A blow-up in steep terrain usually
+shows up as a negative temperature (hence pressure) a few steps before any
+NaN, and diagnostics such as `θ` cannot be evaluated from then on. Costs a few
+percent of a time step on the coarse grid.
+"""
+function is_healthy(model::Model)
+    Y = model.Y
+    all(field -> all(isfinite, parent(field)), Fields._values(Y)) || return false
+    minimum(Y.Yc.ρ) > 0 || return false
+    return minimum(temperature(Y, model.cache.coords)) > 0
+end
+
 # ============================================================================
 # Surface constraint and DSS
 # ============================================================================
@@ -676,9 +691,18 @@ potential_temperature(Y, coords) =
 """
     diagnose(model, name::Symbol)
 
-A scalar center field for plotting. `name` is one of `DIAGNOSTICS`.
+A scalar center field for plotting. `name` is one of `DIAGNOSTICS`. Every
+diagnostic is copied into a plain `Float64` field on `model.center_space`, so
+all of them have the same type (`w` and `u` would otherwise be views into the
+velocity components), which lets a plot switch between them.
 """
 function diagnose(model::Model, name::Symbol)
+    out = Fields.Field(Float64, model.center_space)
+    out .= _diagnose(model, name)
+    return out
+end
+
+function _diagnose(model::Model, name::Symbol)
     Y, coords = model.Y, model.cache.coords
     name === :w && return vertical_velocity(Y)
     name === :u && return horizontal_velocity(Y)
@@ -701,33 +725,32 @@ const DIAGNOSTICS = (
 )
 
 # ============================================================================
-# Tracers: passive particles advected by the resolved wind
+# Wind on a regular grid: tracers and streamlines
 # ============================================================================
 #
 # The wind is remapped once per frame onto a regular grid in (x, reference z)
-# with `Remapping.Remapper`, and each particle then samples that grid
-# bilinearly. Particles live in physical (x, z); the reference height for the
-# lookup follows the `LinearAdaption` mapping of the grid.
+# with `Remapping.Remapper`; tracer particles and streamlines then sample that
+# grid bilinearly. Points live in physical (x, z); the reference height for
+# the lookup follows the `LinearAdaption` mapping of the grid.
 
 """
-    Tracers(model; nx = 32, nz = 10, z_max = 0.6 * model.cfg.Lz)
+    WindGrid(model)
 
-`nx × nz` particles on a regular grid up to `z_max`, lifted above the terrain,
-plus the remapper and scratch used to advect them with [`advance!`](@ref).
+The remapper and scratch that hold `(u, w)` on a regular grid in
+`(x, reference z)`: two points per node horizontally, two per level
+vertically. Filled by [`remap!`](@ref); tied to `model`'s spaces, so it must
+be rebuilt when the terrain or the grid changes.
 """
-mutable struct Tracers{R, X <: AbstractRange, Z <: AbstractRange}
-    x::Vector{Float64}
-    z::Vector{Float64}
+struct WindGrid{R, X <: AbstractRange, Z <: AbstractRange}
     remapper::R
     xs::X
     zs::Z
     uw::Array{Float64, 3}
 end
 
-function Tracers(model::Model; nx = 32, nz = 10, z_max = 0.6 * model.cfg.Lz)
+function WindGrid(model::Model)
     cfg = model.cfg
-    # Target grid: two points per node horizontally, two per level vertically,
-    # kept inside the domain so no target falls outside an element.
+    # Kept inside the domain so no target falls outside an element.
     xs = range(-cfg.Lx / 2, cfg.Lx / 2; length = 2 * cfg.nx * cfg.np + 1)
     xs = range(xs[1] + 1e-3, xs[end] - 1e-3; length = length(xs))
     zs = range(Δz(cfg) / 2, cfg.Lz - Δz(cfg) / 2; length = 2 * cfg.nz)
@@ -737,27 +760,32 @@ function Tracers(model::Model; nx = 32, nz = 10, z_max = 0.6 * model.cfg.Lz)
         target_zcoords = Geometry.ZPoint.(collect(zs)),
         buffer_length = 2,
     )
-    uw = zeros(length(xs), length(zs), 2)
-    x = Float64[]
-    z = Float64[]
-    for xi in range(-cfg.Lx / 2, cfg.Lx / 2; length = nx + 1)[1:nx],
-        zj in range(z_max / nz, z_max; length = nz)
+    return WindGrid(remapper, xs, zs, zeros(length(xs), length(zs), 2))
+end
 
-        push!(x, xi)
-        push!(z, max(zj, model.terrain(xi) + 100.0))
-    end
-    return Tracers(x, z, remapper, xs, zs, uw)
+"""
+Remap the current wind of `model` onto `wg`.
+"""
+function remap!(wg::WindGrid, model::Model)
+    Remapping.interpolate!(
+        wg.uw,
+        wg.remapper,
+        [horizontal_velocity(model.Y), vertical_velocity(model.Y)],
+    )
+    return wg
 end
 
 reference_z(model::Model, x, z) =
     (h = model.terrain(x); (z - h) / (1 - h / model.cfg.Lz))
 
 """
-Bilinear sample of the remapped wind at physical `(x, z)`: returns `(u, w)`.
+Bilinear sample of the remapped wind at physical `(x, z)`: returns `(u, w)`,
+or `(NaN, NaN)` at a non-finite position.
 """
-function sample_wind(tr::Tracers, model::Model, x, z)
-    xs, zs, uw = tr.xs, tr.zs, tr.uw
+function sample_wind(wg::WindGrid, model::Model, x, z)
+    xs, zs, uw = wg.xs, wg.zs, wg.uw
     zr = reference_z(model, x, z)
+    isfinite(x) && isfinite(zr) || return (NaN, NaN)
     fx = clamp((x - first(xs)) / step(xs), 0.0, length(xs) - 1 - 1e-9)
     fz = clamp((zr - first(zs)) / step(zs), 0.0, length(zs) - 1 - 1e-9)
     i, j = floor(Int, fx) + 1, floor(Int, fz) + 1
@@ -771,24 +799,46 @@ function sample_wind(tr::Tracers, model::Model, x, z)
 end
 
 """
-    advance!(tr::Tracers, model, Δt)
+    Tracers(model; nx = 32, nz = 10, z_max = 0.6 * model.cfg.Lz)
 
-Move the particles through the current wind by `Δt` seconds with a midpoint
-step; periodic in `x`, kept above the terrain and below the top.
+`nx × nz` passive particles on a regular grid up to `z_max`, lifted above the
+terrain, advected with [`advance!`](@ref).
 """
-function advance!(tr::Tracers, model::Model, Δt)
-    Remapping.interpolate!(
-        tr.uw,
-        tr.remapper,
-        [horizontal_velocity(model.Y), vertical_velocity(model.Y)],
-    )
+struct Tracers
+    x::Vector{Float64}
+    z::Vector{Float64}
+end
+
+function Tracers(model::Model; nx = 32, nz = 10, z_max = 0.6 * model.cfg.Lz)
+    cfg = model.cfg
+    x = Float64[]
+    z = Float64[]
+    for xi in range(-cfg.Lx / 2, cfg.Lx / 2; length = nx + 1)[1:nx],
+        zj in range(z_max / nz, z_max; length = nz)
+
+        push!(x, xi)
+        push!(z, max(zj, model.terrain(xi) + 100.0))
+    end
+    return Tracers(x, z)
+end
+
+"""
+    advance!(tr::Tracers, wg::WindGrid, model, Δt)
+
+Move the particles by `Δt` seconds through the wind last remapped into `wg`,
+with a midpoint step; periodic in `x`, kept above the terrain and below the
+top.
+"""
+function advance!(tr::Tracers, wg::WindGrid, model::Model, Δt)
     Lx, Lz = model.cfg.Lx, model.cfg.Lz
     wrap(x) = x - Lx * round(x / Lx)
     for i in eachindex(tr.x)
         x, z = tr.x[i], tr.z[i]
-        u1, w1 = sample_wind(tr, model, x, z)
+        u1, w1 = sample_wind(wg, model, x, z)
         xm, zm = wrap(x + Δt / 2 * u1), z + Δt / 2 * w1
-        u2, w2 = sample_wind(tr, model, xm, zm)
+        u2, w2 = sample_wind(wg, model, xm, zm)
+        # A non-finite wind (a blown-up state) leaves the particle in place.
+        isfinite(u2) && isfinite(w2) || continue
         x = wrap(x + Δt * u2)
         z = clamp(z + Δt * w2, model.terrain(x) + 10.0, Lz - 10.0)
         tr.x[i], tr.z[i] = x, z
@@ -796,7 +846,53 @@ function advance!(tr::Tracers, model::Model, Δt)
     return tr
 end
 
+"""
+    streamlines(wg::WindGrid, model; n = 24, z_max = 0.65 * model.cfg.Lz, ds)
+
+Instantaneous streamlines of the wind last remapped into `wg`, traced
+downstream from `n` seeds spread evenly in the terrain-following height at
+the upstream (left) edge, where the lateral sponge holds the inflow at
+`(u₀, 0)`. Each line is integrated in arc length (midpoint steps of `ds`)
+until it leaves the domain, reaches the terrain or the top, or stagnates.
+Returns `(x, z)` with the lines separated by `NaN`, ready for a single
+`lines!` call. In a steady flow streamlines and material lines coincide, so
+these trace the displaced isentropes of the mountain wave.
+"""
+function streamlines(
+    wg::WindGrid,
+    model::Model;
+    n = 24,
+    z_max = 0.65 * model.cfg.Lz,
+    ds = Δx(model.cfg) / 2,
+)
+    Lx, Lz = model.cfg.Lx, model.cfg.Lz
+    max_steps = round(Int, 2 * Lx / ds)
+    xs, zs = Float64[], Float64[]
+    x₀ = first(wg.xs)
+    h₀ = model.terrain(x₀)
+    for ζ in range(z_max / n, z_max; length = n)
+        x, z = x₀, h₀ + ζ * (1 - h₀ / Lz)
+        push!(xs, x)
+        push!(zs, z)
+        for _ in 1:max_steps
+            u1, w1 = sample_wind(wg, model, x, z)
+            s1 = hypot(u1, w1)
+            s1 >= 1e-3 || break  # stagnant or non-finite
+            xm, zm = x + ds / 2 * u1 / s1, z + ds / 2 * w1 / s1
+            u2, w2 = sample_wind(wg, model, xm, zm)
+            s2 = hypot(u2, w2)
+            s2 >= 1e-3 || break
+            x, z = x + ds * u2 / s2, z + ds * w2 / s2
+            (x >= last(wg.xs) || x <= x₀ || z >= Lz) && break
+            z <= model.terrain(x) && break
+            push!(xs, x)
+            push!(zs, z)
+        end
+        push!(xs, NaN)
+        push!(zs, NaN)
+    end
+    return xs, zs
+end
+
 total_mass(model::Model) = sum(model.Y.Yc.ρ)
 total_energy(model::Model) = sum(model.Y.Yc.ρe)
-
-end # module

@@ -11,7 +11,7 @@
 #   └──────────┘ └─────────────────────────────────────────────────────────────────┘
 #
 # This file only needs `Makie`; the caller activates a backend (`run.jl` uses
-# GLMakie, the headless test uses CairoMakie). `build_demo` assembles the
+# GLMakie, `run_offline.jl` CairoMakie). `build_demo` assembles the
 # figure and the callbacks; `run_demo` displays it and steps the model from
 # the main task until the window closes, while the render loop runs
 # concurrently. GUI callbacks only mutate parameters or set request flags that
@@ -19,12 +19,6 @@
 
 using Makie
 import ClimaCore.Visualize: fieldheatmap!
-
-include(joinpath(@__DIR__, "model.jl"))
-using .TerrainFlow
-using .TerrainFlow:
-    GridConfig, Params, Model, SampledTerrain, Tracers, GRID_PRESETS,
-    TERRAIN_PRESETS, DIAGNOSTICS
 
 const H_MAX = 3000.0  # tallest terrain the profile axis allows (m)
 const ANOMALIES = (:w, :u′, :θ′, :p′)
@@ -68,15 +62,19 @@ function build_demo(model::Model)
 
     # ------------------------------------------------------------------ state
     running = Observable(false)
+    # Why the run stopped for good (blow-up or error), until the next rebuild.
+    halted = Ref{Union{Nothing, String}}(nothing)
     quantity = Observable(:w)
     contrast = Observable(1.0)
     steps_per_frame = Observable(10)
     reset_requested = Ref(false)
     rebuild_cfg = Ref{Union{Nothing, GridConfig}}(nothing)
     pending_terrain = Ref{Any}(nothing)
-    current = Ref(model)
+    current = Ref{Model}(model)  # a resolution change alters the Model type
 
-    field = Observable(TerrainFlow.diagnose(model, quantity[]))
+    # Untyped because a resolution change alters the field type (the number of
+    # levels is a type parameter); the heatmap is then replaced, see `rebuild!`.
+    field = Observable{Any}(TerrainFlow.diagnose(model, quantity[]))
     crange = Observable(color_range(quantity[], field[], contrast[]))
     cmap = Observable(color_map(quantity[]))
     status = Observable("")
@@ -107,8 +105,14 @@ function build_demo(model::Model)
     )
     linkxaxes!(ax, ax_profile)
 
-    hm = fieldheatmap!(ax, field; colormap = cmap, colorrange = crange)
-    Colorbar(fig[1, 3], hm; label = @lift(DIAGNOSTICS[$quantity]))
+    heatmap!() = fieldheatmap!(ax, field; colormap = cmap, colorrange = crange)
+    hm = Ref{Any}(heatmap!())
+    Colorbar(
+        fig[1, 3];
+        colormap = cmap,
+        limits = crange,
+        label = @lift(DIAGNOSTICS[$quantity]),
+    )
     xs_vec = collect(xs)
     # The grid uses the slope-limited terrain, which can differ from the drawn
     # profile; the band in the flow axis shows what the model actually sees.
@@ -116,6 +120,29 @@ function build_demo(model::Model)
     terrain_band = band!(ax, xs_vec, zero(xs_vec), model_profile; color = :black)
     translate!(terrain_band, 0, 0, 10)
     limits!(ax, -cfg.Lx / 2, cfg.Lx / 2, 0, cfg.Lz)
+
+    # Wind remapped to a regular grid once per frame, shared by the tracer
+    # particles and the flowlines.
+    wind = Ref{WindGrid}(WindGrid(model))
+    TerrainFlow.remap!(wind[], model)
+
+    # Flowlines: instantaneous streamlines traced from the upstream edge.
+    show_flowlines = Observable(true)
+    flowline_points = Observable(Point2f[])
+    function update_flowlines!()
+        x, z = TerrainFlow.streamlines(wind[], current[])
+        flowline_points[] = Point2f.(x, z)
+        return nothing
+    end
+    update_flowlines!()
+    flowline_plot = lines!(
+        ax,
+        flowline_points;
+        color = (:black, 0.6),
+        linewidth = 1.2,
+        visible = show_flowlines,
+    )
+    translate!(flowline_plot, 0, 0, 15)
 
     # Tracer particles, advected once per frame.
     tracers = Ref(Tracers(model))
@@ -154,7 +181,8 @@ function build_demo(model::Model)
 
     run_button = Button(controls[nextrow(), 1]; label = "Run", tellwidth = false)
     on(run_button.clicks) do _
-        running[] = !running[]
+        # A halted run cannot continue; Reset clears it.
+        running[] = !running[] && isnothing(halted[])
     end
     on(running) do r
         run_button.label = r ? "Pause" : "Run"
@@ -188,6 +216,7 @@ function build_demo(model::Model)
     on(quantity_menu.selection) do sel
         isnothing(sel) && return
         quantity[] = sel
+        isnothing(halted[]) || return  # shown after the next reset
         cmap[] = color_map(sel)
         field[] = TerrainFlow.diagnose(current[], sel)
         crange[] = color_range(sel, field[], contrast[])
@@ -230,9 +259,19 @@ function build_demo(model::Model)
         fontsize = 12,
     )
 
-    tracer_row = GridLayout(controls[nextrow(), 1]; tellwidth = false)
-    tracer_toggle = Toggle(tracer_row[1, 1]; active = show_tracers[])
-    Label(tracer_row[1, 2], "tracers"; tellwidth = false, halign = :left)
+    toggle_row = GridLayout(controls[nextrow(), 1]; tellwidth = false)
+    flowline_toggle = Toggle(toggle_row[1, 1]; active = show_flowlines[])
+    Label(toggle_row[1, 2], "flowlines"; tellwidth = false, halign = :left)
+    tracer_toggle = Toggle(toggle_row[1, 3]; active = show_tracers[])
+    Label(toggle_row[1, 4], "tracers"; tellwidth = false, halign = :left)
+    on(flowline_toggle.active) do active
+        show_flowlines[] = active
+        # The wind grid is only refreshed while something uses it.
+        if active
+            TerrainFlow.remap!(wind[], current[])
+            update_flowlines!()
+        end
+    end
     on(tracer_toggle.active) do active
         show_tracers[] = active
     end
@@ -306,22 +345,35 @@ function build_demo(model::Model)
     end
 
     # ------------------------------------------------------------------ actions
+    # Once halted, the state is not plotted again (it may hold NaNs or a
+    # negative temperature); the last good frame stays on screen.
     function refresh!()
         m = current[]
+        t = string("t = ", round(TerrainFlow.current_time(m) / 60; digits = 1), " min")
+        if !isnothing(halted[])
+            status[] = string(t, "\n", halted[])
+            return nothing
+        end
         field[] = TerrainFlow.diagnose(m, quantity[])
         crange[] = color_range(quantity[], field[], contrast[])
         h_max = maximum(m.terrain.hs)
         w_max = maximum(abs, parent(TerrainFlow.diagnose(m, :w)))
         status[] = string(
-            "t = ", round(TerrainFlow.current_time(m) / 60; digits = 1), " min\n",
+            t, "\n",
             "N h / U = ", round(TerrainFlow.froude_parameter(m.p, h_max); digits = 2),
             "\n",
             "max |w| = ", round(w_max; digits = 2), " m/s",
         )
-        if !isfinite(w_max)
-            running[] = false
-            status[] *= "\nblew up: lower the terrain,\nraise diffusion, then Reset"
-        end
+        return nothing
+    end
+
+    """
+    Stop the run until the next reset or rebuild, showing `reason`.
+    """
+    function halt!(reason)
+        halted[] = reason
+        running[] = false
+        refresh!()
         return nothing
     end
 
@@ -331,22 +383,31 @@ function build_demo(model::Model)
     function rebuild!()
         was_running = running[]
         running[] = false
+        # Take the requests first, so a rebuild that throws is not retried on
+        # every pass of the main loop.
+        new_cfg, terrain = rebuild_cfg[], pending_terrain[]
+        rebuild_cfg[] = pending_terrain[] = nothing
+        reset_requested[] = false
         m = current[]
-        if !isnothing(rebuild_cfg[])
-            new_cfg = rebuild_cfg[]
-            rebuild_cfg[] = nothing
+        if !isnothing(new_cfg)
             new_p = TerrainFlow.default_params(new_cfg; u₀ = m.p.u₀, N = m.p.N)
             diffusivity_base[] = (new_p.κ₂, new_p.κ₄)
             new_p.κ₂ *= diff_slider.value[]
             new_p.κ₄ *= diff_slider.value[]
             current[] = Model(new_cfg, new_p, SampledTerrain(xs, copy(profile[])))
+            # The plot's inputs are typed by the first field it was given.
+            delete!(ax, hm[])
+            field.val = TerrainFlow.diagnose(current[], quantity[])
+            hm[] = heatmap!()
         else
-            terrain = something(pending_terrain[], m.terrain)
-            TerrainFlow.reset!(m; terrain)
+            TerrainFlow.reset!(m; terrain = something(terrain, m.terrain))
         end
-        pending_terrain[] = nothing
-        reset_requested[] = false
+        cmap[] = color_map(quantity[])  # in case the menu changed while halted
+        halted[] = nothing
         model_profile[] = Float64.(current[].terrain.(xs))
+        wind[] = WindGrid(current[])
+        TerrainFlow.remap!(wind[], current[])
+        update_flowlines!()
         tracers[] = Tracers(current[])
         tracer_points[] = Point2f.(tracers[].x, tracers[].z)
         refresh!()
@@ -354,13 +415,37 @@ function build_demo(model::Model)
         return nothing
     end
 
-    function step!()
+    # With `interruptible = true` the substeps yield to the render loop, which
+    # is where GLMakie polls mouse and keyboard events, and stop early when
+    # the run is paused or a rebuild is requested. Without this a click waits
+    # for the whole frame (all substeps plus the redraw) to finish.
+    #
+    # The state is checked after every substep, so a blow-up stops the run
+    # before anything (diagnostics, tracers, flowlines) reads a NaN state.
+    function step!(; interruptible = false)
         m = current[]
-        TerrainFlow.step!(m, steps_per_frame[])
+        isnothing(halted[]) || return nothing
+        n = 0
+        while n < steps_per_frame[]
+            TerrainFlow.step!(m, 1)
+            n += 1
+            if !TerrainFlow.is_healthy(m)
+                halt!("blew up: lower the terrain,\nraise diffusion, then Reset")
+                return nothing
+            end
+            if interruptible
+                yield()
+                (running[] && !needs_rebuild()) || break
+            end
+        end
+        if show_tracers[] || show_flowlines[]
+            TerrainFlow.remap!(wind[], m)
+        end
         if show_tracers[]
-            TerrainFlow.advance!(tracers[], m, steps_per_frame[] * m.dt)
+            TerrainFlow.advance!(tracers[], wind[], m, n * m.dt)
             tracer_points[] = Point2f.(tracers[].x, tracers[].z)
         end
+        show_flowlines[] && update_flowlines!()
         refresh!()
         return nothing
     end
@@ -372,6 +457,7 @@ function build_demo(model::Model)
         rebuild!,
         needs_rebuild,
         step!,
+        halt!,
         running,
         model = () -> current[],
     )
@@ -385,17 +471,42 @@ model.
 """
 function run_demo(; grid::Symbol = :coarse, terrain::Symbol = :agnesi)
     cfg = GRID_PRESETS[grid]
+    @info "Building the model and compiling the time step (first run: ~30 s)"
     model = Model(cfg, TerrainFlow.default_params(cfg), TERRAIN_PRESETS[terrain]())
+    # Compile the time step now rather than on the first click of Run, which
+    # would otherwise freeze the window for several seconds.
+    TerrainFlow.step!(model, 1)
+    TerrainFlow.reset!(model)
     demo = build_demo(model)
     screen = display(demo.fig)
     while isopen(screen)
+        run_frame!(demo)
+    end
+    return demo.model()
+end
+
+"""
+    run_frame!(demo)
+
+One pass of the main loop: apply pending rebuilds, then step and redraw if
+running. An error (from the model, a diagnostic, or a rebuild on an odd
+terrain) is logged and halts the run until Reset instead of closing the
+window.
+"""
+function run_frame!(demo)
+    try
         demo.needs_rebuild() && demo.rebuild!()
         if demo.running[]
-            demo.step!()
+            demo.step!(; interruptible = true)
             yield()
         else
             sleep(0.05)
         end
+    catch err
+        err isa InterruptException && rethrow()
+        @error "Demo step failed; paused until Reset" exception =
+            (err, catch_backtrace())
+        demo.halt!("error: $(nameof(typeof(err)))\n(see terminal), press Reset")
     end
-    return demo.model()
+    return nothing
 end

@@ -18,9 +18,15 @@ coordinate.
 Needs a desktop with OpenGL (GLMakie). From the repository root:
 
 ```
-julia --project=examples/interactive -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+julia --project=examples/interactive -e 'using Pkg; Pkg.develop([PackageSpec(path = "."), PackageSpec(path = "examples/interactive/TerrainFlow")]); Pkg.instantiate()'
 julia --project=examples/interactive examples/interactive/run.jl
 ```
+
+The first launch precompiles the `TerrainFlow` package (about 2 minutes, a
+~600 MB cache); later launches open the window in about 12 s instead of about
+a minute. Editing ClimaCore or `TerrainFlow` triggers the precompilation
+again on the next launch; `julia --project=examples/interactive -e 'using
+Pkg; Pkg.precompile()'` does it ahead of time.
 
 Optional arguments select the grid (`coarse`, `fine`, `finest`) and the
 initial terrain preset (`flat`, `agnesi`, `schar`, `plateau`, `twin`):
@@ -41,7 +47,7 @@ julia --project=examples/interactive examples/interactive/run_offline.jl schar 1
 | Control            | Effect                                                                 |
 |--------------------|------------------------------------------------------------------------|
 | Run / Pause        | start or stop stepping                                                 |
-| Reset              | back to the initial state on the current terrain                       |
+| Reset              | back to the initial state on the current terrain; also clears a halted (blown-up) run |
 | terrain preset     | load a preset profile and restart                                      |
 | profile axis       | click-drag to draw terrain; the model restarts when the mouse is released |
 | plot               | diagnostic shown: `w`, `u`, `u′`, `θ`, `θ′`, `p′`, dye `q`              |
@@ -49,6 +55,7 @@ julia --project=examples/interactive examples/interactive/run_offline.jl schar 1
 | diffusion ×        | scales the second- and fourth-order diffusivities; applied live        |
 | steps/frame        | model steps between redraws (model speed vs. smoothness)               |
 | contrast           | shrinks the colour range                                               |
+| flowlines          | instantaneous streamlines of (u, w), traced from the upstream edge     |
 | tracers            | show passive particles advected by the resolved wind; reseed resets them to a grid |
 | resolution         | rebuilds the model on another grid                                     |
 
@@ -59,8 +66,11 @@ blocked upstream.
 
 ## Files
 
-- `model.jl` — the model (`TerrainFlow` module): spaces on a drawn terrain,
-  initial state, tendency, surface constraint, integrator, diagnostics. No
-  Makie dependency.
-- `gui.jl` — the GLMakie window.
-- `run.jl` — entry point. `run_offline.jl` — headless driver.
+- `TerrainFlow/` — the demo as a package, so its compiled code is cached:
+  - `src/model.jl` — the model: spaces on a drawn terrain, initial state,
+    tendency, surface constraint, integrator, diagnostics, tracers and
+    streamlines. Uses no Makie.
+  - `src/gui.jl` — the Makie window (backend chosen by the caller).
+  - `src/precompile.jl` — the precompile workload: steps every grid preset
+    and assembles the figure.
+- `run.jl` — entry point (GLMakie). `run_offline.jl` — headless driver (CairoMakie).
