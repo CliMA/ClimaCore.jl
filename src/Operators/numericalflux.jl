@@ -748,6 +748,33 @@ function ghost_state(::ReflectingWallBC, normal, argvals⁻)
 end
 
 """
+    ExtrapolationBC <: HorizontalBoundaryCondition
+
+Transmissive (zero-gradient) open boundary condition: the ghost state is the
+interior state, so the boundary flux reduces to the physical flux `F(y⁻)' * n̂`.
+"""
+struct ExtrapolationBC <: HorizontalBoundaryCondition end
+
+ghost_state(::ExtrapolationBC, normal, argvals⁻) = argvals⁻
+
+"""
+    PrescribedBC(f) <: HorizontalBoundaryCondition
+
+Boundary condition with a prescribed exterior state `y⁺ = f(normal, argvals⁻)`,
+imposed weakly through the numerical flux. With an upwind flux (e.g. Roe), a
+far-field `f` yields a characteristic inflow/outflow boundary: incoming
+characteristics take the prescribed state, outgoing ones the interior state.
+`f` may read any argument value (e.g. a coordinate or reference-state field
+passed to the flux operator), so it can vary along the boundary.
+"""
+struct PrescribedBC{F} <: HorizontalBoundaryCondition
+    f::F
+end
+
+ghost_state(bc::PrescribedBC, normal, argvals⁻) =
+    (bc.f(normal, argvals⁻), argvals⁻[2:end]...)
+
+"""
     add_numerical_flux_boundary!(fn, dydt, args...)
 
 Add the numerical flux at the domain-boundary faces of the spectral element

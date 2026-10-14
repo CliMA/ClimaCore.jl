@@ -60,9 +60,17 @@ flux at a boundary face needs the exterior state:
   - `Operators.ReflectingWallBC()`: the exterior state mirrors the normal
     momentum, `Operators.ghost_state(bc, normal, argvals⁻)`, so the wall passes
     no normal flux.
+  - `Operators.ExtrapolationBC()`: the exterior state is the interior state
+    (transmissive outflow).
+  - `Operators.PrescribedBC(f)`: the exterior state is `f(normal, argvals⁻)`,
+    e.g. a far-field or inflow state; with an upwind flux this is a
+    characteristic open boundary.
   - A one-sided flux function `boundary_numflux(normal, argvals⁻)` passed to
     `tendency_completion`, for any other closure; [`examples/plane/bickleyjet.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/plane/bickleyjet.jl)
-    builds a reflecting wall this way for its `noslip` case.
+    builds a reflecting wall this way for its `noslip` case, and
+    [`examples/plane/bickleyjet_open_boundaries.jl`](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/plane/bickleyjet_open_boundaries.jl)
+    builds open (inflow/outflow) boundaries from `ghost_state` of an
+    `ExtrapolationBC` or `PrescribedBC`.
 
 With the boundary flux omitted, DG boundary faces contribute a zero flux,
 which is a closed-boundary closure.

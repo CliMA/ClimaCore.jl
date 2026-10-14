@@ -76,4 +76,6 @@ HorizontalBoundaryCondition
 ghost_state
 PeriodicBC
 ReflectingWallBC
+ExtrapolationBC
+PrescribedBC
 ```
