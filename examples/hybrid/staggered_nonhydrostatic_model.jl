@@ -1,9 +1,11 @@
-# The staggered nonhydrostatic model shared by the `hybrid/` cases: prognostic
-# density, total energy, horizontal momentum at cell centers, and vertical
-# velocity at cell faces. Defines the explicit tendency, the implicit tendency
-# for the vertical acoustic terms, and the Jacobian that the IMEX schemes solve
-# against. Including this file requires the constants listed below to already be
-# defined, which each case file does before the `include`.
+# The staggered nonhydrostatic model shared by the `hybrid/` cases: density and
+# total energy at cell centers, horizontal momentum at centers and vertical
+# momentum at faces. Defines the explicit and implicit (vertical acoustic)
+# tendencies and the Jacobian; the case file defines the constants below first.
+#
+# The state selects the form: velocities `uₕ`, `w` (vector-invariant; CG, or DG
+# via `dg_vector_invariant_tendency.jl`) or momenta `ρuₕ`, `ρw` (flux form; DG
+# via `dg_tendency.jl`).
 using LinearAlgebra: ×, norm, norm_sqr, dot
 using ClimaCore: Operators, Fields
 
@@ -87,6 +89,60 @@ const ᶠno_flux_row3 = Operators.SetBoundaryOperator(
 
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 
+##
+## Reference state of the Exner pressure gradient (DG forms)
+##
+# Dry reference state, a function of pressure: temperature
+# `T_r = T_min + (T_sfc - T_min) Π^7`, potential temperature `θ_r = T_r / Π`,
+# and the geopotential `Φ_r` that holds it in hydrostatic balance,
+# `c_pd θ_r ∇Π + ∇Φ_r = 0`. The pressure gradient plus gravity is then
+# `c_pd θ′ ∇Π + ∇(Φ - Φ_r)` with `θ′ = θ - θ_r`: only the departure from the
+# reference is discretized.
+const T_sfc_ref = FT(288)
+const T_min_ref = FT(215)
+const T_ref_exponent = 7
+const p_msl = FT(101325)
+exner(p) = (p / p_0)^κ
+temperature_ref(p) = T_min_ref + (T_sfc_ref - T_min_ref) * exner(p)^T_ref_exponent
+theta_ref(p) = temperature_ref(p) / exner(p)
+phi_ref(p) =
+    -cp_d * (
+        T_min_ref * log(exner(p)) +
+        (T_sfc_ref - T_min_ref) / T_ref_exponent * (exner(p)^T_ref_exponent - 1)
+    )
+# Dry potential temperature departure from the reference, `p = ρ R_d T`.
+theta_prime(ρ, p) = p / (ρ * R_d) / exner(p) - theta_ref(p)
+# Reference pressure at geopotential `Φ` (fixed-point inversion of `Φ_r`).
+function pressure_ref(Φ)
+    p = p_msl * exp(-Φ / (R_d * T_sfc_ref))
+    for _ in 1:8
+        p *= exp((phi_ref(p) - Φ) / (R_d * temperature_ref(p)))
+    end
+    return p
+end
+
+##
+## The horizontal momentum variable
+##
+# `uₕ`, `w` (vector-invariant) or `ρuₕ`, `ρw` (flux form), read off the state.
+
+struct VectorInvariantForm end
+struct FluxForm end
+momentum_form(Yc) =
+    hasfield(eltype(Yc), :ρuₕ) ? FluxForm() : VectorInvariantForm()
+horizontal_momentum(Yc) = hasfield(eltype(Yc), :ρuₕ) ? Yc.ρuₕ : Yc.uₕ
+vertical_momentum(Yf) = hasfield(eltype(Yf), :ρw) ? Yf.ρw : Yf.w
+
+# Flux-form velocities, into cache scratch.
+function flux_form_velocities!(Y, p)
+    @. p.ᶜuₕ = Y.c.ρuₕ / Y.c.ρ
+    @. p.ᶠw = Y.f.ρw / ᶠinterp(Y.c.ρ)
+    return p.ᶜuₕ, p.ᶠw
+end
+
+include("dg_tendency.jl")
+include("dg_vector_invariant_tendency.jl")
+
 get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
     default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
@@ -94,12 +150,12 @@ get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
 
 function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
     ᶜcoord = ᶜlocal_geometry.coordinates
-    if eltype(ᶜcoord) <: Geometry.LatLongZPoint
-        ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
+    ᶜf_coriolis = if eltype(ᶜcoord) <: Geometry.LatLongZPoint
+        @. 2 * Ω * sind(ᶜcoord.lat)
     else
-        ᶜf = map(_ -> f, ᶜlocal_geometry)
+        map(_ -> f, ᶜlocal_geometry)
     end
-    ᶜf = @. CT3(Geometry.WVector(ᶜf))
+    ᶜf = @. CT3(Geometry.WVector(ᶜf_coriolis))
     ᶠupwind_product, ᶠupwind_product_matrix, ᶠno_flux_row =
         if upwinding_mode == :first_order
             ᶠupwind_product1, ᶠupwind_product1_matrix, ᶠno_flux_row1
@@ -109,6 +165,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             nothing, nothing, nothing
         end
     return (;
+        dg_cache(ᶜlocal_geometry, ᶠlocal_geometry, ᶜf_coriolis, Y)...,
         ᶜuvw = similar(ᶜlocal_geometry, C123{FT}),
         ᶜK = similar(ᶜlocal_geometry, FT),
         ᶜΦ = grav .* ᶜcoord.z,
@@ -129,15 +186,20 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
             c = Spaces.create_dss_buffer(Y.c),
             f = Spaces.create_dss_buffer(Y.f),
             χ = Spaces.create_dss_buffer(Y.c.ρ), # for hyperdiffusion
-            χw = Spaces.create_dss_buffer(Y.f.w.components.data.:1), # for hyperdiffusion
-            χuₕ = Spaces.create_dss_buffer(Y.c.uₕ), # for hyperdiffusion
+            χw = Spaces.create_dss_buffer(
+                vertical_momentum(Y.f).components.data.:1,
+            ), # for hyperdiffusion
+            χuₕ = Spaces.create_dss_buffer(horizontal_momentum(Y.c)), # for hyperdiffusion
         ),
     )
 end
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
-function implicit_tendency!(Yₜ, Y, p, t)
+implicit_tendency!(Yₜ, Y, p, t) =
+    implicit_tendency!(momentum_form(Y.c), Yₜ, Y, p, t)
+
+function implicit_tendency!(::VectorInvariantForm, Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -159,8 +221,40 @@ function implicit_tendency!(Yₜ, Y, p, t)
 
     Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
 
-    @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
+    if Spaces.discretization(axes(Y.c)) isa Grids.DG
+        # Exner form
+        @. Yₜ.f.w = -(
+            ᶠgradᵥ(ᶜΦ) - ᶠgradᵥ(phi_ref(ᶜp)) +
+            cp_d * ᶠinterp(theta_prime(ᶜρ, ᶜp)) * ᶠgradᵥ(exner(ᶜp)) +
+            ᶠgradᵥ(ᶜK)
+        )
+    else
+        @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
+    end
 
+    return Yₜ
+end
+
+# Flux-form vertical acoustics: mass and energy fluxes linear in `ρw`, and the
+# Exner pressure gradient plus gravity.
+function implicit_tendency!(::FluxForm, Yₜ, Y, p, t)
+    ᶜρ = Y.c.ρ
+    ᶠρw = Y.f.ρw
+    (; ᶜK, ᶜΦ, ᶜp) = p
+    ᶜuₕ, ᶠw = flux_form_velocities!(Y, p)
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
+
+    @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠρw))
+    @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠρw * ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ)))
+    Yₜ.c.ρuₕ .= (zero(eltype(Yₜ.c.ρuₕ)),)
+    # Exner form, times the face density
+    @. Yₜ.f.ρw = -(
+        ᶠinterp(ᶜρ) * (
+            ᶠgradᵥ(ᶜΦ) - ᶠgradᵥ(phi_ref(ᶜp)) +
+            cp_d * ᶠinterp(theta_prime(ᶜρ, ᶜp)) * ᶠgradᵥ(exner(ᶜp))
+        )
+    )
     return Yₜ
 end
 
@@ -177,7 +271,24 @@ function remaining_tendency!(Yₜ, Y, p, t)
     return Yₜ
 end
 
-function default_remaining_tendency!(Yₜ, Y, p, t)
+# Explicit tendency by discretization and form.
+default_remaining_tendency!(Yₜ, Y, p, t) = default_remaining_tendency!(
+    Spaces.discretization(axes(Y.c)),
+    momentum_form(Y.c),
+    Yₜ,
+    Y,
+    p,
+    t,
+)
+
+function default_remaining_tendency!(
+    ::Grids.CG,
+    ::VectorInvariantForm,
+    Yₜ,
+    Y,
+    p,
+    t,
+)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -225,7 +336,55 @@ end
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
-function implicit_equation_jacobian!(j, Y, p, δtγ, t)
+implicit_equation_jacobian!(j, Y, p, δtγ, t) =
+    implicit_equation_jacobian!(momentum_form(Y.c), j, Y, p, δtγ, t)
+
+# Flux-form Jacobian: `ᶜK` and `h_tot` frozen, dry `∂p/∂ρe` and `∂p/∂ρ`; the
+# Exner gradient is linearized as the equivalent `∂ᵥp + ᶠinterp(ρ) ∂ᵥΦ`.
+function implicit_equation_jacobian!(::FluxForm, j, Y, p, δtγ, t)
+    (; ∂Yₜ∂Y, ∂R∂Y) = j
+    ᶜρ = Y.c.ρ
+    (; ᶜK, ᶜΦ, ᶜp) = p
+    ᶜuₕ, ᶠw = flux_form_velocities!(Y, p)
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
+
+    ᶜρ_name = @name(c.ρ)
+    ᶜ𝔼_name = @name(c.ρe)
+    ᶠ𝕄_name = @name(f.ρw)
+    ᶠgⁱʲ = Fields.local_geometry_field(Y.f).gⁱʲ
+    g³³(gⁱʲ) = reshape(
+        gⁱʲ,
+        Geometry.Contravariant3Axis(),
+        Geometry.Contravariant3Axis(),
+    )
+
+    ∂ᶜρₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜρ_name, ᶠ𝕄_name]
+    ∂ᶜ𝔼ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜ𝔼_name, ᶠ𝕄_name]
+    ∂ᶠ𝕄ₜ∂ᶜρ = ∂Yₜ∂Y[ᶠ𝕄_name, ᶜρ_name]
+    ∂ᶠ𝕄ₜ∂ᶜ𝔼 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶜ𝔼_name]
+    ∂ᶠ𝕄ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶠ𝕄_name]
+
+    # ᶜρₜ = -ᶜdivᵥ(ᶠρw), ᶜρeₜ = -ᶜdivᵥ(ᶠρw * ᶠinterp(ᶜh_tot))
+    @. ∂ᶜρₜ∂ᶠ𝕄 = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(g³³(ᶠgⁱʲ))
+    @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
+        -(ᶜdivᵥ_matrix()) *
+        DiagonalMatrixRow(ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ) * g³³(ᶠgⁱʲ))
+    # ᶠρwₜ = -ᶠgradᵥ(ᶜp) - ᶠinterp(ᶜρ) * ᶠgradᵥ(ᶜΦ), with
+    # ∂p/∂ρe = R_d / cv_d and ∂p/∂ρ = R_d * (T_tri - (ᶜK + ᶜΦ) / cv_d)
+    @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 = -(ᶠgradᵥ_matrix() * R_d / cv_d)
+    @. ∂ᶠ𝕄ₜ∂ᶜρ =
+        -(ᶠgradᵥ_matrix()) *
+        DiagonalMatrixRow(R_d * (T_tri - (ᶜK + ᶜΦ) / cv_d)) -
+        DiagonalMatrixRow(ᶠgradᵥ(ᶜΦ)) * ᶠinterp_matrix()
+    # `ρw` enters its own tendency only through the explicit advection.
+    ∂ᶠ𝕄ₜ∂ᶠ𝕄 .= (zero(eltype(∂ᶠ𝕄ₜ∂ᶠ𝕄)),)
+
+    I = one(∂R∂Y)
+    @. ∂R∂Y = FT(δtγ) * ∂Yₜ∂Y - I
+end
+
+function implicit_equation_jacobian!(::VectorInvariantForm, j, Y, p, δtγ, t)
     (; ∂Yₜ∂Y, ∂R∂Y, flags) = j
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ

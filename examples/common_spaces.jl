@@ -2,7 +2,7 @@
 # the cubed sphere. They exist so the cases can state a resolution without
 # repeating the Domain -> Mesh construction each time.
 using ClimaComms
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Quadratures
+using ClimaCore: Geometry, Domains, Grids, Meshes, Topologies, Spaces, Quadratures
 
 function periodic_line_mesh(; x_max, x_elem)
     domain = Domains.IntervalDomain(
@@ -34,22 +34,27 @@ function cubed_sphere_mesh(; radius, h_elem)
     return Meshes.EquiangularCubedSphere(domain, h_elem)
 end
 
+# `discretization` selects the Galerkin form: `Grids.CG()` for nodes shared
+# across element boundaries and completed by DSS, `Grids.DG()` for
+# element-local nodes completed by an interface numerical flux.
 function make_horizontal_space(
     mesh,
     npoly,
     context::ClimaComms.SingletonCommsContext,
-    VIJH = DataLayouts.VIJFH,
+    VIJH = DataLayouts.VIJFH;
+    discretization = Grids.CG(),
 )
     quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
         topology = Topologies.IntervalTopology(ClimaComms.device(context), mesh)
-        space = Spaces.SpectralElementSpace1D(topology, quad)
+        space = Spaces.SpectralElementSpace1D(topology, quad; discretization)
     elseif mesh isa Meshes.AbstractMesh2D
         topology = Topologies.Topology2D(context, mesh)
         space = Spaces.SpectralElementSpace2D(
             topology,
             quad;
             VIJH,
+            discretization,
         )
     end
     return space
@@ -59,7 +64,8 @@ function make_horizontal_space(
     mesh,
     npoly,
     comms_ctx::ClimaComms.MPICommsContext,
-    VIJH = DataLayouts.VIJFH,
+    VIJH = DataLayouts.VIJFH;
+    discretization = Grids.CG(),
 )
     quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
@@ -70,6 +76,7 @@ function make_horizontal_space(
             topology,
             quad;
             VIJH,
+            discretization,
         )
     end
     return space

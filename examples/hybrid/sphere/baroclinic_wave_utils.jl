@@ -90,16 +90,52 @@ function sphere_center_initial_condition(
         @. v₀ += δv(long, lat, z)
     end
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
-    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     ᶜρe = @. ᶜρ *
              (cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z)
+    # Covariant `uₕ` (vector-invariant) or orthonormal `ρuₕ` (flux form).
+    if momentum_form_name == "flux"
+        ᶜρuₕ = @. ᶜρ * ᶜuₕ_local
+        return NamedTuple{(:ρ, :ρe, :ρuₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜρuₕ))
+    end
+    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
 end
 
+# The horizontal velocity of a saved state, for diagnostics.
+center_velocity(Yc) =
+    momentum_form(Yc) isa FluxForm ? (@. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)) :
+    (@. Geometry.UVVector(Yc.uₕ))
+
+# The dry temperature diagnosed from the total energy of a saved state. `ᶜw`
+# is placed on the space of `Y.c`, a separate grid from that of `Y.f` on the CPU.
+function center_temperature(Y)
+    ᶜΦ = grav .* Fields.coordinate_field(Y.c).z
+    ᶜuₕ = center_velocity(Y.c)
+    ᶠm = vertical_momentum(Y.f)
+    ᶜm_values = Fields.field_values(@. Geometry.WVector(ᶜinterp(ᶠm)))
+    ᶜm = Fields.Field(ᶜm_values, axes(Y.c))
+    ᶜw = momentum_form(Y.c) isa FluxForm ? (@. ᶜm / Y.c.ρ) : ᶜm
+    ᶜK = @. (norm_sqr(ᶜuₕ) + norm_sqr(ᶜw)) / 2
+    return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
+end
+
+# Temperature animation on one level, on a fixed color scale.
+function temperature_animation(sol, output_dir; level = 1)
+    ᶜTs = map(center_temperature, sol.u)
+    T_min = minimum(T -> minimum(Fields.level(T, level)), ᶜTs)
+    T_max = maximum(T -> maximum(Fields.level(T, level)), ᶜTs)
+    anim = Plots.@animate for ᶜT in ᶜTs
+        Plots.plot(ᶜT; level, clim = (T_min, T_max))
+    end
+    Plots.mp4(anim, joinpath(output_dir, "T.mp4"), fps = 5)
+end
+
+# At rest in the vertical (`w` or `ρw`).
 function face_initial_condition(local_geometry)
     (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
-    return NamedTuple{(:w,)}.(tuple.(w))
+    name = momentum_form_name == "flux" ? :ρw : :w
+    return NamedTuple{(name,)}.(tuple.(w))
 end
 
 ##

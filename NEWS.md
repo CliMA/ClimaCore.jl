@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on CG or
+  DG from one driver (`DISCRETIZATION=DG`). The DG flux form
+  (`examples/hybrid/dg_tendency.jl`) carries `ρuₕ` and `ρw`, with
+  Kennedy-Gruber flux differencing and Roe or Rusanov interface fluxes
+  (`DG_FLUX`); `MOMENTUM_FORM=vector_invariant` runs the vector-invariant form
+  on DG instead, completed by `Operators.complete_tendency!`. Both DG forms use
+  a reference-state Exner pressure gradient.
+
 v1.0.4
 -------
 

@@ -37,10 +37,18 @@ Environment variables read by the driver:
 * `OUTPUT_DIR`: where JLD2 output is written.
 * `RESTART_FILE`: a JLD2 file from a previous run to restart from.
 * `FLOAT_TYPE`: `Float32` (default) or `Float64`.
+* `DISCRETIZATION`: `CG` (default) or `DG` (interface numerical fluxes, no
+  hyperdiffusion; output in a `_dg`-suffixed directory).
+* `DG_FLUX`: `kg-roe` (default), `kg-rusanov` (Kennedy-Gruber flux
+  differencing with a Roe or Rusanov interface flux) or `rusanov` (weak form).
+* `MOMENTUM_FORM`: on DG, `flux` (default; `ρuₕ`, `ρw`, `dg_tendency.jl`) or
+  `vector_invariant` (`uₕ`, `w`, `dg_vector_invariant_tendency.jl`; output in
+  a `_dg_vi`-suffixed directory).
+* `H_ELEM`, `Z_ELEM`, `T_END`, `DT`, `ODE_ALGORITHM`: resolution, run length,
+  timestep and scheme of the baroclinic waves (`SSP333` by default).
 
-Resolution, timestep, and output frequency are set in the case file itself
-(e.g. `sphere/baroclinic_wave_rhoe.jl`); `dt_save_to_disk = FT(0)` disables
-JLD2 output.
+Defaults are set in the case files; `dt_save_to_disk = FT(0)` disables JLD2
+output.
 
 ## Remapping output to a lat/lon grid
 
