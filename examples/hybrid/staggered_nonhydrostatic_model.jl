@@ -207,6 +207,25 @@ function implicit_tendency!(::VectorInvariantForm, Yₜ, Y, p, t)
 
     @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
 
+    if Spaces.discretization(axes(Y.c)) isa Grids.DG
+        # The mass flux `ᶠinterp(ρJ) / ᶠJ * w`, which also carries the face
+        # specific enthalpy, and the Exner pressure gradient.
+        ᶜJ = Fields.local_geometry_field(axes(Y.c)).J
+        ᶠJ = Fields.local_geometry_field(axes(Y.f)).J
+        @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, ᶜρ)
+        @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜJ) / ᶠJ * ᶠw))
+        @. Yₜ.c.ρe = -(ᶜdivᵥ(
+            ᶠinterp(ᶜρ * ᶜJ) / ᶠJ * ᶠw * ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ),
+        ))
+        Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
+        @. Yₜ.f.w = -(
+            ᶠgradᵥ(ᶜΦ) - ᶠgradᵥ(phi_ref(ᶜp)) +
+            cp_d * ᶠinterp(theta_prime(ᶜρ, ᶜp)) * ᶠgradᵥ(exner(ᶜp)) +
+            ᶠgradᵥ(ᶜK)
+        )
+        return Yₜ
+    end
+
     @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw))
 
     ᶜρe = Y.c.ρe
@@ -221,16 +240,7 @@ function implicit_tendency!(::VectorInvariantForm, Yₜ, Y, p, t)
 
     Yₜ.c.uₕ .= (zero(eltype(Yₜ.c.uₕ)),)
 
-    if Spaces.discretization(axes(Y.c)) isa Grids.DG
-        # Exner form
-        @. Yₜ.f.w = -(
-            ᶠgradᵥ(ᶜΦ) - ᶠgradᵥ(phi_ref(ᶜp)) +
-            cp_d * ᶠinterp(theta_prime(ᶜρ, ᶜp)) * ᶠgradᵥ(exner(ᶜp)) +
-            ᶠgradᵥ(ᶜK)
-        )
-    else
-        @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
-    end
+    @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
 
     return Yₜ
 end
