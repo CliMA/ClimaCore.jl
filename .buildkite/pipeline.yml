@@ -928,6 +928,19 @@ steps:
         artifact_paths:
           - "examples/plane/output/dg_*/*"
 
+      - label: ":computer: Bickley jet DG open boundaries {{matrix.case}}"
+        key: "cpu_bickleyjet_dg_open_boundaries"
+        retry: *retry_policy
+        matrix:
+          setup:
+            case:
+              - "characteristic roe"
+              - "prescribed rusanov"
+        command:
+          - "julia --color=yes --project=.buildkite examples/plane/bickleyjet_open_boundaries.jl {{matrix.case}}"
+        artifact_paths:
+          - "examples/plane/output/open_boundaries/*/*"
+
       - label: ":computer: Plane limiters advection {{matrix.case}}"
         key: "cpu_plane_limiters_advection"
         retry: *retry_policy
