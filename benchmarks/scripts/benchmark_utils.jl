@@ -92,6 +92,17 @@ function tabulate_benchmark(bm)
     else
         ()
     end
+    baselines = map(x -> x.baseline_time_s, bm.data)
+    has_baseline = any(!isnothing, baselines)
+    percent_change = map(bm.data) do x
+        isnothing(x.baseline_time_s) ? "-" :
+        string(
+            round(
+                (x.kernel_time_s - x.baseline_time_s) / x.baseline_time_s * 100;
+                digits = 1,
+            ),
+        )
+    end
     problem_size = map(x -> x.problem_size, bm.data)
     # if we specify the problem size up front, then make
     # sure that there is no variation when collecting:
@@ -103,6 +114,7 @@ function tabulate_benchmark(bm)
     header = [
         "funcs",
         "time per call",
+        (has_baseline ? ("% vs baseline",) : ())...,
         (no_bw_efficiency ? () : ("bw %",))...,
         "achieved bw",
         (allequal(n_reads_writes) ? () : ("N reads-writes",))...,
@@ -112,6 +124,7 @@ function tabulate_benchmark(bm)
     args = (
         funcs,
         timings,
+        (has_baseline ? (percent_change,) : ())...,
         (no_bw_efficiency ? () : (bandwidth_efficiency,))...,
         achieved_bandwidth_GBs,
         (allequal(n_reads_writes) ? () : (n_reads_writes,))...,
@@ -146,7 +159,15 @@ push_info(
     caller,
     n_reads_writes,
     problem_size,
+    baseline_time_s = nothing,
 ) = nothing
+"""
+    push_info(bm; kernel_time_s, nreps, caller, n_reads_writes, problem_size, baseline_time_s = nothing)
+
+Record one benchmark result in `bm`. If `baseline_time_s` (a reference time
+in seconds) is given, `tabulate_benchmark` adds a "% vs baseline" column
+showing the percent change of `kernel_time_s` relative to it.
+"""
 function push_info(
     bm;
     kernel_time_s,
@@ -154,6 +175,7 @@ function push_info(
     caller,
     n_reads_writes,
     problem_size,
+    baseline_time_s = nothing,
 )
     N = prod(problem_size)
     GB = N * n_reads_writes * sizeof(bm.float_type) / 1024^3
@@ -173,6 +195,7 @@ function push_info(
         N,
         GB,
         achieved_bandwidth_GBs,
+        baseline_time_s,
     )
     push!(bm.data, nt)
 end

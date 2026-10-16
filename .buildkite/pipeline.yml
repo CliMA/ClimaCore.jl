@@ -769,6 +769,11 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
+          # benchmark_stencils_utils.jl selects reference timings by GPU model
+          # (P100 and A100 tables exist); pin the hardware so they apply.
+          gres: "gpu:p100:1"
+          slurm_mem: 20G
+          slurm_cpus_per_task: 8
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
