@@ -78,6 +78,7 @@ SetBoundaryOperator
 
 ```@docs
 DirichletOperator
+setvalue_operator
 gradient_c2f_dirichlet
 divergence_c2f_dirichlet
 curl_c2f_dirichlet

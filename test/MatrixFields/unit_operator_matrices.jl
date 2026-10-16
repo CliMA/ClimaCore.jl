@@ -140,6 +140,7 @@ end
     test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(UpwindBiasedProductC2F, Extrapolate{0}, (ᶠuvw, ᶜscalar))
     test_op_matrix(UpwindBiasedProductC2F, Extrapolate{2}, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, SetValue, (ᶠuvw, ᶜscalar))
     test_op_matrix(Upwind3rdOrderBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
@@ -159,17 +160,20 @@ end
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
     test_op_matrix(GradientC2F, SetGradient, (ᶜscalar,))
+    test_op_matrix(GradientC2F, SetValue, (ᶜscalar,))
     test_op_matrix(GradientF2C, Nothing, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetValue, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetGradient, (ᶠscalar,))
     test_op_matrix(DivergenceC2F, Nothing, (ᶜuvw,), true)
     test_op_matrix(DivergenceC2F, SetDivergence, (ᶜuvw,))
+    test_op_matrix(DivergenceC2F, SetValue, (ᶜuvw,))
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
     test_op_matrix(CurlC2F, SetCurl, (ᶜc12,))
+    test_op_matrix(CurlC2F, SetValue, (ᶜc12,))
 
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTBorisBook())
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTZalesak())
@@ -278,6 +282,38 @@ end
         face_space,
     ) ≈ stack(
         [i == 1 ? [0, 1] : i == n ? [-1, 0] : [-1, 1] for i in 1:n];
+        dims = 1,
+    )
+
+    # GradientC2F with SetValue (a DirichletOperator): the boundary stencil
+    # G(x)[1/2] = 2 (x[1] - x₀) e³ is affine but not constant, so the matrix
+    # keeps its linear part, 2 e³ on the adjacent center. The prescribed value
+    # only contributes a constant, so the matrix is independent of it.
+    grad_c2f_rows = stack(
+        [f == 1 ? [0, 2] : f == n + 1 ? [-2, 0] : [-1, 1] for f in 1:(n + 1)];
+        dims = 1,
+    )
+    @test matrix_rows(
+        GradientC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
+        center_space,
+    ) ≈ grad_c2f_rows
+    @test matrix_rows(
+        GradientC2F(; bottom = SetValue(FT(3)), top = SetValue(FT(-2))),
+        center_space,
+    ) ≈ grad_c2f_rows
+
+    # DivergenceC2F with SetValue: D(v)[1/2] = 2 (J v³[1] - J v³₀) / J[1/2],
+    # again keeping only the linear part.
+    div_c2f_bcs = (;
+        bottom = SetValue(zero(Geometry.UVWVector{FT})),
+        top = SetValue(zero(Geometry.UVWVector{FT})),
+    )
+    @test matrix_rows(DivergenceC2F(; div_c2f_bcs...), center_space) ≈ stack(
+        [
+            f == 1 ? [zero(FT), 2 * ᶜJ[1] / ᶠJ[1]] :
+            f == n + 1 ? [-2 * ᶜJ[n] / ᶠJ[n + 1], zero(FT)] :
+            [-(ᶜJ[f - 1] / ᶠJ[f]), ᶜJ[f] / ᶠJ[f]] for f in 1:(n + 1)
+        ];
         dims = 1,
     )
 

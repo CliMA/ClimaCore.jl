@@ -1267,6 +1267,8 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
         new{typeof(bcs)}(bcs)
     end
     UpwindBiasedProductC2F(bcs) = UpwindBiasedProductC2F(; bcs...)
+    # Unvalidated constructor; see `setvalue_operator`.
+    UpwindBiasedProductC2F{BCS}(bcs::BCS) where {BCS} = new{BCS}(bcs)
 end
 has_linear_interior(::UpwindBiasedProductC2F) = true
 
@@ -1984,6 +1986,8 @@ struct GradientC2F{BC} <: GradientOperator
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
+    # Unvalidated constructor; see `setvalue_operator`.
+    GradientC2F{BC}(bcs::BC) where {BC} = new{BC}(bcs)
 end
 
 return_space(::GradientC2F, space::AllCenterFiniteDifferenceSpace) =
@@ -2077,8 +2081,7 @@ Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
 @inline adapt_fd_operator(to, op::TVDLimitedFluxC2F, bcs) =
     TVDLimitedFluxC2F(adapt_bcs(to, bcs), Adapt.adapt_structure(to, op.method))
 
-@inline adapt_fd_operator(to, op, bcs) =
-    unionall_type(typeof(op))(; adapt_bcs(to, bcs)...)
+@inline adapt_fd_operator(to, op, bcs) = with_bcs(op, adapt_bcs(to, bcs))
 
 @inline adapt_bcs(to, bcs) = unrolled_map(Base.Fix1(Adapt.adapt_structure, to), bcs)
 
@@ -2117,6 +2120,8 @@ struct DivergenceC2F{BC} <: DivergenceOperator
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
+    # Unvalidated constructor; see `setvalue_operator`.
+    DivergenceC2F{BC}(bcs::BC) where {BC} = new{BC}(bcs)
 end
 
 return_space(::DivergenceC2F, space::AllCenterFiniteDifferenceSpace) =
@@ -2179,6 +2184,8 @@ struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     CurlC2F(bcs) = CurlC2F(; bcs...)
+    # Unvalidated constructor; see `setvalue_operator`.
+    CurlC2F{BC}(bcs::BC) where {BC} = new{BC}(bcs)
 end
 
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
@@ -2222,7 +2229,9 @@ corresponding Dirichlet helper ([`gradient_c2f_dirichlet`](@ref),
 unwrapped to its value `x₀` and every other boundary condition passed through
 as given. The helper's result is a lazy stencil broadcast with lazy boundary
 rows, so it fuses into an enclosing broadcast like a true operator application
-and allocates nothing.
+and allocates nothing. `MatrixFields.operator_matrix` accepts a
+`DirichletOperator` and returns the matrix of the linear part of its stencil
+(see [`setvalue_operator`](@ref)).
 
 # Fields
 
@@ -2238,6 +2247,36 @@ end
 
 dirichlet_bc_value(bc::SetValue) = bc.val
 dirichlet_bc_value(bc) = bc
+
+# The operators whose constructors redirect a `SetValue` to a `DirichletOperator`.
+const DirichletC2FOperator =
+    Union{GradientC2F, DivergenceC2F, CurlC2F, UpwindBiasedProductC2F}
+
+"""
+    setvalue_operator(op::DirichletOperator{Op})
+
+The operator of type `Op` that holds `op`'s Dirichlet values as `SetValue`
+boundary conditions, which the keyword constructor of `Op` refuses to build
+(it returns the `DirichletOperator` instead). This only
+exists for `MatrixFields.operator_matrix`, which can represents non-affine Dirichlet boundary conditions.
+"""
+setvalue_operator(op::DirichletOperator{Op}) where {Op} =
+    with_bcs(Op, map(setvalue_bc, op.bcs))
+setvalue_bc(bc::VerticalBoundaryCondition) = bc
+setvalue_bc(val) = SetValue(val)
+
+# Rebuild the operator (type) `op` with the boundary conditions `bcs`, keeping
+# its type: a `DirichletC2FOperator` is rebuilt through its unvalidated
+# constructor, since its keyword constructor would redirect a `SetValue` (held
+# on behalf of `MatrixFields.operator_matrix`, see `setvalue_operator`) to a
+# `DirichletOperator`; every other operator is rebuilt through its positional
+# constructor, which validates `bcs` like the keyword constructor.
+@inline with_bcs(op::FiniteDifferenceOperator, bcs) =
+    with_bcs(unionall_type(op), bcs)
+@inline with_bcs(::Type{Op}, bcs) where {Op <: FiniteDifferenceOperator} =
+    Op(bcs)
+@inline with_bcs(::Type{Op}, bcs) where {Op <: DirichletC2FOperator} =
+    Op{typeof(bcs)}(bcs)
 
 dirichlet_helper_broadcasted(::DirichletOperator{GradientC2F}) =
     gradient_c2f_dirichlet_broadcasted
@@ -3050,7 +3089,7 @@ for slice_op in (:level, :slab, :column)
 end
 
 Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
-    unionall_type(typeof(op))(column(op.bcs, inds...))
+    with_bcs(op, column(op.bcs, inds...))
 Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
     StencilBroadcasted{S}(
         column(sbc.op, inds...),
