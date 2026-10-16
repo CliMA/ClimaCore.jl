@@ -64,6 +64,9 @@ function results(ᶜspace)
         ᶠupwind = upwind.(ᶠw, ᶜf),
         ᶜdiv_mat = @.(div_mat() * ᶠw),
         ᶠinterp_mat = @.(interp_mat() * ᶜf),
+        # Lazy operator matrices in expressions over several spaces
+        ᶠinterp_mat_sum = @.(ᶠz + interp_mat() * ᶜf),
+        ᶠinterp_mat_level = @.(interp_mat() * ᶜf * $(Fields.level(ᶜf, 1))),
         ᶜdivₕ = Operators.Divergence().(ᶜcov12),
         ᶜwdivₕ = Operators.Divergence{Operators.WeakForm}().(ᶜcov12),
         ᶜgradₕ = Operators.Gradient().(ᶜf),

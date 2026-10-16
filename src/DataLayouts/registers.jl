@@ -3,7 +3,8 @@
 
 Array that presents the full size `Sz` of a [`DataScope`](@ref)'s data while
 only storing the entries that belong to the thread reading it, in a
-`StaticArrays.MArray` or `SArray` that a compiler can promote to registers. `F`
+`StaticArrays.MArray` or `SArray` that a compiler can promote to registers (or in
+a view of some of its entries, for a field view of the data). `F`
 is the position of the field dimension (see [`f_dim`](@ref)), `Stride` is the
 number of threads in the scope it was allocated for (also the stride between
 consecutive points of the reading thread), and `register_array_params`
@@ -45,21 +46,41 @@ end
 
 # A RegisterArray presents exactly the data of the layout it was allocated for,
 # so rebuilding a layout around one keeps the layout's own scope.
-@inline rebuild(data, array::RegisterArray, ::Type{T}; params...) where {T} =
-    layout_constructor(data, T; params...)(array)
+Base.@propagate_inbounds rebuild(
+    data, array::RegisterArray, ::Type{T}; params...,
+) where {T} = layout_constructor(data, T; params...)(array)
+
+# A field's components are a contiguous block of the storage (see register_index), so its
+# view is a RegisterArray over that block (writable when the storage is an MArray), which
+# keeps the layout's scope; a SubArray would hide that the data is in registers.
+@inline function struct_field_view(
+    array::RegisterArray{<:Any, <:Any, Sz, F, Stride}, ::Type{T}, ::Val{i}, ::Val{F},
+) where {Sz, F, Stride, T, i}
+    check_basetype(eltype(array), fieldtype(T, i))
+    isnothing(F) && return array
+    Nf = num_basetypes(eltype(array), fieldtype(T, i))
+    first_f = Int(stable_fieldoffset(T, Val(i))) ÷ sizeof(eltype(array))
+    Nl = cld(register_array_params(Sz, Val(F)).Np, Stride)
+    storage =
+        view(array.array, StaticArrays.SUnitRange(first_f * Nl + 1, (first_f + Nf) * Nl))
+    return RegisterArray{Base.setindex(Sz, Nf, F), F, Stride}(storage)
+end
 
 # Map a linear index into the full array onto this thread's own storage:
 # replace its point index p by (p - 1) ÷ Stride + 1, the point's position in
 # this thread's strided subset; every divisor is a compile-time constant.
+# The arithmetic is in 32 bits when the array fits, as 64-bit divisions are costly on GPUs.
 @inline function register_index(
     ::RegisterArray{<:Any, <:Any, Sz, F, Stride},
     index::Int,
 ) where {Sz, F, Stride}
     (; Nf, SB, Np) = register_array_params(Sz, Val(F))
-    (rest, before) = divrem(index - 1, SB)
-    (after, f) = divrem(rest, Nf)
-    point = after * SB + before
-    return f * cld(Np, Stride) + point ÷ Stride + 1
+    I = prod(Sz) <= typemax(UInt32) ? UInt32 : Int
+    (rest, before) = divrem((index - 1) % I, I(SB))
+    (after, f) = divrem(rest, I(Nf))
+    # With at most one point per thread, skip a division that may spill the array.
+    position = cld(Np, Stride) == 1 ? zero(I) : (after * I(SB) + before) ÷ I(Stride)
+    return Int(f * I(cld(Np, Stride)) + position) + 1
 end
 
 @propagate_inbounds Base.getindex(array::RegisterArray, index::Int) =
@@ -67,13 +88,65 @@ end
 @propagate_inbounds Base.setindex!(array::RegisterArray, value, index::Int) =
     setindex!(array.array, value, register_index(array, index))
 
+@inline has_cartesian_components(::RegisterArray) = true
+
 # Cartesian access; two leading indices avoid overlap with the linear methods.
+# Taking the component from the F axis keeps register indices constant (no spilling).
 @propagate_inbounds Base.getindex(
     array::RegisterArray, index1::Int, index2::Int, indices::Int...,
-) = array[linear_index(size(array), (index1, index2, indices...))]
+) = array.array[register_index(array, (index1, index2, indices...))]
 @propagate_inbounds Base.setindex!(
     array::RegisterArray, value, index1::Int, index2::Int, indices::Int...,
-) = setindex!(array, value, linear_index(size(array), (index1, index2, indices...)))
+) = setindex!(array.array, value, register_index(array, (index1, index2, indices...)))
+# Splat CartesianIndex entries (of get_struct and set_struct!), which Base would linearize.
+@propagate_inbounds Base.getindex(
+    array::RegisterArray{<:Any, N}, index::CartesianIndex{N},
+) where {N} = array[Tuple(index)...]
+@propagate_inbounds Base.setindex!(
+    array::RegisterArray{<:Any, N}, value, index::CartesianIndex{N},
+) where {N} = setindex!(array, value, Tuple(index)...)
+@inline function register_index(
+    ::RegisterArray{<:Any, N, Sz, F, Stride}, index::NTuple{N, Int},
+) where {N, Sz, F, Stride}
+    (; Np) = register_array_params(Sz, Val(F))
+    (point, f) = point_and_component(Sz, Val(F), index)
+    I = prod(Sz) <= typemax(UInt32) ? UInt32 : Int
+    position = cld(Np, Stride) == 1 ? 0 : Int((point - 1) % I ÷ I(Stride))
+    return (f - 1) * cld(Np, Stride) + position + 1
+end
+@inline point_and_component(Sz, ::Val{F}, index) where {F} = (
+    linear_index(drop_f_dim(Sz, Val(F)), drop_f_dim(index, Val(F))),
+    isnothing(F) ? 1 : index[F],
+)
+
+# Single-point view of a RegisterArray (also used by device extensions) that reads through
+# the Cartesian methods above: a fast SubArray would divide out components at run time, and
+# Cartesian SubArrays give the same kernels but compile more slowly on CPUs (Julia 1.10
+# keeps their bounds checks, dead under @inbounds, in the IR).
+struct RegisterPointView{T, Nf, N, F, A <: AbstractArray{T, N}} <: AbstractVector{T}
+    parent::A
+    index::NTuple{N, Int} # the point's index, with the F axis (if any) at 1
+end
+Base.parent(view::RegisterPointView) = view.parent
+Base.size(::RegisterPointView{<:Any, Nf}) where {Nf} = (Nf,)
+Base.IndexStyle(::Type{<:RegisterPointView}) = IndexLinear()
+@inline component_index(view::RegisterPointView{<:Any, <:Any, <:Any, F}, i) where {F} =
+    isnothing(F) ? view.index : Base.setindex(view.index, i, F)
+Base.@propagate_inbounds function Base.getindex(view::RegisterPointView, i::Int)
+    @boundscheck checkbounds(view, i)
+    return @inbounds parent(view)[component_index(view, i)...]
+end
+Base.@propagate_inbounds function Base.setindex!(view::RegisterPointView, value, i::Int)
+    @boundscheck checkbounds(view, i)
+    @inbounds parent(view)[component_index(view, i)...] = value
+    return view
+end
+@inline RegisterPointView(
+    array::AbstractArray{T, N}, ::Val{Nf}, index, ::Val{F},
+) where {T, N, Nf, F} =
+    RegisterPointView{T, Nf, N, F, typeof(array)}(array, add_f_dim(Tuple(index), 1, Val(F)))
+@inline unchecked_view_struct(a::RegisterArray, Nf::Val, i::CartesianIndex, F::Val) =
+    RegisterPointView(a, Nf, i, F)
 
 # Freeze a mutable register array into an immutable one, so that constant_field
 # can guarantee stack (rather than heap) storage without full inlining.
@@ -81,6 +154,30 @@ end
     array::RegisterArray{T, N, Sz, F, Stride},
 ) where {T, N, Sz, F, Stride} =
     RegisterArray{Sz, F, Stride}(StaticArrays.SArray(array.array))
+# Point views (like boundary levels of columns) are frozen with their parents, and they also
+# keep the scopes of their layouts.
+@inline function StaticArrays.SArray(
+    view::RegisterPointView{T, Nf, N, F},
+) where {T, Nf, N, F}
+    array = StaticArrays.SArray(parent(view))
+    return RegisterPointView{T, Nf, N, F, typeof(array)}(array, view.index)
+end
+Base.@propagate_inbounds rebuild(
+    data, view::RegisterPointView, ::Type{T}; params...,
+) where {T} = layout_constructor(data, T; params...)(view)
+
+"""
+    stored_in_scope_registers(data)
+
+Whether `data` is a [`DataLayout`](@ref) in the registers that [`register_similar`](@ref)
+allocates for its [`DataScope`](@ref), with each thread holding its own points' values.
+"""
+@inline stored_in_scope_registers(data) =
+    data isa DataLayout && stored_in_registers(data) &&
+    register_stride(parent(data)) == static_num_threads(DataScope(data))
+@inline register_stride(
+    ::RegisterArray{<:Any, <:Any, <:Any, <:Any, Stride},
+) where {Stride} = Stride
 
 # Whether any value in a DataLayout or LazyDataLayout expression is backed by a
 # RegisterArray, and therefore cannot be read by any thread other than the one
@@ -110,12 +207,16 @@ would allocate.
 
 @inline function register_similar(data, ::Type{T}) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
+    has_scope_registers(data) || return similar_layout(data, T)
     Stride = static_num_threads(DataScope(data))
-    (isnothing(Stride) || Stride == 1 || !has_inferred_size(data)) &&
-        return similar_layout(data, T)
     Nf = num_basetypes(B, T)
     array_size = add_f_dim(inferred_size(data), Nf, Val(f_dim(data)))
     return register_similar(data, T, B, array_size, Val(f_dim(data)), Val(Stride))
+end
+
+@inline function has_scope_registers(data)
+    Stride = static_num_threads(DataScope(data))
+    return !isnothing(Stride) && Stride != 1 && has_inferred_size(data)
 end
 
 @inline function register_similar(
@@ -123,5 +224,6 @@ end
 ) where {T, B, F, Stride}
     (; Nf, Np) = register_array_params(array_size, Val(F))
     storage = StaticArrays.MArray{Tuple{cld(Np, Stride) * Nf}, B}(undef)
-    return rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
+    # The register array has the layout's canonical size; skip the parent check.
+    return @inbounds rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
 end

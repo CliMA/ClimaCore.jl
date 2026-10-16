@@ -43,16 +43,7 @@ function column_reduce_device!(
         cart_inds,
         reverse,
     )
-    nitems = length(cart_inds)
-    threads = threads_via_occupancy(bycolumn_kernel!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
-    auto_launch!(
-        bycolumn_kernel!,
-        args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
-    )
+    auto_launch!(bycolumn_kernel!, args; nitems = length(cart_inds))
     call_post_op_callback() && post_op_callback(
         output,
         (dev, f, transform, output, input, init, space, reverse),
@@ -88,16 +79,7 @@ function column_accumulate_device!(
         cart_inds,
         reverse,
     )
-    nitems = length(cart_inds)
-    threads = threads_via_occupancy(bycolumn_kernel!, args)
-    n_max_threads = min(threads, nitems)
-    p = linear_partition(nitems, n_max_threads)
-    auto_launch!(
-        bycolumn_kernel!,
-        args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
-    )
+    auto_launch!(bycolumn_kernel!, args; nitems = length(cart_inds))
 end
 
 function bycolumn_kernel!(
@@ -117,7 +99,7 @@ function bycolumn_kernel!(
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space, reverse)
     else
-        tidx = linear_thread_idx()
+        tidx = thread_index()
         if linear_is_valid_index(tidx, unval(cart_inds))
             I = unval(cart_inds)[tidx]
             (i, j, h) = I.I

@@ -137,14 +137,32 @@ end
     isnothing(F) ? single_component_struct_indices(index, Val(Nf)) :
     struct_indices(array, Val(Nf), index, prod(size(array)[1:(F - 1)]))
 
-@inline struct_index(i, array, index::Integer, stride::Integer) = index + (i - 1) * stride
+@inline struct_index(i, array, index::Integer, stride::Integer) =
+    index + (i - 1) % typeof(index) * stride
 
 # A StridedRange instead of range(index; step, length), a StepRange whose
 # length Base obtains by division once per view built from it (see the note on
 # StridedRange); the stride is not a compile-time constant when a slab is
 # spread over several threads, and a point view is taken once per point.
 @inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
-    (StridedRange(index, stride, Nf),)
+    (StridedRange{Int}(index, stride, index + (Nf - 1) * stride),)
+
+# Check the bounds of struct_indices at their first and last entries, since last divides for
+# a StridedRange. Julia 1.10 keeps the dead checks of @inbounds reads, and inlining costs
+# count them, so a division here keeps closures that read points from inlining into loops.
+@inline check_struct_bounds(array, val_Nf, index...) =
+    checkbounds(array, struct_indices(array, val_Nf, index...)...)
+@inline function check_struct_bounds(
+    array, ::Val{Nf}, index::Integer, stride::Integer,
+) where {Nf}
+    in_bounds =
+        isone(Nf) ? checkbounds(Bool, array, index) :
+        checkbounds(Bool, array, index) &
+        checkbounds(Bool, array, index + (Nf - 1) * stride)
+    in_bounds ||
+        Base.throw_boundserror(array, struct_indices(array, Val(Nf), index, stride))
+    return nothing
+end
 
 """
     set_struct!(array, value, [index, Val(F)])
@@ -200,7 +218,7 @@ julia> set_struct!(zeros(Int64, 3, 4), (Int32(2), Int32(0), Int128(1)), 2, 3)
     value::T,
     index...,
 ) where {T}
-    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    @boundscheck check_struct_bounds(array, Val(1), index...)
     @inbounds array[struct_index(1, array, index...)] = value
     return array
 end
@@ -211,7 +229,7 @@ end
     index...,
 ) where {B, T}
     Nf = num_basetypes(B, T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    @boundscheck check_struct_bounds(array, Val(Nf), index...)
     entries = bitcast_struct(NTuple{Nf, B}, value)
     unrolled_foreach(enumerate(entries)) do (i, entry)
         @inbounds array[struct_index(i, array, index...)] = entry
@@ -257,7 +275,7 @@ julia> get_struct([0 0 0 0; 2 0 1 0; 0 0 0 0], Tuple{Int32, Int32, Int128}, 2, 3
     ::Type{T},
     index...,
 ) where {T}
-    @boundscheck checkbounds(array, struct_indices(array, Val(1), index...)...)
+    @boundscheck check_struct_bounds(array, Val(1), index...)
     return @inbounds array[struct_index(1, array, index...)]
 end
 
@@ -267,7 +285,7 @@ end
     index...,
 ) where {B, T}
     Nf = num_basetypes(B, T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
+    @boundscheck check_struct_bounds(array, Val(Nf), index...)
     return bitcast_struct(T, array, Val(Nf), index...)
 end
 
@@ -280,6 +298,9 @@ and it can be updated with `set_struct!(struct_view, new_value)`.
 """
 @inline function view_struct(array, ::Type{T}, index...) where {T}
     Nf = num_basetypes(eltype(array), T)
-    @boundscheck checkbounds(array, struct_indices(array, Val(Nf), index...)...)
-    return @inbounds stable_view(array, struct_indices(array, Val(Nf), index...)...)
+    @boundscheck check_struct_bounds(array, Val(Nf), index...)
+    return unchecked_view_struct(array, Val(Nf), index...)
 end
+# Overridden by arrays whose points are not views of the array (see RegisterPointView).
+@inline unchecked_view_struct(array, val_Nf, index...) =
+    @inbounds stable_view(array, struct_indices(array, val_Nf, index...)...)

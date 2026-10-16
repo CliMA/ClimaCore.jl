@@ -171,9 +171,9 @@ function vector_laplacian(::Grids.CG, u, divergence_factor)
     space = axes(u)
     div = Divergence()
     wgrad = Gradient{WeakForm}()
-    graddiv = lazy.(wgrad.(div.(u)))
-    isone(divergence_factor) ||
-        (graddiv = lazy.(divergence_factor .* graddiv))
+    # Scaling by a divergence_factor of 1 is exact, and always scaling keeps the type of the
+    # result independent of the value of divergence_factor.
+    graddiv = lazy.(divergence_factor .* wgrad.(div.(u)))
     # The curl-curl part exists whenever the horizontal manifold has two
     # dimensions (a plane or the sphere, extruded or not); with one horizontal
     # dimension it vanishes identically.

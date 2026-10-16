@@ -11,13 +11,13 @@ The vertical domain names its two boundaries, `(:bottom, :top)` by convention,
 and every `C2F` operator whose stencil reaches a boundary face takes a keyword
 of that name.
 
-| Condition                     | Meaning at the boundary face                                                       | Accepted by                                                                                                                                       |
-|:----------------------------- |:---------------------------------------------------------------------------------- |:------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SetValue(x₀)`                | The operator's *argument* takes the value `x₀`                                     | `InterpolateC2F`, `DivergenceF2C` (a flux), and, through `DirichletOperator`, `GradientC2F`, `DivergenceC2F`, `CurlC2F`, `UpwindBiasedProductC2F` |
-| `SetGradient(v₀)`             | The gradient equals the covariant vector `v₀`                                      | `GradientC2F`                                                                                                                                     |
-| `SetDivergence(d₀)`           | The divergence equals `d₀`                                                         | `DivergenceC2F`                                                                                                                                   |
-| `SetCurl(c₀)`                 | The curl equals the contravariant vector `c₀`                                      | `CurlC2F`                                                                                                                                         |
-| `Extrapolate()` / `Outflow()` | Use the nearest interior value (`Outflow(; order)` for higher-order extrapolation) | `InterpolateC2F`, the upwind operators                                                                                                            |
+| Condition                     | Meaning at the boundary face                                                       | Accepted by                                                                                                     |
+|:----------------------------- |:---------------------------------------------------------------------------------- |:--------------------------------------------------------------------------------------------------------------- |
+| `SetValue(x₀)`                | The operator's *argument* takes the value `x₀`                                     | `InterpolateC2F`, `DivergenceF2C` (a flux), `GradientC2F`, `DivergenceC2F`, `CurlC2F`, `UpwindBiasedProductC2F` |
+| `SetGradient(v₀)`             | The gradient equals the covariant vector `v₀`                                      | `GradientC2F`                                                                                                   |
+| `SetDivergence(d₀)`           | The divergence equals `d₀`                                                         | `DivergenceC2F`                                                                                                 |
+| `SetCurl(c₀)`                 | The curl equals the contravariant vector `c₀`                                      | `CurlC2F`                                                                                                       |
+| `Extrapolate()` / `Outflow()` | Use the nearest interior value (`Outflow(; order)` for higher-order extrapolation) | `InterpolateC2F`, the upwind operators                                                                          |
 
 Steps:
 
@@ -37,10 +37,12 @@ Steps:
     @. dydt = divf2c(κ * gradc2f(θ))
     ```
 
- 3. For a Dirichlet value of the argument itself, use the helper that builds
-    the equivalent gradient stencil:
+ 3. For a Dirichlet value of the argument itself, give the gradient a
+    `SetValue`:
+    `Operators.GradientC2F(bottom = Operators.SetValue(θ₀), top = Operators.SetGradient(...))`,
+    which the helper
     `Operators.gradient_c2f_dirichlet(θ; bottom = θ₀, top = Operators.SetGradient(...))`
-    ([Solve a column PDE](../tutorials/column_heat.md)).
+    applies ([Solve a column PDE](../tutorials/column_heat.md)).
 
 A `SetGradient` prescribes the covariant component `∂x/∂ξ³`, the derivative
 along the third coordinate line. Over terrain, the coordinate surface is tilted,

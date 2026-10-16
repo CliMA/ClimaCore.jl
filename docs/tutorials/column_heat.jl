@@ -36,9 +36,9 @@ y0 = zeros(center_space)
 #
 # The state lives on cell centers. There is no node at the bottom boundary, so
 # the Dirichlet condition enters through the gradient at the first face:
-# `Operators.gradient_c2f_dirichlet` builds the `SetGradient` boundary stencil
-# that a prescribed boundary value implies, `∂y/∂ξ³[½] = 2 (y[1] − 1)` for a
-# value of 1. The Neumann condition at the top is a `SetGradient` with a zero
+# `Operators.gradient_c2f_dirichlet` applies the `SetValue` boundary stencil of
+# `GradientC2F`, `∂y/∂ξ³[½] = 2 (y[1] − 1)` for a prescribed boundary value of
+# 1. The Neumann condition at the top is a `SetGradient` with a zero
 # covariant component. The face-to-center divergence then needs no boundary
 # conditions of its own.
 

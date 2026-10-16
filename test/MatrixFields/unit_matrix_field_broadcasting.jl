@@ -4,22 +4,22 @@
 ```
 import Profile, ProfileCanvas
 
-function do_work(space, bc, idx, hidx, n)
+function do_work(bc_column, n)
     for i in 1:n
-        call_getidx(space, bc, idx, hidx)
+        call_apply_operators(bc_column)
     end
     return nothing
 end
 
-(; space, bc, idx_l, idx_i, idx_r, hidx) = get_getidx_args(bc);
-do_work(space, bc, idx_i, hidx, 1)
+bc_column = column_broadcast(bc);
+do_work(bc_column, 1)
 Profile.clear()
-prof = Profile.@profile do_work(space, bc, idx_i, hidx, 10^6)
+prof = Profile.@profile do_work(bc_column, 10^5)
 results = Profile.fetch()
 Profile.clear()
 ProfileCanvas.html_file("flame.html", results)
 
-perf_getidx(bc)
+perf_apply_operators(bc)
 ```
 =#
 using Test

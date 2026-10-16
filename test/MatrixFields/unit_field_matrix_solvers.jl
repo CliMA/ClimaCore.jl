@@ -134,8 +134,10 @@ end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
-    # Note: The round-off error of StationaryIterativeSolve can be much larger
-    # on GPUs, so n_iters often has to be increased when USING_CUDA is true.
+    # Note: StationaryIterativeSolve updates x in place with an expression that reads x
+    # at neighboring levels, which converges faster when levels are updated one after
+    # another (as on CPUs) than when they are updated concurrently (as on GPUs), so
+    # n_iters often has to be increased when USING_CUDA is true.
 
     for alg in (
         MatrixFields.BlockDiagonalSolve(),

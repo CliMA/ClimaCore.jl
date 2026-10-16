@@ -99,6 +99,8 @@ for f in (:issubspace, :maybe_issubspace)
     @eval $f(subspace::AbstractSpace, space::PointSpace) = false
 end
 
+staggering(::PointSpace) = nothing
+
 all_nodes(::PointSpace) = (1,)
 
 node_horizontal_length_scale(space::PointSpace) = 1

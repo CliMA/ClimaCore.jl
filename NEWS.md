@@ -4,6 +4,34 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Finite difference operators are now applied
+  through the same `Operators.apply_operator` API as spectral element operators,
+  one column at a time. A broadcast over several finite difference operators is
+  evaluated in a single pass over each column whenever possible: operators whose
+  arguments contain no other stencils are evaluated wherever they are read, and
+  all other operators are evaluated once per column into registers instead of
+  being recomputed at every point that reads them. Linear operators are applied
+  as products with their band matrices. The CUDA extension no longer contains
+  any finite difference kernels, so GPU evaluation goes through the generic slice
+  loops with static shared memory, and the `CLIMA_FD_MAX_THREADS` environment
+  variable has been removed. Since GPU index arithmetic is 32-bit, GPU kernels
+  support at most 2^32 - 1 elements per array and 2^31 - 1 slices per
+  `DataLayouts.foreach_slice` loop. Internal stencil methods no longer take
+  horizontal indices, and `Operators.getidx`, the three-argument
+  `Geometry.LocalGeometry(space, idx, hidx)`, `Geometry.mul_with_projection` and
+  `Geometry.mul_return_type` have been removed.
+- ![][badge-✨feature/enhancement] `GradientC2F`, `DivergenceC2F`, `CurlC2F` and
+  `UpwindBiasedProductC2F` have their own `SetValue` boundary stencils again,
+  which read the closest center of the argument that the operator already reads,
+  so they no longer materialize lazy arguments (or, on GPUs, read the registers
+  of other threads). `UpwindBiasedProductC2F` with a `SetValue` also accepts lazy
+  velocities and an `Extrapolate` at the other boundary, and
+  `MatrixFields.operator_matrix` supports these operators with a `SetValue`.
+  Their constructors no longer return an `Operators.DirichletOperator` for a
+  `SetValue`, and the `Operators.*_c2f_dirichlet` helpers now apply the
+  `SetValue` stencils. `DirichletOperator` is only kept for backward
+  compatibility, and it can be removed in a future breaking release.
+
 v1.0.4
 -------
 

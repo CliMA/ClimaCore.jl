@@ -35,9 +35,8 @@ on `z ∈ [0, 1]` with 10 cells, `T = 0` at the bottom and `∂T/∂z = 1` at th
 top, starting from `T = 0`. The temperature lives on cell centers. The Laplacian
 is a center-to-face gradient followed by a face-to-center divergence, and both
 boundary conditions enter through the gradient at the boundary faces: the
-Dirichlet value through `gradient_c2f_dirichlet`, which builds the
-`SetGradient` stencil a prescribed boundary value implies, and the Neumann
-value as an explicit `SetGradient`.
+Dirichlet value through `gradient_c2f_dirichlet`, which applies the `SetValue`
+stencil of `GradientC2F`, and the Neumann value as an explicit `SetGradient`.
 
 ```@example gallery
 import ClimaComms
@@ -106,10 +105,10 @@ supplies the boundary values. The script compares four discretizations of the
 same equation:
 
   - **Flux form, upwind**: the face flux `w θ` is reconstructed by first-order
-    upwinding and differenced back to centers. `UpwindBiasedProductC2F` has no
-    boundary-value condition of its own, so
+    upwinding and differenced back to centers.
     `upwind_biased_product_c2f_dirichlet` evaluates the upwind stencil at the
-    two boundary faces with the exact `θ` outside the domain.
+    two boundary faces with the exact `θ` outside the domain (the `SetValue`
+    stencil of `UpwindBiasedProductC2F`).
 
     ```julia
     upwind_flux(θ, t) = Operators.upwind_biased_product_c2f_dirichlet(

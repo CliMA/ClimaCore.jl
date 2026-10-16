@@ -73,6 +73,12 @@ end
     got_damped =
         materialize(Operators.vector_laplacian(u; divergence_factor = factor))
     @test parent(got_damped) ≈ parent(expected_damped)
+
+    # The type of the lazy result does not depend on the value of divergence_factor.
+    damped_laplacian(u, factor) =
+        Operators.vector_laplacian(u; divergence_factor = factor)
+    @test (@inferred damped_laplacian(u, 1)) isa Base.AbstractBroadcasted
+    @test (@inferred damped_laplacian(u, factor)) isa Base.AbstractBroadcasted
 end
 
 @testset "vector_laplacian with one horizontal dimension" begin

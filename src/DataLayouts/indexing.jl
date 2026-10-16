@@ -130,6 +130,37 @@ blocks SIMD in pointwise loops).
     return offset + 1
 end
 
+# Linear-to-Cartesian conversion of a point index, divisionless if has_one_inferred_axis.
+@propagate_inbounds function cartesian_point_index(data, index)
+    has_inferred_size(data) || return CartesianIndices(data)[index]
+    dims = inferred_size(data)
+    has_one_inferred_axis(data) || return cartesian_index_from_linear(dims, index)
+    @boundscheck 1 <= index <= length(data) || Base.throw_boundserror(data, (index,))
+    return CartesianIndex(unrolled_map(dim -> isone(dim) ? 1 : index, dims))
+end
+
+@inline has_one_inferred_axis(data) =
+    has_inferred_size(data) &&
+    unrolled_sum(dim -> Int(!isone(dim)), inferred_size(data)) <= 1
+
+# Whether to access points by Cartesian index when that is free (as RegisterArray needs).
+@inline has_cartesian_components(_) = false
+
+# Linear-to-Cartesian conversion in 32 bits for a UInt32 (GPU) index; Base uses 64 bits.
+@inline cartesian_index_from_linear(dims, index) = CartesianIndices(dims)[index]
+Base.@propagate_inbounds function cartesian_index_from_linear(dims, index::UInt32)
+    @boundscheck 1 <= index <= prod(dims) ||
+                 Base.throw_boundserror(CartesianIndices(dims), (index,))
+    return CartesianIndex(cartesian_components(dims, index - one(index)))
+end
+@inline cartesian_components(::Tuple{}, ::UInt32) = ()
+# As in Base, the last axis gets the remaining offset, without dividing by a run-time size.
+@inline cartesian_components(::Tuple{Any}, offset::UInt32) = (Int(offset) + 1,)
+@inline function cartesian_components(dims, offset::UInt32)
+    (remaining_offset, component) = divrem(offset, first(dims) % UInt32)
+    return (Int(component) + 1, cartesian_components(Base.tail(dims), remaining_offset)...)
+end
+
 # Propagate all Cartesian indices that are specified by the user, without any
 # Cartesian-to-linear conversion. Avoid linear-to-Cartesian conversion unless it
 # is necessary, using a single integer division to access any constant-stride
@@ -141,10 +172,15 @@ end
     (index == CartesianIndex() && isone(length(data))) &&
         return (array, (first(CartesianIndices(data)), Val(F)))
     (index isa CartesianIndex || isnothing(F)) && return (array, (index, Val(F)))
-    IndexStyle(data) == IndexCartesian() &&
-        return (array, (CartesianIndices(data)[index], Val(F)))
+    (
+        IndexStyle(data) == IndexCartesian() ||
+        has_cartesian_components(array) && has_one_inferred_axis(data)
+    ) && return (array, (cartesian_point_index(data, index), Val(F)))
     stride = prod(size(data)[1:(F - 1)])
     IndexStyle(array) == IndexLinear() && return (array, (index, stride))
+    # Column and level slices skip the divrem below, so that CPU column loops vectorize.
+    has_one_inferred_axis(data) &&
+        return (array, (cartesian_point_index(data, index), Val(F)))
     index_for_dims_after_F, offset_for_dims_before_F = divrem(index - 1, stride)
     parent_Nf = size(parent(array), F)
     parent_f = field_offset(array, Val(F))
@@ -167,14 +203,66 @@ end
     return (array, ())
 end
 
+# Views with unit range indices are accessed through their parents, one index per value:
+# reindexing per component generates much more code (mostly dead checks on Julia 1.10).
+const UnitRangeSubArray{N} = SubArray{
+    <:Any,
+    N,
+    <:DenseArray{<:Any, N},
+    <:NTuple{N, Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}},
+}
+@inline parent_array_and_index_args(array, index_args) = (array, index_args)
+@propagate_inbounds function parent_array_and_index_args(
+    array::UnitRangeSubArray{N}, (index, val_F)::Tuple{CartesianIndex, Val{F}},
+) where {N, F}
+    # Asserted for inferability when the index type is abstract (e.g., in JET analyses).
+    view_index = Tuple(index)::NTuple{isnothing(F) ? N : N - 1, Int}
+    @boundscheck in_view(view_index, array.indices, Val(something(F, 0))) ||
+                 Base.throw_boundserror(array, view_index)
+    parent_array = parent(array)
+    return (
+        parent_array,
+        parent_offset_and_stride(parent_array, view_index, array.indices, val_F),
+    )
+end
+
+@inline function parent_offset_and_stride(
+    parent_array, view_index, ranges::NTuple{N, Any}, ::Val{F},
+) where {N, F}
+    sizes = size(parent_array)::NTuple{N, Int}
+    offset = parent_offset(Int, view_index, ranges, sizes, Val(something(F, 0)))
+    stride = isnothing(F) ? 1 : axis_stride(Int, sizes, Val(F))
+    return (offset + 1, stride)
+end
+
+# Offset of a point in a view's parent, by Horner's rule from its view index without F (at
+# index 1 along F), in the type I (UInt32 on GPUs), converting sizes singly for inference.
+@inline parent_offset(::Type{I}, _, ::Tuple{}, ::Tuple{}, ::Val) where {I} = zero(I)
+@inline function parent_offset(::Type{I}, index, ranges, sizes, ::Val{F}) where {I, F}
+    (i, remaining_index) = F == 1 ? (one(I), index) : (first(index) % I, Base.tail(index))
+    range = first(ranges)
+    offset = range isa Base.Slice ? i - one(I) : i - one(I) + (first(range) - 1) % I
+    remaining_offset =
+        parent_offset(I, remaining_index, Base.tail(ranges), Base.tail(sizes), Val(F - 1))
+    return offset + (first(sizes) % I) * remaining_offset
+end
+@inline in_view(_, ::Tuple{}, ::Val) = true
+@inline in_view(index, ranges, ::Val{F}) where {F} =
+    F == 1 ? in_view(index, Base.tail(ranges), Val(0)) :
+    (1 <= first(index) <= length(first(ranges))) &
+    in_view(Base.tail(index), Base.tail(ranges), Val(F - 1))
+@inline axis_stride(::Type{I}, sizes, ::Val{1}) where {I} = one(I)
+@inline axis_stride(::Type{I}, sizes, ::Val{F}) where {I, F} =
+    (first(sizes) % I) * axis_stride(I, Base.tail(sizes), Val(F - 1))
+
 # Always convert to the element type of a DataLayout when modifying its values.
 @propagate_inbounds function Base.setindex!(data::DataLayout, value, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, index)
+    (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     return set_struct!(array, convert(eltype(data), value), index_args...)
 end
 
 @propagate_inbounds function Base.getindex(data::DataLayout, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, index)
+    (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     return get_struct(array, eltype(data), index_args...)
 end
 

@@ -75,14 +75,21 @@ function return_space end
     apply_operator(op, args...)
 
 Eagerly evaluate the [`SpectralElementOperator`](@ref) `op` over one slab of
-slab `Field`s and/or lazy pointwise broadcasts over slabs.
+slab `Field`s and/or lazy pointwise broadcasts over slabs, or the
+[`FiniteDifferenceOperator`](@ref) `op` over one column of column `Field`s
+and/or lazy broadcasts over columns.
 
-# Notes
+# Buffer reuse invariant
 
-**Buffer reuse invariant.** On GPUs, buffers of equal byte size can be assigned to the same shared memory
-(see `DataLayouts.scoped_static_array`), so each `apply_operator` method keeps
-at most one buffer of each size live at a time, separating every reuse from the
-previous use with a `DataLayouts.synchronize`. The destination stays live for
+On GPUs, buffers of equal byte size can be assigned to the same shared memory
+when they are allocated in separately compiled functions (see
+`DataLayouts.scoped_static_array`), so each `apply_operator` method keeps at most
+one buffer of each size live at a time, separating every reuse from the previous
+use with a `DataLayouts.synchronize`. A finite difference operator with
+cached arguments (see [`cached_arg`](@ref)) is applied before any expression that
+contains it is cached or evaluated, so only one application's cached arguments are
+live at a time; only `FCTZalesak` caches two, on different staggerings, whose buffers
+can only have equal byte sizes on very short columns. The destination stays live for
 the whole application and may alias a *different* live application's destination
 (as in `@. wdiv(grad(a)) + wdiv(grad(b))`), so it lives in per-thread registers
 ([`register_similar`](@ref)), as do temporaries materialized inside a fused

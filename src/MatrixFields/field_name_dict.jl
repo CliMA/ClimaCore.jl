@@ -15,7 +15,7 @@ entries; the parametric constructor takes `key => entry` pairs. `T` is either
     operation as a `FieldMatrix` (e.g. when both appear in the same broadcast
     expression, or when both are passed to a [`FieldMatrixSolver`](@ref)).
 
-A `FieldNameDict` is "lazy" when its entries include `LazyField`s that become
+A `FieldNameDict` is "lazy" when its entries include lazy broadcasts that become
 `Field`s on materialization. Internal operations produce lazy `FieldNameDict`s
 so a chain of operations materializes once, in a single call to `materialize!`.
 
@@ -100,8 +100,7 @@ check_entry(::Type{FieldNamePair}, ::ColumnwiseBandMatrixField) = true
 
 is_field_broadcasted(bc) =
     Base.Broadcast.BroadcastStyle(typeof(bc)) isa Fields.AbstractFieldStyle
-check_entry(::Type{FieldName}, entry::Fields.LazyField) =
-    is_field_broadcasted(entry)
+check_entry(::Type{FieldName}, entry::Fields.LazyField) = is_field_broadcasted(entry)
 check_entry(::Type{FieldNamePair}, entry::Fields.LazyField) =
     is_field_broadcasted(entry) && eltype(entry) <: BandMatrixRow
 

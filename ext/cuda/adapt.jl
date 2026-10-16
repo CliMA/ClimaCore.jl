@@ -2,6 +2,12 @@ import CUDA, Adapt
 import ClimaCore
 import ClimaCore: Grids, Spaces, Topologies
 
+# Adapt turns every Ref{Type{T}} into a CuRefType{T}, whose eltype is the
+# non-specific DataType instead of Type{T}. CUDA.jl v6 defines CuRefType in
+# its CUDACore module, and earlier versions define it at the top level.
+const CuRefType = isdefined(CUDA, :CUDACore) ? CUDA.CUDACore.CuRefType : CUDA.CuRefType
+Utilities.unsafe_eltype(::CuRefType{T}) where {T} = Type{T}
+
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     grid::Grids.ExtrudedFiniteDifferenceGrid,
@@ -45,6 +51,13 @@ Adapt.adapt_structure(
 Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.PointSpace) =
     Spaces.PointSpace(
         ClimaCore.DeviceSideContext(),
+        Adapt.adapt(to, Spaces.local_geometry_data(space)),
+    )
+
+Adapt.adapt_structure(to::CUDA.KernelAdaptor, space::Spaces.SpectralElementSpaceSlab) =
+    Spaces.SpectralElementSpaceSlab(
+        ClimaCore.DeviceSideContext(),
+        Adapt.adapt(to, Spaces.quadrature_style(space)),
         Adapt.adapt(to, Spaces.local_geometry_data(space)),
     )
 

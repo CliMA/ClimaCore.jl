@@ -179,6 +179,117 @@ function test_column_reduce_and_accumulate!(center_space)
 
 end
 
+# Lazy inputs with pointwise and finite difference operators (including linear
+# operators, which broadcasts apply as band matrix products) give the same
+# reductions and accumulations as their materialized values.
+function test_column_reduce_and_accumulate_lazy!(center_space)
+    FT = Spaces.undertype(center_space)
+    face_space = Spaces.face_space(center_space)
+    ᶜa = Fields.coordinate_field(center_space).z .+ 1
+    ᶜb = sin.(Fields.coordinate_field(center_space).z)
+    ᶠc = cos.(Fields.coordinate_field(face_space).z)
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    ᶠgrad = Operators.GradientC2F(;
+        bottom = Operators.SetValue(zero(FT)),
+        top = Operators.SetValue(zero(FT)),
+    )
+    lazy(args...) = Base.Broadcast.broadcasted(args...)
+    inputs = (
+        lazy(*, ᶜa, ᶜb),
+        lazy(*, ᶜa, lazy(ᶜinterp, ᶠc)),
+        lazy(ᶜdiv, lazy(ClimaCore.Geometry.WVector, lazy(*, ᶠc, lazy(ᶠinterp, ᶜb)))),
+        lazy(+, ᶜb, lazy(ᶜdiv, lazy(ClimaCore.Geometry.WVector, lazy(ᶠinterp, ᶜa)))),
+        lazy(ᶜdiv, lazy(ᶠgrad, ᶜb)), # reads the metric terms of every column
+    )
+    init = one(FT) # a concrete value, so that the closures below are inferable
+    for input in inputs
+        materialized_input = Base.Broadcast.materialize(input)
+        ᶜoutput = similar(ᶜa)
+        ᶜreference = similar(ᶜa)
+        ᶠoutput = similar(ᶠc)
+        ᶠreference = similar(ᶠc)
+        level_output = Fields.level(similar(ᶜa), 1)
+        level_reference = Fields.level(similar(ᶜa), 1)
+        for (reduce!, output, reference) in (
+            ((out, in) -> column_accumulate!(+, out, in), ᶜoutput, ᶜreference),
+            (
+                (out, in) -> column_accumulate!(+, out, in; init, reverse = true),
+                ᶠoutput,
+                ᶠreference,
+            ),
+            ((out, in) -> column_reduce!(max, out, in), level_output, level_reference),
+            (
+                (out, in) -> column_integral_definite!(out, in),
+                level_output,
+                level_reference,
+            ),
+            ((out, in) -> column_integral_indefinite!(out, in), ᶠoutput, ᶠreference),
+        )
+            reduce!(reference, materialized_input)
+            reduce!(output, input)
+            # Equal up to roundoff: GPU kernels of different structure fuse multiplications
+            # differently. Roundoff scales with the reduction of the input's magnitude, which
+            # matters for reductions that cancel to 0 (e.g., the integral of a divergence).
+            scale = similar(output)
+            reduce!(scale, Base.Broadcast.broadcasted(abs, materialized_input))
+            @test parent(output) ≈ parent(reference) rtol = 100 * eps(FT) atol =
+                100 * eps(FT) * maximum(abs, parent(scale))
+            @test_opt ignored_modules = CUDA_FRAMES reduce!(output, input)
+            test_allocs(@allocated reduce!(output, input))
+        end
+    end
+end
+
+# A column field (e.g., Spaces.column(field, i, j, h)) in an operator expression with fields
+# on the whole space is read in every column, like a copy of it on the whole space.
+function test_column_reduce_and_accumulate_column_fields!(center_space)
+    FT = Spaces.undertype(center_space)
+    ᶜa = Fields.coordinate_field(center_space).z .+ 1
+    ᶠb = cos.(Fields.coordinate_field(Spaces.face_space(center_space)).z)
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜdiv = Operators.DivergenceF2C()
+    ᶠupwind = Operators.UpwindBiasedProductC2F()
+    ᶠvanleer = Operators.LinVanLeerC2F(; constraint = Operators.MonotoneLocalExtrema())
+    lazy(args...) = Base.Broadcast.broadcasted(args...)
+    ᶠw = lazy(ClimaCore.Geometry.WVector, lazy(ᶠinterp, ᶜa))
+    inputs(ᶜc, ᶠc) = (
+        lazy(ᶜdiv, lazy(ᶠvanleer, lazy(*, ᶠw, ᶠc), ᶜa, FT(0.1))),
+        lazy(*, ᶜa, lazy(ᶜdiv, lazy(ᶠupwind, ᶠw, ᶜc))),
+    )
+    ᶜcolumn = Spaces.column(ᶜa .^ 2, 2, 2, 3)
+    ᶠcolumn = Spaces.column(ᶠb, 2, 2, 3)
+    (ᶜcopy, ᶠcopy) = (similar(ᶜa), similar(ᶠb))
+    @. ᶜcopy = ᶜcolumn
+    @. ᶠcopy = ᶠcolumn
+    level_output = Fields.level(similar(ᶜa), 1)
+    level_reference = Fields.level(similar(ᶜa), 1)
+    for (input, reference_input) in zip(inputs(ᶜcolumn, ᶠcolumn), inputs(ᶜcopy, ᶠcopy))
+        for (reduce!, output, reference) in (
+            ((out, in) -> column_reduce!(+, out, in), level_output, level_reference),
+            (
+                (out, in) -> column_accumulate!(+, out, in; reverse = true),
+                similar(ᶜa),
+                similar(ᶜa),
+            ),
+            (column_integral_definite!, level_output, level_reference),
+            (column_integral_indefinite!, similar(ᶠb), similar(ᶠb)),
+        )
+            reduce!(reference, reference_input)
+            reduce!(output, input)
+            @test parent(output) ≈ parent(reference) rtol = 100 * eps(FT)
+            @test_opt ignored_modules = CUDA_FRAMES reduce!(output, input)
+        end
+    end
+end
+
 function test_fubinis_theorem(space)
     FT = Spaces.undertype(space)
     center_field = zeros(space)
@@ -207,6 +318,20 @@ end
             test_column_integral_indefinite!(space)
             test_column_integral_indefinite_fn!(space)
             test_column_reduce_and_accumulate!(space)
+            test_column_reduce_and_accumulate_lazy!(space)
+        end
+        test_column_reduce_and_accumulate_column_fields!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context, topography = true),
+        )
+        # Columns of these spaces are indexed by (i, h) rather than (i, j, h).
+        for space in (
+            TU.MultiColumnSpace(FT; context),
+            Spaces.ExtrudedFiniteDifferenceSpace(
+                TU.SpectralElementSpace1D(FT; context),
+                TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            ),
+        )
+            test_column_reduce_and_accumulate_lazy!(space)
         end
     end
 end

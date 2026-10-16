@@ -25,19 +25,12 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     mask = Spaces.get_mask(axes(x))
     cart_inds = cartesian_indices_columnwise(Fields.field_values(A))
     args = (device, cache, x, A, b, mask, cart_inds)
-    nitems = Ni * Nj * Nh
-    (; threads, blocks) = config_via_occupancy(single_field_solve_kernel!, nitems, args)
-    auto_launch!(
-        single_field_solve_kernel!,
-        args;
-        threads_s = threads,
-        blocks_s = blocks,
-    )
+    auto_launch!(single_field_solve_kernel!, args; nitems = Ni * Nj * Nh)
     call_post_op_callback() && post_op_callback(x, device, cache, x, A, b)
 end
 
 function single_field_solve_kernel!(device, cache, x, A, b, mask, cart_inds)
-    tidx = linear_thread_idx()
+    tidx = thread_index()
     if linear_is_valid_index(tidx, unval(cart_inds))
         I = unval(cart_inds)[tidx]
         (i, j, h) = I.I

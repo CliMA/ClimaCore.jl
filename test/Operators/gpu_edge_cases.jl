@@ -20,7 +20,8 @@ import ClimaCore:
     Operators,
     MatrixFields,
     Quadratures
-import ClimaCore.CommonSpaces: MultiColumnSpace, CellCenter
+import ClimaCore.CommonSpaces:
+    MultiColumnSpace, ColumnSpace, ExtrudedCubedSphereSpace, CellCenter
 
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
@@ -128,8 +129,8 @@ function fd_c2f_results(center_space, face_space)
     return (gradc2f.(f), interpc2f.(f))
 end
 
-# Advection and nested-multiply stencils, covering the eager GPU kernel's
-# advection (pointwise and operator-matrix) and matrix-multiply handlers.
+# Advection and nested-multiply stencils, covering advection (pointwise and
+# operator-matrix) and matrix multiplication in GPU kernels.
 function fd_advection_inputs(center_space, face_space)
     FT = Spaces.undertype(center_space)
     zc = Fields.coordinate_field(center_space).z
@@ -182,6 +183,28 @@ function fd_pointwise_advection_results(center_space, face_space)
     )
 end
 
+# Fluxes of a NamedTuple-valued field under divergences whose SetValue
+# conditions impose plain vectors, which apply to every component of the flux.
+# On GPUs, a divergence caches its operand, where every imposed value must have
+# the NamedTuple type of the flux.
+tracer_densities(x) = (; tot = x, liq = x / 10, ice = x / 5)
+function fd_tuple_flux_results(center_space, face_space)
+    (; FT, x, u³) = fd_advection_inputs(center_space, face_space)
+    ρq = tracer_densities.(x)
+    zero_flux = Operators.SetValue(Geometry.Contravariant3Vector(FT(0)))
+    div_sv = Operators.DivergenceF2C(bottom = zero_flux, top = zero_flux)
+    div_sv_ex =
+        Operators.DivergenceF2C(bottom = zero_flux, top = Operators.Extrapolate())
+    lvl = Operators.LinVanLeerC2F(
+        constraint = Operators.MonotoneLocalExtrema(),
+    )
+    up3 = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    return ((@. div_sv(lvl(u³, ρq, FT(0.5)))), (@. div_sv_ex(up3(u³, ρq))))
+end
+
 @testset "boundary-only column, Nv = 1 (device vs CPU) [$FT]" for FT in (
     Float32,
     Float64,
@@ -196,11 +219,10 @@ end
         @test all(isfinite, Array(parent(field)))
     end
 
-    # Center-to-face stencils on a column whose interior window is empty:
-    # `Operators.window_bounds` used to reject these, but it now clamps the
-    # overlapping boundary windows (boundary handling is dispatched per index,
-    # with the left window taking precedence), so both faces are computed with
-    # their boundary rows.
+    # Center-to-face stencils on a column whose interior window is empty: the
+    # boundary windows overlap (boundary handling is dispatched per index, with
+    # the left window taking precedence), so both faces are computed with their
+    # boundary rows.
     for (field, field_cpu) in
         zip(fd_c2f_results(spaces...), fd_c2f_results(spaces_cpu...))
         @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
@@ -262,9 +284,8 @@ end
     Float64,
 )
     # On a vertically periodic column, stencil indices wrap instead of
-    # clamping (`mod1` in the eager kernel's window and matrix helpers), and
-    # boundary conditions are ignored; nothing else in the GPU tier covers
-    # the periodic vertical topology.
+    # clamping (`mod1` in `Operators.level_index`), and boundary conditions are
+    # ignored; nothing else in the GPU tier covers the periodic vertical topology.
     periodic_column_spaces(device) = begin
         context = ClimaComms.SingletonCommsContext(device)
         domain = Domains.IntervalDomain(
@@ -304,11 +325,11 @@ end
     Float32,
     Float64,
 )
-    # MultiColumnFiniteDifferenceSpace is in the eager GPU kernel's supported
-    # space families (`Operators.AllFiniteDifferenceSpace`); its `Field`
-    # handler must read each leaf field at the thread's level, not misread the
-    # space as a level field and read everything at level 1 -- the CPU
-    # references vary with z, so that failure mode cannot match them.
+    # MultiColumnFiniteDifferenceSpace is one of the finite difference space
+    # families (`Operators.AllFiniteDifferenceSpace`); a GPU kernel must read
+    # each leaf field at the thread's level, not misread the space as a level
+    # field and read everything at level 1 -- the CPU references vary with z,
+    # so that failure mode cannot match them.
     mc_spaces(device) = begin
         points = [
             Geometry.LatLongPoint(FT(10i - 40), FT(20i - 80)) for i in 1:7
@@ -346,10 +367,9 @@ end
     Float32,
     Float64,
 )
-    # A column with more than 256 face levels does not fit in one block of the
-    # eager GPU kernel, so it uses the lazy kernel, which evaluates nested
-    # stencils pointwise. This covers nested limiter and operator matrix
-    # expressions that once failed to compile for the lazy kernel.
+    # A column of 301 faces has more points than the threads of a GPU sub-block,
+    # so each thread evaluates several of its points. This covers nested limiter
+    # and operator matrix expressions on such columns.
     high_resolution_column_spaces(device) = begin
         context = ClimaComms.SingletonCommsContext(device)
         domain = Domains.IntervalDomain(
@@ -416,5 +436,50 @@ end
     )
         @test device_matches_cpu(field, field_cpu; rtol)
         @test all(isfinite, Array(parent(field)))
+    end
+end
+
+@testset "NamedTuple fluxes, vector boundary values (device vs CPU) [$FT]" for FT in (
+    Float32,
+    Float64,
+)
+    # The columns of the extruded space are short enough for a divergence to
+    # keep its cached operand in registers (read with warp shuffles), and those
+    # of the column space are too tall, so it is cached in shared memory.
+    tuple_flux_spaces(device) = map(
+        center_space -> (center_space, Spaces.face_space(center_space)),
+        (
+            ColumnSpace(
+                FT;
+                z_elem = 40,
+                z_min = 0,
+                z_max = 1,
+                device,
+                context = ClimaComms.SingletonCommsContext(device),
+                staggering = CellCenter(),
+            ),
+            ExtrudedCubedSphereSpace(
+                FT;
+                z_elem = 10,
+                z_min = 0,
+                z_max = 1,
+                radius = 10,
+                h_elem = 2,
+                n_quad_points = 3,
+                device,
+                context = ClimaComms.SingletonCommsContext(device),
+                staggering = CellCenter(),
+            ),
+        ),
+    )
+    for (spaces, spaces_cpu) in
+        zip(tuple_flux_spaces(test_device), tuple_flux_spaces(cpu_device))
+        for (field, field_cpu) in zip(
+            fd_tuple_flux_results(spaces...),
+            fd_tuple_flux_results(spaces_cpu...),
+        )
+            @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+            @test all(isfinite, Array(parent(field)))
+        end
     end
 end

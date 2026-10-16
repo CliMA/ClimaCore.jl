@@ -3,6 +3,7 @@ import ..Utilities:
     half,
     unionall_type,
     AutoBroadcaster,
+    nested_broadcast,
     nested_broadcast_result_type,
     add_auto_broadcasters
 
@@ -34,52 +35,36 @@ left_idx(space::AllFaceFiniteDifferenceSpace) = left_face_boundary_idx(space)
 right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
-right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
-    Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
-    1,
-)
+right_center_boundary_idx(space::AllFiniteDifferenceSpace) =
+    num_levels(Spaces.grid(space), Grids.CellCenter())
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
-    size(
-        Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
-        1,
-    ) - half
+    num_levels(Spaces.grid(space), Grids.CellFace()) - half
+
+# A ColumnGrid reads the local geometry of its full grid (a column view per point is slow).
+num_levels(grid, staggering) = size(Grids.local_geometry_data(grid, staggering), 1)
+num_levels(grid::Grids.ColumnGrid, staggering) = num_levels(grid.full_grid, staggering)
+Base.@propagate_inbounds column_local_geometry(grid, staggering, v) =
+    Grids.local_geometry_data(grid, staggering)[v]
+Base.@propagate_inbounds column_local_geometry(grid::Grids.ColumnGrid, staggering, v) =
+    Grids.local_geometry_data(grid.full_grid, staggering)[CartesianIndex(
+        v,
+        Grids.full_column_indices(grid.indices)...,
+    )]
 
 
-left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))
-right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
-left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
-right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
+left_face_boundary_idx(arg) = left_face_boundary_idx(Fields.shared_space(arg))
+right_face_boundary_idx(arg) = right_face_boundary_idx(Fields.shared_space(arg))
+left_center_boundary_idx(arg) = left_center_boundary_idx(Fields.shared_space(arg))
+right_center_boundary_idx(arg) = right_center_boundary_idx(Fields.shared_space(arg))
 
-# Unlike getidx, this allows extracting the face local geometry from the center space,
-# and vice versa.
-Base.@propagate_inbounds function Geometry.LocalGeometry(
-    space::AllFiniteDifferenceSpace,
-    idx::Integer,
-    hidx,
-)
-    v = idx
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    i, j, h = hindices(space, hidx)
-    local_geom =
-        Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
-    return @inbounds local_geom[v, i, j, h]
-end
-Base.@propagate_inbounds function Geometry.LocalGeometry(
-    space::AllFiniteDifferenceSpace,
-    idx::PlusHalf,
-    hidx,
-)
-    v = idx + half
-    if Topologies.isperiodic(space)
-        v = mod1(v, Spaces.nlevels(space))
-    end
-    i, j, h = hindices(space, hidx)
-    local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
-    return @inbounds local_geom[v, i, j, h]
-end
+# This can read the face local geometry of a center space, and vice versa.
+Base.@propagate_inbounds Geometry.LocalGeometry(space::AllFiniteDifferenceSpace, idx) =
+    column_local_geometry(
+        Spaces.grid(space),
+        idx isa PlusHalf ? Grids.CellFace() : Grids.CellCenter(),
+        level_index(space, idx),
+    )
 
 """
     VerticalBoundaryCondition <: AbstractBoundaryCondition
@@ -98,17 +83,24 @@ Adapt.adapt_structure(to, bc::VerticalBoundaryCondition) =
     hasfield(typeof(bc), :val) ? unionall_type(typeof(bc))(Adapt.adapt(to, bc.val)) : bc
 
 Base.@propagate_inbounds column(bc::VerticalBoundaryCondition, inds...) =
-    hasfield(typeof(bc), :val) ? unionall_type(typeof(bc))(column(bc.val, inds...)) : bc
+    hasfield(typeof(bc), :val) && bc.val isa MaybeLazyField ?
+    unionall_type(typeof(bc))(
+        column(bc.val, Fields.arg_slice_indices(column, bc.val, inds)...),
+    ) : bc
 
-promote_bc(bc::VerticalBoundaryCondition, FT) =
+has_mutable_registers(bc::VerticalBoundaryCondition) =
+    hasfield(typeof(bc), :val) && has_mutable_registers(bc.val)
+@inline freeze_registers(bc::VerticalBoundaryCondition) =
+    has_mutable_registers(bc) ? unionall_type(typeof(bc))(freeze_registers(bc.val)) : bc
+
+promote_bc(bc::VerticalBoundaryCondition, ::Type{FT}) where {FT} =
     hasfield(typeof(bc), :val) ? unionall_type(typeof(bc))(promote_val(bc.val, FT)) : bc
 
-promote_val(val, ::Type{FT}) where {FT} = val
-promote_val(val::FT, ::Type{FT}) where {FT} = val
-promote_val(val::Number, ::Type{FT}) where {FT} = FT(val)
-promote_val(val::Geometry.Tensor, ::Type{FT}) where {FT} =
-    Geometry.Tensor(SArray{eltype(val), FT}(parent(val)...), axes(val))
-promote_val(val::Geometry.Tensor{<:Any, FT}, ::Type{FT}) where {FT} = val
+promote_val(val, _) = val
+# Plain numbers take the type of the space, but other values (e.g., Duals) are kept.
+promote_val(val::Union{Integer, AbstractFloat}, ::Type{FT}) where {FT} = FT(val)
+promote_val(val::AbstractArray{<:Union{Integer, AbstractFloat}}, ::Type{FT}) where {FT} =
+    map(x -> FT(x), val)
 
 """
     NullBoundaryCondition()
@@ -232,17 +224,23 @@ from the interior; near a boundary the order is reduced when fewer than
 Outflow(; order = 0) = Extrapolate{order}()
 
 """
-    extrapolate_weights(bc::Extrapolate{N}, navailable)
+    extrapolate_weights(bc::Extrapolate{N}, navailable, FT)
 
 Return the weights of the `navailable` closest interior points in the ghost-point
-extrapolation of `bc`, as a tuple of 3 integers ordered from the closest
-interior point outwards (with trailing zeros when fewer than 3 points are
-used). The extrapolation order is reduced to `navailable - 1` when fewer than
-`N + 1` interior points are available.
+extrapolation of `bc`, as a tuple of 3 numbers of type `FT` ordered from the closest
+interior point outwards (with trailing zeros when fewer than 3 points are used), at an
+order reduced to `navailable - 1` when fewer than `N + 1` interior points are available.
 """
-function extrapolate_weights(::Extrapolate{N}, navailable::Integer) where {N}
+function extrapolate_weights(
+    ::Extrapolate{N},
+    navailable::Integer,
+    ::Type{FT},
+) where {N, FT}
+    # Floats are chosen in each branch: LLVM narrows a run-time choice between 0 and -1 to
+    # `sitofp i1`, which LLVM 15's NVPTX backend (Julia 1.10) converts to 1.0, not -1.0.
     n = min(N, navailable - 1)
-    return n == 0 ? (1, 0, 0) : n == 1 ? (2, -1, 0) : (3, -3, 1)
+    return n == 0 ? (FT(1), FT(0), FT(0)) :
+           n == 1 ? (FT(2), FT(-1), FT(0)) : (FT(3), FT(-3), FT(1))
 end
 
 # Callable ghost-point reconstruction interface (see AdvectionOperator): the
@@ -254,7 +252,7 @@ end
 # `extrapolate_weights` for the weights themselves). The reconstruction of a
 # tuple-valued field applies componentwise, through the AutoBroadcaster
 # arithmetic. The result must have the same type as the inputs (which are
-# already AutoBroadcasters for tuple-valued fields, wrapped by `getidx`), so
+# already AutoBroadcasters for tuple-valued fields, wrapped when broadcasted), so
 # the wrappers are not dropped here: `advection_ghost_values` substitutes the
 # result for a subset of the clamped stencil values, and a type mismatch
 # between the two makes the stencil evaluation dynamically dispatched.
@@ -271,16 +269,11 @@ end
     3 * (add_auto_broadcasters(x₁) - add_auto_broadcasters(x₂)) +
     add_auto_broadcasters(x₃)
 
-abstract type Location end
-abstract type Boundary <: Location end
-abstract type BoundaryWindow{name} <: Location end
-
-struct Interior <: Location end
+abstract type BoundaryWindow{name} end
 struct LeftBoundaryWindow{name} <: BoundaryWindow{name} end
 struct RightBoundaryWindow{name} <: BoundaryWindow{name} end
 
-@inline left_boundary_window(space) =
-    LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+@inline left_boundary_window(space) = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
 @inline right_boundary_window(space) =
     RightBoundaryWindow{Spaces.right_boundary_name(space)}()
 
@@ -299,19 +292,41 @@ See also [`VerticalBoundaryCondition`](@ref) for how to define the boundaries.
 """
 abstract type FiniteDifferenceOperator <: AbstractOperator end
 
+@inline function map_bcs(f::F, op) where {F}
+    hasfield(typeof(op), :bcs) || return op
+    @assert fieldname(typeof(op), 1) === :bcs
+    return unionall_type(typeof(op))(
+        f(op.bcs),
+        ntuple(n -> getfield(op, n + 1), Val(fieldcount(typeof(op)) - 1))...,
+    )
+end
+
 Adapt.adapt_structure(to, op::FiniteDifferenceOperator) =
-    hasfield(typeof(op), :bcs) ? unionall_type(typeof(op))(; Adapt.adapt(to, op.bcs)...) :
-    op
+    map_bcs(bcs -> Adapt.adapt(to, bcs), op)
 
 Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
-    hasfield(typeof(op), :bcs) ? unionall_type(typeof(op))(column(op.bcs, inds...)) : op
+    map_bcs(bcs -> column(bcs, inds...), op)
+
+# Boundary values can be broadcasts over operators with boundary conditions of their own
+# (e.g., a SetValue of a stencil expression), whose bcs are mapped and sliced by nested calls.
+@drop_recursion_limits map_bcs, Fields.sliced_function
+@static if hasfield(Method, :recursion_relation)
+    for T in (FiniteDifferenceOperator, VerticalBoundaryCondition)
+        which(column, Tuple{T, Vararg{Any}}).recursion_relation = Returns(true)
+    end
+end
+
+# Boundary values can be register temporaries of a slice loop body (e.g., boundary levels).
+has_mutable_registers(op::FiniteDifferenceOperator) =
+    hasfield(typeof(op), :bcs) && unrolled_any(has_mutable_registers, op.bcs)
+@inline freeze_registers(op::FiniteDifferenceOperator) =
+    has_mutable_registers(op) ? map_bcs(bcs -> unrolled_map(freeze_registers, bcs), op) : op
 
 get_boundary(op::FiniteDifferenceOperator, ::BoundaryWindow{name}) where {name} =
     hasfield(typeof(op.bcs), name) ? getfield(op.bcs, name) : NullBoundaryCondition()
 
 @inline promote_bcs(op::FiniteDifferenceOperator, ::Type{FT}) where {FT} =
-    hasfield(typeof(op), :bcs) ?
-    unionall_type(typeof(op))(unrolled_map(Base.Fix2(promote_bc, FT), op.bcs)) : op
+    map_bcs(bcs -> unrolled_map(Base.Fix2(promote_bc, FT), bcs), op)
 
 """
     boundary_width(op::FiniteDifferenceOperator, bc::VerticalBoundaryCondition, args...)
@@ -326,7 +341,7 @@ boundary_width(::FiniteDifferenceOperator, bc::SetDivergence, args...) = 1
 boundary_width(::FiniteDifferenceOperator, bc::SetCurl, args...) = 1
 boundary_width(::FiniteDifferenceOperator, bc::Extrapolate{N}, args...) where {N} = N + 1
 
-struct StencilStyle <: Fields.AbstractFieldStyle end
+struct StencilStyle <: OperatorStyle end
 
 OperatorStyle(::FiniteDifferenceOperator) = StencilStyle()
 slice_operator(::StencilStyle) = column
@@ -353,197 +368,419 @@ and `i + 1 + half`, and `arg2` at index `i`.
 function stencil_interior_width end
 
 """
-    stencil_interior(::Op, space, idx, hidx, args...)
+    stencil_interior(::Op, space, idx, args...)
 
 Return the value of the interior stencil of the operator `Op` at vertical index
-`idx` and horizontal index `hidx` of `space`; `args` are the input arguments.
+`idx` of the column `space`; `args` are the input arguments.
 """
 function stencil_interior end
 
 """
-    stencil_left_boundary(op, bc, space, idx, hidx, args...)
+    stencil_left_boundary(op, bc, space, idx, args...)
 
-Return the result of the stencil operator `op` at horizontal index `hidx` and
-vertical index `idx` of `space` near the left boundary, with boundary condition
-`bc`. For operators that cannot be evaluated without a boundary condition, a
-`NullBoundaryCondition` generates `NaN` values here.
-
-Operators that are rewritten into an operator matrix multiply do not reach this
-method: their boundary rows come from `MatrixFields` instead, where a
-`NullBoundaryCondition` row is filled with `NaN`s, so the boundary output is
-`NaN` there as well.
-"""
-stencil_left_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
-    new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
-
-"""
-    stencil_right_boundary(op, bc, space, idx, hidx, args...)
-
-Return the result of the stencil operator `op` at horizontal index `hidx` and
-vertical index `idx` of `space` near the right boundary, with boundary condition
-`bc`. For operators that cannot be evaluated without a boundary condition, a
-`NullBoundaryCondition` generates `NaN` values here.
+Return the result of the stencil operator `op` at vertical index `idx` of the column `space`
+near the left boundary, with boundary condition `bc`. For operators that cannot be evaluated
+without a boundary condition, a `NullBoundaryCondition` generates `NaN` values here.
 
 Operators that are rewritten into an operator matrix multiply do not reach this
 method: their boundary rows come from `MatrixFields` instead, where a
 `NullBoundaryCondition` row is filled with `NaN`s, so the boundary output is
 `NaN` there as well.
 """
-stencil_right_boundary(op, ::NullBoundaryCondition, space, _, _, args...) =
+stencil_left_boundary(op, ::NullBoundaryCondition, space, _, args...) =
     new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
 
 """
-    left_interior_idx(op, bc, args...)
+    stencil_right_boundary(op, bc, space, idx, args...)
 
-Return the index of the left-most interior point of the operator `op` with
-boundary `bc` when used with arguments `args...`.
+Like [`stencil_left_boundary`](@ref), near the right boundary.
 """
-@inline left_interior_idx(op, bc::VerticalBoundaryCondition, args...) =
-    left_idx(return_space(op, args...)) + boundary_width(op, bc)
+stencil_right_boundary(op, ::NullBoundaryCondition, space, _, args...) =
+    new(return_eltype(op, args...)) * Spaces.undertype(space)(NaN)
 
-"""
-    right_interior_idx(op, bc::VerticalBoundaryCondition, args...)
-
-Return the index of the right-most interior point of the operator `op` with
-boundary `bc` when used with arguments `args...`.
-"""
-@inline right_interior_idx(op, bc::VerticalBoundaryCondition, args...) =
-    right_idx(return_space(op, args...)) - boundary_width(op, bc)
-
-"""
-    left_interior_window_idx(arg, loc)
-
-Compute the index of the leftmost point of `arg` (a stencil broadcast, field,
-or scalar) that uses the interior stencil; `loc` is the left boundary window.
-"""
-@inline function left_interior_window_idx(
-    bc::StencilOperatorBroadcasted,
-    loc::LeftBoundaryWindow,
-)
-    args_and_widths =
-        unrolled_map(tuple, bc.args, stencil_interior_width(bc.op, bc.args...))
-    min_idx = left_interior_idx(bc.op, get_boundary(bc.op, loc), bc.args...)
-    max_args_idx = unrolled_maximum(args_and_widths) do (arg, (left_width, _))
-        Fields.has_field_style(arg) ?
-        left_interior_window_idx(arg, loc) - left_width : min_idx
+# Widths of the boundary windows, which only depend on argument types: a column ends as far
+# from the other staggering's end as it starts from its start (faces have one more point).
+@inline function left_window_width(space, op, bc, args...)
+    stencil_width = unrolled_maximum(stencil_interior_width(op, args...)) do (lo, _)
+        first_index(space, left_idx(space) + lo) - lo - left_idx(space)
     end
-    return max(min_idx, max_args_idx)
+    return max(boundary_width(op, bc, args...), stencil_width)
 end
-@inline function left_interior_window_idx(
-    bc::StencilBroadcasted,
-    loc::LeftBoundaryWindow,
-)
-    field_args = unrolled_filter(Fields.has_field_style, bc.args)
-    return unrolled_maximum(Base.Fix2(left_interior_window_idx, loc), field_args)
-end
-@inline left_interior_window_idx(field::MaybeLazyField, loc::LeftBoundaryWindow) =
-    left_idx(axes(field))
-
-@inline function right_interior_window_idx(
-    bc::StencilOperatorBroadcasted,
-    loc::RightBoundaryWindow,
-)
-    args_and_widths =
-        unrolled_map(tuple, bc.args, stencil_interior_width(bc.op, bc.args...))
-    max_idx = right_interior_idx(bc.op, get_boundary(bc.op, loc), bc.args...)
-    min_args_idx = unrolled_minimum(args_and_widths) do (arg, (_, right_width))
-        Fields.has_field_style(arg) ?
-        right_interior_window_idx(arg, loc) - right_width : max_idx
+@inline function right_window_width(space, op, bc, args...)
+    stencil_width = unrolled_maximum(stencil_interior_width(op, args...)) do (_, hi)
+        hi + first_index(space, left_idx(space) + hi) - left_idx(space)
     end
-    return min(max_idx, min_args_idx)
+    return max(boundary_width(op, bc, args...), stencil_width)
 end
-@inline function right_interior_window_idx(
-    bc::StencilBroadcasted,
-    loc::RightBoundaryWindow,
-)
-    field_args = unrolled_filter(Fields.has_field_style, bc.args)
-    return unrolled_minimum(Base.Fix2(right_interior_window_idx, loc), field_args)
-end
-@inline right_interior_window_idx(field::MaybeLazyField, loc::RightBoundaryWindow) =
-    right_idx(axes(field))
+
+# The constant width is tested first, so an empty window never branches on the distance.
+@inline in_window(distance, width) = width > 0 && distance < width
 
 @inline function should_call_left_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
-    loc = left_boundary_window(space)
-    boundary_condition = get_boundary(op, loc)
-    return idx < left_interior_idx(op, boundary_condition, args...)
+    bc = get_boundary(op, left_boundary_window(space))
+    return in_window(idx - left_idx(space), left_window_width(space, op, bc, args...))
 end
 
 @inline function should_call_right_boundary(idx, space, op, args...)
     Topologies.isperiodic(space) && return false
-    loc = right_boundary_window(space)
-    boundary_condition = get_boundary(op, loc)
-    return idx > right_interior_idx(op, boundary_condition, args...)
+    bc = get_boundary(op, right_boundary_window(space))
+    return in_window(right_idx(space) - idx, right_window_width(space, op, bc, args...))
 end
 
-function apply_operator(op::FiniteDifferenceOperator, arg1, args...)
-    dest = register_similar(arg1, return_eltype(op, arg1, args...))
-    bc = Broadcast.broadcasted(op, arg1, args...)
-    (li, lw, rw, ri) = window_bounds(bc)
-    IP = Topologies.isperiodic(axes(bc))
-    L = !IP ? li : lw
-    R = !IP ? ri : rw
-    @inbounds for idx in L:R
-        # On a column too short to separate the two boundary windows
-        # (`window_bounds` clamps the overlap), an index can lie in both windows
-        # at once; the left (bottom) boundary condition always takes precedence.
-        # In particular, when both boundary conditions prescribe the operator's
-        # output at such an index (e.g. a two-sided SetDivergence on a
-        # single-level DivergenceF2C), only the left one is applied.
-        dest[idx] =
-            if should_call_left_boundary(idx, axes(bc), bc.op, bc.args...)
-                stencil_left_boundary(
-                    op,
-                    get_boundary(op, left_boundary_window(axes(bc))),
-                    axes(bc),
-                    idx,
-                    hidx,
-                    bc.args...,
-                )
-            elseif should_call_right_boundary(idx, axes(bc), bc.op, bc.args...)
-                stencil_right_boundary(
-                    op,
-                    get_boundary(op, right_boundary_window(axes(bc))),
-                    axes(bc),
-                    idx,
-                    hidx,
-                    bc.args...,
-                )
-            else
-                stencil_interior(bc.op, axes(bc), idx, hidx, bc.args...)
-            end
+@inline function level_index(space, idx)
+    v = idx isa PlusHalf ? idx + half : idx
+    return Topologies.isperiodic(space) ? mod1(v, right_center_boundary_idx(space)) : v
+end
+
+@inline first_index(space, idx) =
+    idx isa PlusHalf ? left_face_boundary_idx(space) : left_center_boundary_idx(space)
+@inline last_index(space, idx) =
+    idx isa PlusHalf ? right_face_boundary_idx(space) : right_center_boundary_idx(space)
+
+# Whether idx is in the column, and the closest index that is in the column.
+# Used to implement operators without thread divergence on GPUs (e.g., advection stencils
+# and band matrix products), so that even out-of-bounds threads in a synchronized scope
+# can read from valid indices.
+@inline is_valid_column_index(space, idx) =
+    Topologies.isperiodic(space) || first_index(space, idx) <= idx <= last_index(space, idx)
+@inline clamped_column_index(space, idx) =
+    Topologies.isperiodic(space) ? idx :
+    clamp(idx, first_index(space, idx), last_index(space, idx))
+
+# Numbers of the points of a stencil at offsets ld:ud from idx beyond the ends of the column
+# (ghost points), zero at compile time on a side that the stencil never reaches.
+@inline function ghost_counts(space, idx, ld, ud)
+    Topologies.isperiodic(space) && return (0, 0)
+    (max_left, max_right) = max_ghost_counts(space, idx, ld, ud)
+    return (
+        max_left > 0 ? max(max_left - (idx - first_index(space, idx)), 0) : 0,
+        max_right > 0 ? max(max_right - (last_index(space, idx) - idx), 0) : 0,
+    )
+end
+@inline function max_ghost_counts(space, idx, ld, ud)
+    offset = first_index(space, idx + ld) - first_index(space, idx)
+    return (offset - ld, ud + offset)
+end
+
+"""
+    fuses_into_stencils(op)
+
+Whether the operator `op` can be evaluated wherever another stencil reads its result, as it
+only reads its arguments at that point (or values not computed in the column).
+"""
+fuses_into_stencils(::FiniteDifferenceOperator) = false
+
+"""
+    reads_neighbors(op, args...)
+
+Return a tuple with `Val(true)` for each argument that the stencil of `op` reads at points
+other than the one it evaluates and `Val(false)` for the others; by default, every argument
+is read at neighboring points unless `op` [`fuses_into_stencils`](@ref).
+"""
+reads_neighbors(op, args...) = unrolled_map(Returns(Val(!fuses_into_stencils(op))), args)
+
+"""
+    reads_without_branching(op)
+
+Whether the stencil of `op` reads its arguments at neighboring points without branching on
+the point (e.g., at clamped indices, replacing out-of-range values afterwards), so its cached
+arguments can stay in registers where supported (see [`cached_arg`](@ref)).
+"""
+reads_without_branching(_) = false
+
+# How an operator reads each of its arguments: at the point it evaluates (Val(false)), at
+# neighboring points (Val(true)), or at neighboring points without branching (Val(:branch_free)).
+arg_reads(bc::StencilOperatorBroadcasted) =
+    unrolled_map(reads_neighbors(bc.f, bc.args...)) do reads
+        reads isa Val{true} && reads_without_branching(bc.f) ? Val(:branch_free) : reads
     end
+arg_reads(bc) = unrolled_map(Returns(Val(false)), bc.args)
+reads_neighbor(reads) = !(reads isa Val{false})
+
+has_stencils(arg) = false
+has_stencils(bc::StencilBroadcasted) = unrolled_any(has_stencils, bc.args)
+has_stencils(bc::StencilOperatorBroadcasted) =
+    !fuses_into_stencils(bc.f) || unrolled_any(has_stencils, bc.args)
+
+# Whether a broadcast passes through its only argument's value (like adjoint), except maybe
+# at boundaries; it is read from a cache of that argument, so cached values share a type.
+passes_through(_) = false
+passes_through(bc::Broadcast.Broadcasted) =
+    bc.f isa Union{typeof(adjoint), typeof(add_auto_broadcasters), SetBoundaryOperator}
+
+"""
+    recomputable(arg)
+
+Whether an argument read at neighboring points is cheaper to recompute at every read than
+to cache (see `stencil_arg`): a pointwise expression of at most `MAX_RECOMPUTED_DEPTH`
+nested [`recomputable_node`](@ref) broadcasts over constants and thread-readable `Field`s,
+or an application of a [`recomputable_operator`](@ref).
+"""
+recomputable(arg) = recomputable(arg, Val(MAX_RECOMPUTED_DEPTH))
+recomputable(_, _) = true
+recomputable(field::Field, _) = !DataLayouts.stored_in_registers(Fields.field_values(field))
+recomputable(::LazyField, _) = false
+recomputable(bc::Fields.PointwiseBroadcasted, ::Val{depth}) where {depth} =
+    depth > 0 &&
+    recomputable_node(bc.f) &&
+    unrolled_all(arg -> recomputable(arg, Val(depth - 1)), bc.args)
+recomputable(bc::StencilOperatorBroadcasted, _) = recomputable_operator(bc.f)
+const MAX_RECOMPUTED_DEPTH = 2
+
+"""
+    recomputable_operator(op)
+
+Whether an application of `op` can be [`recomputable`](@ref), as when it reads no values
+(like interpolation matrices, whose rows only depend on the float type).
+"""
+recomputable_operator(_) = false
+
+"""
+    recomputable_node(f)
+
+Whether a pointwise broadcast of `f` can be [`recomputable`](@ref): `true` by default, and
+`false` for functions that cost more than a buffer read, like `MatrixFields.ProjectForMul`.
+"""
+recomputable_node(_) = true
+
+# Whether an argument read at neighboring points is cached when buffers are shared. If its
+# buffer would need too much shared memory (e.g., on very tall columns), its values are
+# recomputed at every read instead, unless it reads registers, which only hold the values at
+# the points of their own threads.
+caches_values(arg) =
+    is_cached(arg) &&
+    !recomputable(arg) &&
+    (reads_registers(arg) || fits_inlined_buffers(arg, single_field_buffer_bytes))
+reads_registers(_) = false
+reads_registers(field::Field) = DataLayouts.stored_in_registers(Fields.field_values(field))
+reads_registers(bc::Broadcast.Broadcasted) = unrolled_any(reads_registers, bc.args)
+@drop_recursion_limits reads_registers
+is_cached_arg(arg) = passes_through(arg) ? is_cached_arg(arg.args[1]) : caches_values(arg)
+
+caches_args(bc) =
+    !has_private_buffers(bc) &&
+    unrolled_any(identity, unrolled_map(bc.args, arg_reads(bc)) do arg, reads
+        reads_neighbor(reads) && is_cached_arg(arg)
+    end)
+
+# Whether an operator is evaluated where its result is read, not over a column: with private
+# buffers, if its arguments have no stencils (recomputed per read); otherwise, if it caches
+# no arguments, so that cached arguments of different applications are never live at once.
+is_fused(bc) =
+    has_private_buffers(bc) ?
+    fuses_into_stencils(bc.f) || !unrolled_any(has_stencils, bc.args) : !caches_args(bc)
+
+fused_stencil(bc) =
+    Broadcast.Broadcasted(bc.style, bc.f, unrolled_map(operator_arg, bc.args), bc.axes)
+
+operator_arg(bc::StencilBroadcasted) =
+    rebroadcasted(bc, unrolled_map(operator_arg, bc.args))
+operator_arg(bc::StencilOperatorBroadcasted) =
+    is_fused(bc) ? fused_stencil(bc) : apply_operators(bc)
+
+# A pointwise expression over stencil operators is evaluated in one pass, which
+# also evaluates the operators that it reads at the same point, as long as at most
+# one of them caches its arguments. An operator is instead applied separately (see
+# operator_arg) if it caches arguments when other operators do too, or if it needs
+# more than half of the buffer limit of its scope; when the operators that cache
+# arguments do not fit together, each of them is compiled separately.
+pointwise_stencil(bc) = pointwise_stencil(
+    bc,
+    fits_inlined_buffers(bc) ? Val(num_caching_operators(bc) <= 1) : Val(:separately),
+)
+pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
+    bc.style,
+    bc.f,
+    unrolled_map(bc.args, in_pass(bc)) do arg, same_pass
+        same_pass isa Val{true} ? pointwise_arg(arg, fuse_caching) : operator_arg(arg)
+    end,
+    bc.axes,
+)
+pointwise_arg(arg, _) = operator_arg(arg)
+pointwise_arg(bc::StencilBroadcasted, fuse_caching) = pointwise_stencil(bc, fuse_caching)
+pointwise_arg(bc::StencilOperatorBroadcasted, fuse_caching) =
+    fuse_caching isa Val{:separately} && caches_args(bc) ? apply_separately(bc) :
+    fits_inlined_buffers(bc) && (fuse_caching isa Val{true} || !caches_args(bc)) ?
+    pointwise_stencil(bc, fuse_caching) : apply_operators(bc)
+in_pass(bc) = unrolled_map(Returns(Val(true)), bc.args)
+in_pass(bc::StencilOperatorBroadcasted) =
+    has_private_buffers(bc) ? unrolled_map(Returns(Val(false)), bc.args) :
+    unrolled_map(reads -> Val(reads isa Val{false}), arg_reads(bc))
+num_caching_operators(_) = 0
+num_caching_operators(bc::StencilBroadcasted) =
+    Int(caches_args(bc)) + unrolled_sum(unrolled_map(bc.args, in_pass(bc)) do arg, same_pass
+        same_pass isa Val{true} ? num_caching_operators(arg) : 0
+    end)
+
+# On GPUs, every operator in an inlined body allocates a shared buffer per cached argument.
+inlined_buffer_bytes(bc::StencilOperatorBroadcasted) = published_bytes(bc, Val(false))
+published_bytes(arg, reads) =
+    reads_neighbor(reads) && passes_through(arg) ? published_bytes(arg.args[1], reads) :
+    (
+        reads_neighbor(reads) && caches_values(arg) &&
+        !caches_in_registers(
+            DataLayouts.DataScope(arg),
+            arg,
+            Val(reads isa Val{:branch_free}),
+        ) ?
+        single_field_buffer_bytes(arg) : 0
+    ) + nested_bytes(arg)
+nested_bytes(_) = 0
+nested_bytes(bc::StencilBroadcasted) =
+    unrolled_sum(unrolled_map(published_bytes, bc.args, arg_reads(bc)))
+
+@drop_recursion_limits has_stencils, recomputable, is_cached_arg, operator_arg,
+pointwise_stencil, pointwise_arg, num_caching_operators, published_bytes, nested_bytes
+
+# Value of an argument or boundary value at idx, with newindex to handle
+# horizontal and point spaces. Implemented as a generated function for
+# StencilBroadcasted, since an unrolled_map over a closure would add two method
+# instances per pointwise node (see DataLayouts.slice_every_arg).
+Base.@propagate_inbounds column_value(arg::MaybeLazyField, space, idx) =
+    arg[Broadcast.newindex(arg, level_index(space, idx))]
+@generated function column_value(bc::StencilBroadcasted, space, idx)
+    N = length(bc.parameters[4].parameters)
+    return quote
+        Base.@_propagate_inbounds_meta
+        args = getfield(bc, :args)
+        return getfield(bc, :f)(
+            Base.Cartesian.@ntuple($N, n -> column_value(getfield(args, n), space, idx))...,
+        )
+    end
+end
+Base.@propagate_inbounds function column_value(bc::StencilOperatorBroadcasted, space, idx)
+    space = idx isa PlusHalf ? Spaces.face_space(space) : Spaces.center_space(space)
+    return stencil_value(bc.f, space, idx, bc.args...)
+end
+@inline column_value(arg::Union{Ref, Broadcast.Broadcasted}, _, _) =
+    add_auto_broadcasters(arg[])
+@inline column_value(arg::Tuple{Any}, _, _) = add_auto_broadcasters(arg[1])
+@inline column_value(arg, _, _) = add_auto_broadcasters(arg)
+
+# Value of a boundary condition at idx; a column-wide value is read at its end nearest idx.
+Base.@propagate_inbounds boundary_value(val, space, idx) = column_value(val, space, idx)
+Base.@propagate_inbounds boundary_value(val::MaybeLazyField, space, idx) =
+    val[Broadcast.newindex(val, idx == left_idx(space) ? 1 : num_values(val))]
+# Similarly, a stencil expression is evaluated at its own point nearest idx.
+Base.@propagate_inbounds function boundary_value(val::StencilBroadcasted, space, idx)
+    val_space = Fields.shared_space(val)
+    val_idx = idx == left_idx(space) ? left_idx(val_space) : right_idx(val_space)
+    return column_value(val, val_space, val_idx)
+end
+num_values(val) = iszero(ndims(val)) ? 1 : size(val)[1]
+
+# Value of an operator application at idx; at an index in both boundary windows of a short
+# column, the left (bottom) condition takes precedence.
+Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
+    if should_call_left_boundary(idx, space, op, args...)
+        bc = get_boundary(op, left_boundary_window(space))
+        stencil_left_boundary(op, bc, space, idx, args...)
+    elseif should_call_right_boundary(idx, space, op, args...)
+        bc = get_boundary(op, right_boundary_window(space))
+        stencil_right_boundary(op, bc, space, idx, args...)
+    else
+        stencil_interior(op, space, idx, args...)
+    end
+
+@inline apply_operator(op::FiniteDifferenceOperator, args...) = apply_stencil(
+    Broadcast.Broadcasted(StencilStyle(), op, args, return_space(op, args...)),
+)
+
+apply_pointwise_operators(::StencilStyle, bc) = apply_stencil(pointwise_stencil(bc))
+# Unlike apply_operator, an application keeps its stored axes (see Fields.shared_space).
+@inline inline_apply_operators(bc::StencilOperatorBroadcasted) =
+    apply_stencil(fused_stencil(bc))
+@noinline noinline_apply_operators(bc::StencilOperatorBroadcasted) =
+    apply_stencil(fused_stencil(bc))
+apply_operators!(dest, bc::StencilBroadcasted) =
+    apply_stencil!(dest, pointwise_stencil(bc), Val(true))
+
+@inline function vertical_index(space, index)
+    v = isempty(Tuple(index)) ? 1 : index[1]
+    return Spaces.staggering(space) isa Spaces.CellFace ? v - half : v
+end
+
+# With shared buffers, each argument that an operator reads at neighboring points is cached
+# (see cached_arg), and a cached expression caches no arguments itself (see is_fused).
+@inline stencil_arg(arg, _) = arg
+@inline stencil_arg(arg::MaybeLazyField, reads) =
+    has_private_buffers(arg) ? arg :
+    reads_neighbor(reads) ? neighbor_arg(arg, Val(reads isa Val{:branch_free})) :
+    arg isa StencilBroadcasted ?
+    Broadcast.Broadcasted(
+        arg.style,
+        arg.f,
+        unrolled_map(stencil_arg, arg.args, arg_reads(arg)),
+        arg.axes,
+    ) : arg
+@inline neighbor_arg(arg, branch_free) =
+    !is_cached_arg(arg) ? arg :
+    passes_through(arg) ?
+    Broadcast.Broadcasted(
+        StencilStyle(),
+        arg.f,
+        (neighbor_arg(arg.args[1], branch_free),),
+        arg.axes,
+    ) : cached_arg(arg, branch_free)
+
+@inline materialize_buffer(bc::StencilBroadcasted) = constant_field(
+    apply_stencil!(buffer_similar(destination_template(bc), eltype(bc)), bc, Val(false)),
+)
+@inline register_values(bc::StencilBroadcasted) = constant_field(
+    apply_stencil!(register_similar(destination_template(bc), eltype(bc)), bc, Val(false)),
+)
+
+# Evaluate a stencil expression over a column into dest, each point on its own thread (in
+# rounds of the whole scope where cached reads need every thread; see update_points!). The
+# first synchronization publishes the values the pass reads, and the last one protects them
+# until all threads have read them (a cached argument's reader synchronizes instead). If
+# operator results are in scope registers (see register_similar), a pass that caches no
+# arguments skips both, since every earlier pass that read buffers ended synchronized (see
+# is_fused).
+@inline function apply_stencil!(dest, bc, finish)
+    scope = DataLayouts.DataScope(bc)
+    space = Fields.shared_space(bc)
+    stencil_bc = stencil_arg(bc, Val(false))
+    syncs =
+        num_caching_operators(bc) > 0 ||
+        !DataLayouts.has_scope_registers(Fields.field_values(destination_template(bc)))
+    syncs && DataLayouts.synchronize(scope)
+    dest_data = Fields.field_values(dest)
+    if has_private_buffers(bc)
+        # One thread owns the column (as on CPUs): entering update_points!'s loop directly
+        # avoids two method instances per expression, each with the whole stencil inlined.
+        DataLayouts.scoped_slice_loop(
+            DataLayouts.ThisThread(),
+            DataLayouts.ThisThread(),
+            view,
+            StencilPointUpdate(stencil_bc, space),
+            DataLayouts.NoMask(),
+            Val(true),
+            dest_data,
+        )
+    else
+        DataLayouts.update_points!(nothing, dest_data, view) do index
+            @inbounds column_value(stencil_bc, space, vertical_index(space, index))
+        end
+    end
+    syncs && finish isa Val{true} && DataLayouts.synchronize(scope)
     return dest
 end
 
-function window_bounds(bc)
-    if Topologies.isperiodic(axes(bc))
-        li = lw = left_idx(axes(bc))
-        ri = rw = right_idx(axes(bc))
-    else
-        lbw = left_boundary_window(axes(bc))
-        rbw = right_boundary_window(axes(bc))
-        li = left_idx(axes(bc))
-        lw = left_interior_window_idx(bc, lbw)::typeof(li)
-        ri = right_idx(axes(bc))
-        rw = right_interior_window_idx(bc, rbw)::typeof(ri)
-        # On a short column the two boundary windows can overlap (e.g. a
-        # 4-wide advection stencil on a 2-center column, whose middle face is
-        # within a stencil width of both boundaries), crossing `lw` past `rw`.
-        # Boundary handling is dispatched per index (`should_call_left_boundary`
-        # takes precedence over the right), so the window split only needs to
-        # cover each index exactly once: clamp the crossed bounds into an
-        # empty interior window, with the overlap assigned to the left window.
-        lw = min(lw, ri + 1)
-        rw = max(rw, lw - 1)
-    end
-    @assert li <= lw <= rw + 1 && rw <= ri
-    return (li, lw, rw, ri)
+# Point update of apply_stencil!, a callable struct rather than a closure (see above).
+struct StencilPointUpdate{B, S}
+    stencil_bc::B
+    space::S
 end
-
-abstract type InterpolationOperator <: FiniteDifferenceOperator end
-
-return_eltype(::InterpolationOperator, arg) = eltype(arg)
+@inline function (update::StencilPointUpdate)(index, point)
+    (; stencil_bc, space) = update
+    @inbounds point[] = column_value(stencil_bc, space, vertical_index(space, index))
+    return nothing
+end
+@inline apply_stencil(bc) = constant_field(
+    apply_stencil!(register_similar(destination_template(bc), eltype(bc)), bc, Val(true)),
+)
 
 function assert_no_bcs(op, kwargs)
     length(kwargs) == 0 && return nothing
@@ -557,12 +794,23 @@ function assert_valid_bcs(op, kwargs, ::Type{ValidBCs}) where {ValidBCs}
     return nothing
 end
 
-# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` have no
-# `SetValue` boundary stencil of their own; each is exactly expressible with the
-# other operators and boundary conditions. When a `SetValue` is requested, those
-# constructors return a `DirichletOperator` (defined with the `*_c2f_dirichlet`
-# helpers below) instead of an operator of their own type.
-has_setvalue_bc(kwargs) = unrolled_any(Base.Fix2(isa, SetValue), values(kwargs))
+check_staggering(arg, ::Type{S}) where {S} = check_staggering(Fields.shared_space(arg), S)
+function check_staggering(space::Union{Nothing, Spaces.AbstractSpace}, ::Type{S}) where {S}
+    staggering = Spaces.staggering(space)
+    staggering isa S && return true
+    throw(DimensionMismatch("Expected $S argument, got $(typeof(staggering))"))
+end
+check_centers(args...) = unrolled_all(Base.Fix2(check_staggering, Spaces.CellCenter), args)
+check_faces(args...) = unrolled_all(Base.Fix2(check_staggering, Spaces.CellFace), args)
+# The result space of an operator from faces to centers or from centers to faces.
+f2c_space(args...) =
+    check_faces(args...) && Spaces.center_space(Fields.shared_space(last(args)))
+c2f_space(args...) =
+    check_centers(args...) && Spaces.face_space(Fields.shared_space(last(args)))
+
+abstract type InterpolationOperator <: FiniteDifferenceOperator end
+
+return_eltype(::InterpolationOperator, arg) = eltype(arg)
 
 """
     InterpolateF2C()
@@ -578,7 +826,7 @@ function InterpolateF2C(; kwargs...)
     InterpolateF2C((NamedTuple()))
 end
 
-return_space(::InterpolateF2C, arg) = Spaces.center_space(axes(arg))
+return_space(::InterpolateF2C, arg) = f2c_space(arg)
 
 stencil_interior_width(::InterpolateF2C, arg) = ((-half, half),)
 
@@ -621,9 +869,11 @@ struct InterpolateC2F{BCS} <: InterpolationOperator
     InterpolateC2F(bcs) = InterpolateC2F(; bcs...)
 end
 
-return_space(::InterpolateC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::InterpolateC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::InterpolateC2F, arg) = ((-half, half),)
+# Only the boundary face has a ghost point, equal to the closest interior one at any order.
+boundary_width(::InterpolateC2F, ::Extrapolate, args...) = 1
 
 """
     B = BottomBiasedC2F(;boundaries)
@@ -652,7 +902,7 @@ struct BottomBiasedC2F{BCS} <: InterpolationOperator
     BottomBiasedC2F(bcs) = BottomBiasedC2F(; bcs...)
 end
 
-return_space(::BottomBiasedC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::BottomBiasedC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::BottomBiasedC2F, arg) = ((-half, -half),)
 
@@ -683,27 +933,21 @@ struct BottomBiasedF2C{BCS} <: InterpolationOperator
     BottomBiasedF2C(bcs) = BottomBiasedF2C(; bcs...)
 end
 
-return_space(::BottomBiasedF2C, arg) = Spaces.center_space(axes(arg))
+return_space(::BottomBiasedF2C, arg) = f2c_space(arg)
 
 stencil_interior_width(::BottomBiasedF2C, arg) = ((-half, -half),)
 
-Base.@propagate_inbounds stencil_interior(
-    ::BottomBiasedF2C,
-    space,
-    idx,
-    hidx,
-    arg,
-) = getidx(arg, idx - half, hidx)
+Base.@propagate_inbounds stencil_interior(::BottomBiasedF2C, space, idx, arg) =
+    column_value(arg, space, idx - half)
 Base.@propagate_inbounds function stencil_left_boundary(
     ::BottomBiasedF2C,
     bc::SetValue,
     space,
     idx,
-    hidx,
     arg,
 )
     @assert idx == left_center_boundary_idx(space)
-    getidx(bc.val, idx, hidx)
+    boundary_value(bc.val, space, idx)
 end
 
 """
@@ -733,7 +977,7 @@ struct TopBiasedC2F{BCS} <: InterpolationOperator
     TopBiasedC2F(bcs) = TopBiasedC2F(; bcs...)
 end
 
-return_space(::TopBiasedC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::TopBiasedC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::TopBiasedC2F, arg) = ((half, half),)
 
@@ -764,7 +1008,7 @@ struct TopBiasedF2C{BCS} <: InterpolationOperator
     TopBiasedF2C(bcs) = TopBiasedF2C(; bcs...)
 end
 
-return_space(::TopBiasedF2C, arg) = Spaces.center_space(axes(arg))
+return_space(::TopBiasedF2C, arg) = f2c_space(arg)
 
 stencil_interior_width(::TopBiasedF2C, arg) = ((half, half),)
 
@@ -800,22 +1044,22 @@ function WeightedInterpolateF2C(; kwargs...)
     WeightedInterpolateF2C(NamedTuple(kwargs))
 end
 
-return_space(::WeightedInterpolateF2C, weight, arg) = Spaces.center_space(axes(arg))
+return_space(::WeightedInterpolateF2C, weight, arg) = f2c_space(weight, arg)
 
-stencil_interior_width(::WeightedInterpolateF2C, weight, arg) =
+# The interior stencil of both weighted interpolations.
+stencil_interior_width(::WeightedInterpolationOperator, weight, arg) =
     ((-half, half), (-half, half))
 Base.@propagate_inbounds function stencil_interior(
-    ::WeightedInterpolateF2C,
+    ::WeightedInterpolationOperator,
     space,
     idx,
-    hidx,
     weight,
     arg,
 )
-    w⁺ = getidx(weight, idx + half, hidx)
-    w⁻ = getidx(weight, idx - half, hidx)
-    a⁺ = getidx(arg, idx + half, hidx)
-    a⁻ = getidx(arg, idx - half, hidx)
+    w⁺ = column_value(weight, space, idx + half)
+    w⁻ = column_value(weight, space, idx - half)
+    a⁺ = column_value(arg, space, idx + half)
+    a⁻ = column_value(arg, space, idx - half)
     (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
 end
 
@@ -854,28 +1098,14 @@ struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
     WeightedInterpolateC2F(bcs) = WeightedInterpolateC2F(; bcs...)
 end
 
-return_space(::WeightedInterpolateC2F, weight, arg) = Spaces.face_space(axes(arg))
+return_space(::WeightedInterpolateC2F, weight, arg) = c2f_space(weight, arg)
 
-stencil_interior_width(::WeightedInterpolateC2F, weight, arg) =
-    ((-half, half), (-half, half))
-Base.@propagate_inbounds function stencil_interior(
-    ::WeightedInterpolateC2F,
-    space,
-    idx,
-    hidx,
-    weight,
-    arg,
-)
-    w⁺ = getidx(weight, idx + half, hidx)
-    w⁻ = getidx(weight, idx - half, hidx)
-    a⁺ = getidx(arg, idx + half, hidx)
-    a⁻ = getidx(arg, idx - half, hidx)
-    (w⁺ * a⁺ + w⁻ * a⁻) / (w⁺ + w⁻)
-end
+# As for InterpolateC2F (see MatrixFields.clip_row).
+boundary_width(::WeightedInterpolateC2F, ::Extrapolate, args...) = 1
 
 # WeightedInterpolateC2F has no stencil_left_boundary/stencil_right_boundary methods:
 # every broadcast over it is rewritten as an operator matrix multiply when it is
-# instantiated, so its boundary values come from the operator matrix (for Extrapolate)
+# constructed, so its boundary values come from the operator matrix (for Extrapolate)
 # or from a SetBoundaryOperator applied to the result (for SetValue); see
 # MatrixFields/operator_matrices.jl.
 
@@ -899,16 +1129,19 @@ values (on periodic domains, indices wrap around instead):
     boundary face itself, where fewer interior points are in range). The only
     supported boundary conditions are `Extrapolate{N}`
     ([`Outflow(; order = N)`](@ref Outflow) is the physically named
-    constructor); when an advection operator is constructed with no boundary
-    conditions, `Extrapolate{0}` is added to its `bcs`, and a boundary whose
-    name has no entry in `bcs` also falls back to `Extrapolate{0}`.
+    constructor), except for the [`SetValue`](@ref) stencil of
+    [`UpwindBiasedProductC2F`](@ref); when an advection operator is
+    constructed with no boundary conditions, `Extrapolate{0}` is added to its
+    `bcs`, and a boundary whose name has no entry in `bcs` also falls back to
+    `Extrapolate{0}`.
   - The velocity field's out-of-range face indices are clamped to the domain.
 
 An advection operator whose interior stencil is linear in the advected
 argument (see `Operators.has_linear_stencil`) is rewritten as an
 operator-matrix multiply when it is broadcasted (see
 `MatrixFields.operator_matrix`), with the ghost-point extrapolations folded
-into its matrix's boundary rows; every other advection operator is evaluated
+into its matrix's boundary rows (unless it has the `SetValue` stencil of
+[`UpwindBiasedProductC2F`](@ref)); every other advection operator is evaluated
 pointwise, through the callable interface described below.
 
 !!! note
@@ -958,8 +1191,8 @@ abstract type AdvectionOperator <: FiniteDifferenceOperator end
     has_linear_stencil(op::AdvectionOperator)
 
 Return whether `op` is a linear function of its advected argument, in the
-interior and at the boundaries, so that it can be rewritten as an operator-matrix
-multiply (see `MatrixFields.operator_matrix`). This requires an operator type
+interior and at the boundaries, so that it can be represented by an operator
+matrix (see `MatrixFields.operator_matrix`). This requires an operator type
 with a linear interior stencil (`has_linear_interior`) and a linear
 ghost-point reconstruction (`is_linear_reconstruction`) at every boundary.
 """
@@ -967,6 +1200,8 @@ has_linear_stencil(op::AdvectionOperator) =
     has_linear_interior(op) && unrolled_all(is_linear_reconstruction, op.bcs)
 has_linear_interior(::AdvectionOperator) = false
 is_linear_reconstruction(::Extrapolate) = true
+# Affine, like the value-fixing conditions of other operators (see MatrixFields.has_affine_bc).
+is_linear_reconstruction(::SetValue) = true
 
 # When no boundary conditions are supplied, advection operators default to
 # Extrapolate{0} at both boundaries (`bottom` and `top` are the canonical
@@ -978,16 +1213,8 @@ advection_bcs(kwargs) =
 # Advection operators never use NullBoundaryCondition: a boundary whose name
 # has no entry in `bcs` (e.g. when the vertical boundaries are not named
 # `bottom` and `top`) gets the default Extrapolate{0} reconstruction.
-get_boundary(
-    op::AdvectionOperator,
-    ::LeftBoundaryWindow{name},
-) where {name} = get_advection_boundary(op.bcs, name)
-get_boundary(
-    op::AdvectionOperator,
-    ::RightBoundaryWindow{name},
-) where {name} = get_advection_boundary(op.bcs, name)
-get_advection_boundary(bcs::NamedTuple, name::Symbol) =
-    hasfield(typeof(bcs), name) ? getfield(bcs, name) : Extrapolate()
+get_boundary(op::AdvectionOperator, ::BoundaryWindow{name}) where {name} =
+    hasfield(typeof(op.bcs), name) ? getfield(op.bcs, name) : Extrapolate()
 
 # A `bcs` entry whose name matches neither of the space's boundary names would
 # silently be ignored in favor of the Extrapolate{0} fallback above, so catch
@@ -1002,16 +1229,18 @@ get_advection_boundary(bcs::NamedTuple, name::Symbol) =
     Topologies.isperiodic(space) && return nothing
     names =
         (Spaces.left_boundary_name(space), Spaces.right_boundary_name(space))
-    unrolled_all(name -> name in names, keys(op.bcs)) ||
-        invalid_advection_bc_names_error(typeof(op), keys(op.bcs), names)
+    unrolled_all(in(names), keys(op.bcs)) ||
+        error(invalid_advection_bc_names_string(op, Val(names)))
     return nothing
 end
-@noinline invalid_advection_bc_names_error(op_type, bc_names, space_names) =
-    error(
-        "Every boundary condition of $(op_type.name.name) must be named \
-         after a boundary of the space ($(join(space_names, ", "))); \
-         got ($(join(bc_names, ", ")))",
-    )
+@generated invalid_advection_bc_names_string(
+    op,
+    ::Val{space_names},
+) where {
+    space_names,
+} = "Every boundary condition of $(op.name.name) must be named after a boundary \
+     of the space ($(join(space_names, ", "))); \
+     got ($(join(fieldnames(fieldtype(op, :bcs)), ", ")))"
 # The stencil returns Contravariant3Vector(op(...)), where op's result combines
 # the contravariant3 component of a velocity element with the advected field's
 # stencil values using ordinary arithmetic. For tuple-valued fields, both of
@@ -1042,47 +1271,28 @@ function return_eltype(op::AdvectionOperator, V, arg, extra_params...)
     # dispatching on it (Union{} is a subtype of everything).
     (eltype(V) == Union{} || eltype(arg) == Union{}) && return Union{}
     return advection_eltype(
-        Geometry.mul_return_type(
-            velocity_component_type(eltype(V)),
-            advected_component_type(op, add_auto_broadcasters(eltype(arg))),
+        Utilities.return_type(
+            *,
+            Tuple{
+                velocity_component_type(eltype(V)),
+                advected_component_type(op, add_auto_broadcasters(eltype(arg))),
+            },
         ),
     )
 end
 function return_space(op::AdvectionOperator, V, arg, extra_params...)
     assert_valid_advection_bc_names(op, axes(V))
-    return axes(V)
+    return check_faces(V) && check_centers(arg) && Fields.shared_space(V)
 end
 advection_velocity_width(::AdvectionOperator) = Val(:current)
 velocity_stencil_width(::Val{:current}) = (0, 0)
 velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
 
-# All faces are computed with the interior stencil (which applies the
-# ghost-point extrapolations itself), so no boundary window is needed. The
-# operators that are rewritten as matrix multiplies override this: their
-# matrices need explicit boundary rows.
-boundary_width(::AdvectionOperator, ::VerticalBoundaryCondition) = 0
+# Every face uses the interior stencil, which applies the ghost-point extrapolations itself.
+Base.@propagate_inbounds stencil_value(op::AdvectionOperator, space, idx, args...) =
+    stencil_interior(op, space, idx, args...)
+reads_without_branching(::AdvectionOperator) = true
 
-# Never reached at runtime for operators whose boundary_width is 0 (no face is
-# treated as a boundary window), but getidx's boundary branch still needs
-# statically resolvable methods when the operator carries boundary conditions;
-# evaluating the interior stencil keeps the semantics identical either way.
-# (Operators rewritten as matrix multiplies never evaluate these raw-operator
-# methods at all: their boundary rows come through FDOperatorMatrix.)
-# The `NullBoundaryCondition` methods resolve an ambiguity: the generic
-# `NullBoundaryCondition` methods are more specific in the boundary condition,
-# and the `Any` methods here are more specific in the operator.
-for f in (:stencil_left_boundary, :stencil_right_boundary),
-    BC in (:Any, :NullBoundaryCondition)
-
-    @eval Base.@propagate_inbounds $f(
-        op::AdvectionOperator,
-        ::$BC,
-        space,
-        idx,
-        hidx,
-        args...,
-    ) = stencil_interior(op, space, idx, hidx, args...)
-end
 stencil_interior_width(
     op::AdvectionOperator,
     velocity,
@@ -1093,145 +1303,98 @@ stencil_interior_width(
     (-half - 1, half + 1),
     map(Returns((0, 0)), extra_params)...,
 )
-
-Base.@propagate_inbounds function advection_velocities(
-    ::Val{:current},
-    space,
-    idx,
-    hidx,
-    velocity,
+reads_neighbors(op::AdvectionOperator, velocity, arg, extra_params...) = (
+    Val(advection_velocity_width(op) isa Val{:neighboring}),
+    Val(true),
+    unrolled_map(Returns(Val(false)), extra_params)...,
 )
-    v = Geometry.contravariant3(
-        getidx(velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    return (v,)
-end
 
-Base.@propagate_inbounds function advection_velocities(
-    ::Val{:neighboring},
-    space,
-    idx,
-    hidx,
-    velocity,
+# The contravariant vertical velocity at idx.
+Base.@propagate_inbounds ct3_data(velocity, space, idx) = Geometry.contravariant3(
+    column_value(velocity, space, idx),
+    Geometry.LocalGeometry(space, idx),
 )
-    idx⁻, idx⁺ = if Topologies.isperiodic(space)
-        (idx - 1, idx + 1) # getidx and LocalGeometry wrap periodic indices
-    else
-        lf = left_face_boundary_idx(space)
-        rf = right_face_boundary_idx(space)
-        (max(idx - 1, lf), min(idx + 1, rf))
-    end
-    v⁻ = Geometry.contravariant3(
-        getidx(velocity, idx⁻, hidx),
-        Geometry.LocalGeometry(space, idx⁻, hidx),
-    )
-    v = Geometry.contravariant3(
-        getidx(velocity, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
-    )
-    v⁺ = Geometry.contravariant3(
-        getidx(velocity, idx⁺, hidx),
-        Geometry.LocalGeometry(space, idx⁺, hidx),
-    )
-    return (v⁻, v, v⁺)
-end
+Base.@propagate_inbounds advection_velocities(::Val{:current}, space, idx, velocity) =
+    (ct3_data(velocity, space, idx),)
+Base.@propagate_inbounds advection_velocities(::Val{:neighboring}, space, idx, velocity) = (
+    ct3_data(velocity, space, clamped_column_index(space, idx - 1)),
+    ct3_data(velocity, space, idx),
+    ct3_data(velocity, space, clamped_column_index(space, idx + 1)),
+)
 
 """
-    advection_ghost_values(op, space, dist_left, dist_right, a⁻⁻, a⁻, a⁺, a⁺⁺)
+    advection_ghost_values(op, space, nghost_left, nghost_right, a⁻⁻, a⁻, a⁺, a⁺⁺)
 
 Replace the values of the out-of-range centers of an [`AdvectionOperator`](@ref)
-stencil at the face `dist_left` faces in from the left boundary and
-`dist_right` faces in from the right one with the extrapolation of `op`'s
-boundary condition for that boundary from the in-range interior points of the
-stencil: at the boundary face itself, both out-of-range centers share the
-extrapolation from the 2 in-range points, and at the face one in from the
-boundary the single out-of-range center is extrapolated from the 3 in-range
-points (see [`AdvectionOperator`](@ref)). The two boundaries are handled with
-independent branches: on a 2-center column, the middle face is one in from
-both boundaries, so both of its out-of-range centers need their ghost-point
-extrapolations, each from the only 2 in-range points. Every other face is
-unaffected, and keeps the closest-value padding of the caller's index
-clamping.
-
-The stencil values are passed in already clamped, so this is shared by the
-pointwise `stencil_interior` method below (the CPU and lazy-GPU path) and the
-eager GPU kernel's `advection_gather`, keeping the boundary semantics of the
-two paths identical by construction.
+stencil, the first `nghost_left` and the last `nghost_right` of its 4 values (see
+`ghost_counts`), with their extrapolations from the in-range points by `op`'s boundary
+conditions, handling the two boundaries independently (both apply on a 2-center column).
+Operator matrices fold the same ghost points into their rows (see `MatrixFields.clip_row`).
 """
 @inline function advection_ghost_values(
     op::AdvectionOperator,
     space,
-    dist_left,
-    dist_right,
+    nghost_left,
+    nghost_right,
     a⁻⁻,
     a⁻,
     a⁺,
     a⁺⁺,
 )
-    if dist_left == 0
+    if nghost_left == 2
         bc = get_boundary(op, left_boundary_window(space))
         a⁻⁻ = a⁻ = bc(a⁺, a⁺⁺)
-    elseif dist_left == 1
+    elseif nghost_left == 1
         bc = get_boundary(op, left_boundary_window(space))
-        a⁻⁻ = dist_right == 1 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
+        a⁻⁻ = nghost_right == 1 ? bc(a⁻, a⁺) : bc(a⁻, a⁺, a⁺⁺)
     end
-    if dist_right == 0
+    if nghost_right == 2
         bc = get_boundary(op, right_boundary_window(space))
         a⁺⁺ = a⁺ = bc(a⁻, a⁻⁻)
-    elseif dist_right == 1
+    elseif nghost_right == 1
         bc = get_boundary(op, right_boundary_window(space))
-        a⁺⁺ = dist_left == 1 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
+        a⁺⁺ = nghost_left == 1 ? bc(a⁺, a⁻) : bc(a⁺, a⁻, a⁻⁻)
     end
     return (a⁻⁻, a⁻, a⁺, a⁺⁺)
 end
 
-# we treat all faces like interior faces: out-of-range stencil indices are
-# clamped to the domain (indices wrap on periodic domains instead), and the
-# clamped values are then replaced by the boundary condition's ghost-point
-# extrapolation from the in-range interior points of the stencil (a no-op
-# with the default Extrapolate{0}, which matches the clamping). On
-# terrain-following grids, the extrapolation is along the third coordinate
-# line, not along the wall normal; see the note on AdvectionOperator.
+# Clamped reads beyond the column are replaced by ghost-point extrapolations (see
+# advection_ghost_values and the note on AdvectionOperator).
 Base.@propagate_inbounds function stencil_interior(
     op::AdvectionOperator,
     space,
     idx,
-    hidx,
     velocity,
     arg,
     extra_params...,
 )
-    a⁻⁻, a⁻, a⁺, a⁺⁺ = if Topologies.isperiodic(space)
-        (
-            getidx(arg, idx - half - 1, hidx),
-            getidx(arg, idx - half, hidx),
-            getidx(arg, idx + half, hidx),
-            getidx(arg, idx + half + 1, hidx),
+    a⁻⁻ = column_value(arg, space, clamped_column_index(space, idx - half - 1))
+    a⁻ = column_value(arg, space, clamped_column_index(space, idx - half))
+    a⁺ = column_value(arg, space, clamped_column_index(space, idx + half))
+    a⁺⁺ = column_value(arg, space, clamped_column_index(space, idx + half + 1))
+    if !Topologies.isperiodic(space)
+        (a⁻⁻, a⁻, a⁺, a⁺⁺) = advection_ghost_values(
+            op,
+            space,
+            ghost_counts(space, idx, -half - 1, half + 1)...,
+            a⁻⁻,
+            a⁻,
+            a⁺,
+            a⁺⁺,
         )
-    else
-        lc = left_center_boundary_idx(space)
-        rc = right_center_boundary_idx(space)
-        a⁻⁻ = getidx(arg, clamp(idx - half - 1, lc, rc), hidx)
-        a⁻ = getidx(arg, clamp(idx - half, lc, rc), hidx)
-        a⁺ = getidx(arg, clamp(idx + half, lc, rc), hidx)
-        a⁺⁺ = getidx(arg, clamp(idx + half + 1, lc, rc), hidx)
-        lf = left_face_boundary_idx(space)
-        rf = right_face_boundary_idx(space)
-        advection_ghost_values(op, space, idx - lf, rf - idx, a⁻⁻, a⁻, a⁺, a⁺⁺)
     end
-    vs = advection_velocities(
-        advection_velocity_width(op),
-        space,
-        idx,
-        hidx,
-        velocity,
-    )
-    params = map(param -> getidx(param, idx, hidx), extra_params)
+    vs = advection_velocities(advection_velocity_width(op), space, idx, velocity)
+    params = extra_param_values(space, idx, extra_params...)
     return Geometry.Contravariant3Vector(
         op(vs..., a⁻⁻, a⁻, a⁺, a⁺⁺, params...),
     )
 end
+
+# Recursive: a map over a closure is not inlined on CPUs and loses the inbounds context.
+Base.@propagate_inbounds extra_param_values(space, idx) = ()
+Base.@propagate_inbounds extra_param_values(space, idx, param, params...) =
+    (column_value(param, space, idx), extra_param_values(space, idx, params...)...)
+
 """
     U = UpwindBiasedProductC2F(;boundaries)
     U.(v, x)
@@ -1251,30 +1414,31 @@ U(\\boldsymbol{v},x)[i] = \\begin{cases}
 
 where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
-The only supported boundary condition is [`Extrapolate`](@ref)
-([`Outflow`](@ref)), which is also added to `bcs` (as `Extrapolate{0}`) by
-default when no boundary conditions are given: boundary faces are computed with
-the interior stencil, padding the
-ghost point it reaches with the boundary condition's extrapolation. The
-stencil only reaches a ghost point at the boundary face itself, where a single
-interior point is in range, so every extrapolation order reduces to the value
-of the closest interior point: since the padded upwind and downwind values
-then coincide, the boundary faces reduce to ``v^3[i] x_b \\boldsymbol{e}_3``,
-where ``x_b`` is the value at the center closest to the boundary.
+The following boundary conditions are supported:
 
-To prescribe the value of `x` used on the outside of a boundary instead, pass
-a [`SetValue`](@ref): the constructor then returns a
-[`DirichletOperator`](@ref) that applies
-[`upwind_biased_product_c2f_dirichlet`](@ref), which reproduces the `SetValue`
-boundary stencil exactly and fuses into an enclosing broadcast with lazy
-boundary rows.
+  - [`Extrapolate`](@ref) ([`Outflow`](@ref)), which is also added to `bcs` (as
+    `Extrapolate{0}`) by default when no boundary conditions are given:
+    boundary faces are computed with the interior stencil, padding the ghost
+    point it reaches with the boundary condition's extrapolation. The stencil
+    only reaches a ghost point at the boundary face itself, where a single
+    interior point is in range, so every extrapolation order reduces to the
+    value of the closest interior point: since the padded upwind and downwind
+    values then coincide, the boundary faces reduce to
+    ``v^3[i] x_b \\boldsymbol{e}_3``, where ``x_b`` is the value at the center
+    closest to the boundary.
+  - [`SetValue(x₀)`](@ref): set the value of `x` on the outside of the boundary
+    to be `x₀`. On the left boundary the stencil is
+    ```math
+    U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
+      v^3[\\tfrac{1}{2}] x_0 \\boldsymbol{e}_3 \\textrm{, if } v^3[\\tfrac{1}{2}] > 0 \\\\
+      v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if } v^3[\\tfrac{1}{2}] < 0
+      \\end{cases}
+    ```
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
     function UpwindBiasedProductC2F(; kwargs...)
-        has_setvalue_bc(kwargs) &&
-            return DirichletOperator{UpwindBiasedProductC2F}(kwargs)
-        assert_valid_bcs("UpwindBiasedProductC2F", kwargs, Extrapolate)
+        assert_valid_bcs("UpwindBiasedProductC2F", kwargs, Union{SetValue, Extrapolate})
         bcs = advection_bcs(kwargs)
         new{typeof(bcs)}(bcs)
     end
@@ -1289,16 +1453,6 @@ upwind_biased_product(v, a⁻, a⁺) = ((v + abs(v)) * a⁻ + (v - abs(v)) * a�
 
 stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
-
-# Boundary faces are computed with the interior stencil, padding ghost points
-# with the Extrapolate boundary condition's extrapolation from the in-range
-# interior points (see AdvectionOperator). Unlike a pointwise-evaluated
-# AdvectionOperator, this operator is evaluated through its operator matrix,
-# whose multiply clips out-of-range band entries instead of extrapolating
-# their values, so the faces whose interior row reaches a ghost point need
-# explicit boundary rows that fold the ghost coefficients into the in-range
-# interior columns; see MatrixFields/operator_matrices.jl.
-boundary_width(::UpwindBiasedProductC2F, ::VerticalBoundaryCondition) = 1
 
 """
     LVL = LinVanLeerC2F(; constraint)
@@ -1338,11 +1492,6 @@ function LinVanLeerC2F(; constraint, kwargs...)
     assert_valid_bcs("LinVanLeerC2F", kwargs, Extrapolate)
     LinVanLeerC2F(advection_bcs(kwargs), constraint)
 end
-
-Adapt.@adapt_structure LinVanLeerC2F
-
-@inline promote_bcs(op::LinVanLeerC2F, ::Type{FT}) where {FT} =
-    LinVanLeerC2F(unrolled_map(Base.Fix2(promote_bc, FT), op.bcs), op.constraint)
 
 @inline (op::LinVanLeerC2F)(v, a⁻⁻, a⁻, a⁺, a⁺⁺, dt) =
     slope_limited_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺, dt, op.constraint)
@@ -1488,14 +1637,6 @@ return_eltype(::Upwind3rdOrderBiasedProductC2F, V, A) =
 
 stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half - 1, half + 1))
-
-
-# As for UpwindBiasedProductC2F, the boundary rows implement the interior
-# stencil with extrapolated ghost points; see
-# MatrixFields/operator_matrices.jl. The interior stencil reaches one center
-# beyond its face on each side, so the two faces nearest each boundary need
-# boundary rows.
-boundary_width(::Upwind3rdOrderBiasedProductC2F, ::VerticalBoundaryCondition) = 2
 
 """
     U = FCTBorisBook()
@@ -1754,11 +1895,6 @@ function TVDLimitedFluxC2F(; method, kwargs...)
     TVDLimitedFluxC2F(advection_bcs(kwargs), method)
 end
 
-Adapt.@adapt_structure TVDLimitedFluxC2F
-
-@inline promote_bcs(op::TVDLimitedFluxC2F, ::Type{FT}) where {FT} =
-    TVDLimitedFluxC2F(unrolled_map(Base.Fix2(promote_bc, FT), op.bcs), op.method)
-
 @inline (op::TVDLimitedFluxC2F)(
     A,
     ϕ₋₃₂,
@@ -1808,86 +1944,236 @@ struct SetBoundaryOperator{BCS} <: BoundaryOperator
         assert_valid_bcs(
             "SetBoundaryOperator",
             kwargs,
-            Union{SetValue, SetGradient, SetCurl, SetDivergence},
+            ValueFixingBoundaryCondition,
         )
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     SetBoundaryOperator(bcs) = SetBoundaryOperator(; bcs...)
 end
+# The boundary conditions that fix an operator's value at a boundary.
+const ValueFixingBoundaryCondition = Union{SetValue, SetGradient, SetCurl, SetDivergence}
 
 return_eltype(::SetBoundaryOperator, arg) = eltype(arg)
-return_space(::SetBoundaryOperator, arg) = axes(arg)
+fuses_into_stencils(::SetBoundaryOperator) = true
+return_space(::SetBoundaryOperator, arg) = Fields.shared_space(arg)
+
+# Whether an expression contains a SetBoundaryOperator, whose values at the
+# boundary can have other types than its eltype (e.g., a Contravariant3Vector
+# imposed on a Covariant3Vector flux).
+has_set_boundary_operator(_) = false
+has_set_boundary_operator(bc::Broadcast.Broadcasted) =
+    unrolled_any(has_set_boundary_operator, bc.args)
+has_set_boundary_operator(::StencilOperatorBroadcasted{<:SetBoundaryOperator}) = true
+@drop_recursion_limits has_set_boundary_operator
+
+# The type of the plain value that a SetValue or SetDivergence condition imposes
+# (see imposed_boundary_value): that of its value, or of the values of its field.
+imposed_value_type(bc::Union{SetValue, SetDivergence}) =
+    bc.val isa MaybeLazyField ? eltype(bc.val) : typeof(add_auto_broadcasters(bc.val))
+
+# The value that a boundary condition imposes in place of a value of type T (and
+# its type, for a condition value of type V). When T is tuple-valued (an
+# AutoBroadcaster, like the values of a NamedTuple-valued field in an operator),
+# the condition applies to each component, as in AutoBroadcaster arithmetic: a
+# value that is not tuple-valued (e.g., a Contravariant3Vector imposed on a
+# NamedTuple of fluxes) is copied into every component, and a tuple-valued one
+# is paired with the components. The imposed value then has the type of the
+# values it replaces, up to the axes of its tensors (which
+# MatrixFields.projected_operand unifies), as every value of a cached argument
+# must (see cached_arg).
+@inline imposed_value(::Type, value) = value
+@inline imposed_value(::Type{T}, value) where {T <: AutoBroadcaster} =
+    nested_broadcast((_, component) -> component, new(T), add_auto_broadcasters(value))
+imposed_type(::Type, ::Type{V}) where {V} = V
+imposed_type(::Type{T}, ::Type{V}) where {T <: AutoBroadcaster, V} =
+    typeof(imposed_value(T, new(V)))
+
+# The metric (see Geometry.projected_metric) that projecting the values imposed
+# by every SetBoundaryOperator in arg onto axes reads, combined over all of their
+# conditions (see Geometry.combine_projected_metrics): nothing when no imposed
+# value needs a metric (or arg has no such operator), and all of lg for a value
+# that is projected onto the operator's axis before it is imposed (SetGradient
+# and SetCurl). Together with the metric for the values of arg's eltype, this is
+# the metric for every value that arg can have (see
+# MatrixFields.projected_operand).
+imposed_values_metric(axes, _, lg) = nothing
+imposed_values_metric(axes, bc::Broadcast.Broadcasted, lg) = unrolled_mapreduce(
+    arg -> imposed_values_metric(axes, arg, lg),
+    (metric1, metric2) -> Geometry.combine_projected_metrics(metric1, metric2, lg),
+    bc.args;
+    init = nothing,
+)
+imposed_values_metric(
+    axes,
+    bc::StencilOperatorBroadcasted{<:SetBoundaryOperator},
+    lg,
+) = Geometry.combine_projected_metrics(
+    unrolled_mapreduce(
+        boundary_condition -> imposed_value_metric(axes, boundary_condition, lg),
+        (metric1, metric2) -> Geometry.combine_projected_metrics(metric1, metric2, lg),
+        values(bc.f.bcs);
+        init = nothing,
+    ),
+    imposed_values_metric(axes, bc.args[1], lg),
+    lg,
+)
+imposed_value_metric(axes, bc::Union{SetValue, SetDivergence}, lg) =
+    Geometry.projected_metric(axes, Val(imposed_value_type(bc)), lg)
+imposed_value_metric(_, _, lg) = Some(lg)
+
+# Whether every value that a SetBoundaryOperator in arg imposes is a plain value
+# of type T (see imposes_plain_value), the type of the values it replaces, so
+# that arg only has values of type T.
+imposes_only(_, ::Type) = true
+imposes_only(bc::Broadcast.Broadcasted, ::Type{T}) where {T} =
+    unrolled_all(arg -> imposes_only(arg, T), bc.args)
+imposes_only(bc::StencilOperatorBroadcasted{<:SetBoundaryOperator}, ::Type{T}) where {T} =
+    unrolled_all(
+        boundary_condition -> imposes_plain_value(boundary_condition, T),
+        values(bc.f.bcs),
+    ) && imposes_only(bc.args[1], T)
+@drop_recursion_limits imposed_values_metric, imposes_only
 
 stencil_interior_width(::SetBoundaryOperator, arg) = ((0, 0),)
 Base.@propagate_inbounds stencil_interior(
     ::SetBoundaryOperator,
     space,
     idx,
-    hidx,
     arg,
-) = getidx(arg, idx, hidx)
+) = column_value(arg, space, idx)
+
+# An argument that does not allow branching (see allows_branching) is read at
+# every point, including the boundaries where its value is replaced, so that an
+# operator that reads this operator's result without branching (see
+# reads_without_branching) also reads the argument that way. So is an argument
+# without stencils (a field or a pointwise expression over fields) whose buffers
+# are not private to a thread (see has_private_buffers), as on GPUs, where the
+# threads of a column run the same instructions anyway: reading it before
+# branching on the point lets an operator issue the reads of every point in its
+# band together, since the compiler does not know the range of the point index
+# and cannot fold the branch, and only the two boundary points of each column
+# read a value that they discard. A stencil argument keeps the branch, which
+# skips its evaluation at the boundaries and lets the compiler fold the
+# stencil's own checks.
+Base.@propagate_inbounds function stencil_value(
+    op::SetBoundaryOperator,
+    space,
+    idx,
+    arg,
+)
+    # A periodic column has no boundaries (and no boundary windows to look up).
+    Topologies.isperiodic(space) && return stencil_interior(op, space, idx, arg)
+    left_bc = get_boundary(op, left_boundary_window(space))
+    right_bc = get_boundary(op, right_boundary_window(space))
+    reads_first =
+        !allows_branching(arg) || (
+            !has_private_buffers(arg) &&
+            !has_stencils(arg) &&
+            imposes_plain_value(left_bc, eltype(arg)) &&
+            imposes_plain_value(right_bc, eltype(arg))
+        )
+    if reads_first
+        value = stencil_interior(op, space, idx, arg)
+        # The left (bottom) condition is selected last, so that it takes
+        # precedence on a column too short to separate the two windows.
+        value = boundary_select(
+            right_bc,
+            space,
+            right_idx(space),
+            should_call_right_boundary(idx, space, op, arg),
+            value,
+        )
+        return boundary_select(
+            left_bc,
+            space,
+            left_idx(space),
+            should_call_left_boundary(idx, space, op, arg),
+            value,
+        )
+    end
+    if should_call_left_boundary(idx, space, op, arg)
+        return stencil_left_boundary(op, left_bc, space, idx, arg)
+    elseif should_call_right_boundary(idx, space, op, arg)
+        return stencil_right_boundary(op, right_bc, space, idx, arg)
+    end
+    return stencil_interior(op, space, idx, arg)
+end
+
+# Whether bc imposes a plain value (SetValue or SetDivergence) whose type is T,
+# the type of the values it replaces, or no value at all. Such a value can be
+# selected with ifelse (see boundary_select); a value that has to be projected
+# (SetGradient or SetCurl), or that has another type than the values it
+# replaces, is applied with a branch, which is only worth taking after reading
+# the argument when the argument does not allow branching.
+@inline imposes_plain_value(::NullBoundaryCondition, ::Type) = true
+@inline imposes_plain_value(_, ::Type) = false
+@inline imposes_plain_value(bc::Union{SetValue, SetDivergence}, ::Type{T}) where {T} =
+    imposed_type(T, imposed_value_type(bc)) == T
+
+# The value of a SetBoundaryOperator at a point whose argument has already been
+# read (see stencil_value): the value that bc imposes at the boundary with
+# index boundary_idx replaces the argument's value where is_boundary holds. A
+# plain imposed value (SetValue or SetDivergence) of the same type as the
+# argument's values is selected with ifelse, so that the compiler does not sink
+# the read of the argument into a branch; it is computed at the boundary index,
+# where it is a constant or a value at the boundary level. A value that has to
+# be projected (SetGradient or SetCurl) or that has another type is selected
+# with a branch instead, and a missing condition imposes nothing.
+@inline boundary_select(::NullBoundaryCondition, _, _, _, value) = value
+Base.@propagate_inbounds boundary_select(bc, space, boundary_idx, is_boundary, value) =
+    is_boundary ? imposed_boundary_value(bc, space, boundary_idx, typeof(value)) : value
+Base.@propagate_inbounds function boundary_select(
+    bc::Union{SetValue, SetDivergence},
+    space,
+    boundary_idx,
+    is_boundary,
+    value,
+)
+    imposed = imposed_boundary_value(bc, space, boundary_idx, typeof(value))
+    return imposed isa typeof(value) ? ifelse(is_boundary, imposed, value) :
+           is_boundary ? imposed : value
+end
 
 # The value a `SetBoundaryOperator` imposes at a boundary. `SetGradient` and `SetCurl`
 # hold values in the axis the operator they were taken from writes its output in, so they
 # are projected onto that axis; `SetValue` and `SetDivergence` are imposed as given.
-# The value is read at the boundary index, so it may be a constant, a field on
-# the boundary level, or a field or lazy broadcast over the whole space. A
-# full-space value on the space's own staggering is read at the boundary index
-# itself; one on the opposite staggering must be wrapped in
-# `BoundaryAdjacentCenter` (as the Dirichlet helpers' boundary rows do), which
-# reads it at the center level adjacent to the boundary face.
-# A lazy value must be pointwise (fields combined with pointwise functions): a
-# stencil operator inside it would be evaluated at the boundary index of the
-# wrong staggering, so its boundary handling breaks down (an operator without
-# boundary conditions yields its `NullBoundaryCondition` `NaN`s there).
+# The value may be a constant, a field on the boundary level, or a field or lazy
+# broadcast over the whole space (see boundary_value).
 Base.@propagate_inbounds imposed_boundary_value(
     bc::Union{SetValue, SetDivergence},
     space,
     idx,
-    hidx,
-) = getidx(bc.val, idx, hidx)
-Base.@propagate_inbounds imposed_boundary_value(
-    bc::SetGradient,
-    space,
-    idx,
-    hidx,
-) = Geometry.project(
-    Geometry.Covariant3Axis(),
-    getidx(bc.val, idx, hidx),
-    Geometry.LocalGeometry(space, idx, hidx),
-)
-# Project onto Contravariant12, not Contravariant123: CurlC2F's operator
+) = boundary_value(bc.val, space, idx)
+# SetCurl projects onto Contravariant12, not Contravariant123: CurlC2F's operator
 # matrix produces Contravariant12Vector entries (see `op_matrix_row_type` for
-# CurlFiniteDifferenceOperator), so a wider boundary value would make getidx
-# return a Union of the two vector types across the column.
-Base.@propagate_inbounds imposed_boundary_value(bc::SetCurl, space, idx, hidx) =
+# CurlFiniteDifferenceOperator), so a wider boundary value would make the
+# result a Union of the two vector types across the column.
+Base.@propagate_inbounds imposed_boundary_value(
+    bc::Union{SetGradient, SetCurl},
+    space,
+    idx,
+) =
     Geometry.project(
-        Geometry.Contravariant12Axis(),
-        getidx(bc.val, idx, hidx),
-        Geometry.LocalGeometry(space, idx, hidx),
+        bc isa SetGradient ? Geometry.Covariant3Axis() : Geometry.Contravariant12Axis(),
+        boundary_value(bc.val, space, idx),
+        Geometry.LocalGeometry(space, idx),
     )
+# The value imposed in place of a value of type T (see imposed_value).
+Base.@propagate_inbounds imposed_boundary_value(bc, space, idx, ::Type{T}) where {T} =
+    imposed_value(T, imposed_boundary_value(bc, space, idx))
 
-Base.@propagate_inbounds function stencil_left_boundary(
-    ::SetBoundaryOperator,
-    bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == left_idx(space)
-    return imposed_boundary_value(bc, space, idx, hidx)
-end
-Base.@propagate_inbounds function stencil_right_boundary(
-    ::SetBoundaryOperator,
-    bc::Union{SetValue, SetGradient, SetCurl, SetDivergence},
-    space,
-    idx,
-    hidx,
-    arg,
-)
-    @assert idx == right_idx(space)
-    return imposed_boundary_value(bc, space, idx, hidx)
+for (stencil_boundary, boundary_idx) in
+    ((:stencil_left_boundary, :left_idx), (:stencil_right_boundary, :right_idx))
+    @eval Base.@propagate_inbounds function $stencil_boundary(
+        ::SetBoundaryOperator,
+        bc::ValueFixingBoundaryCondition,
+        space,
+        idx,
+        arg,
+    )
+        @boundscheck @assert idx == $boundary_idx(space)
+        return imposed_boundary_value(bc, space, idx, eltype(arg))
+    end
 end
 
 abstract type GradientOperator <: FiniteDifferenceOperator end
@@ -1940,7 +2226,7 @@ struct GradientF2C{BCS} <: GradientOperator
     GradientF2C(bcs) = GradientF2C(; bcs...)
 end
 
-return_space(::GradientF2C, arg) = Spaces.center_space(axes(arg))
+return_space(::GradientF2C, arg) = f2c_space(arg)
 
 stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 
@@ -1957,6 +2243,11 @@ G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 
 The following boundary conditions are supported:
 
+  - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
+    boundary is `x₀`. For the left boundary, this becomes:
+    ```math
+    G(x)[\\tfrac{1}{2}]^3 = 2 (x[1] - x₀)
+    ```
   - [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
     `v₀`. For the left boundary, this becomes:
     ```math
@@ -1974,24 +2265,17 @@ The following boundary conditions are supported:
     `SetGradient(Covariant3Vector(0))` is a zero normal derivative only where
     the boundary is flat; elsewhere the value that gives one is
     ``-(g^{31} \\partial_1 x + g^{32} \\partial_2 x) / g^{33}``.
-
-To prescribe the boundary value of `x` instead, pass a [`SetValue`](@ref):
-the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`gradient_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary
-stencil exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
     function GradientC2F(; kwargs...)
-        has_setvalue_bc(kwargs) &&
-            return DirichletOperator{GradientC2F}(kwargs)
-        assert_valid_bcs("GradientC2F", kwargs, SetGradient)
+        assert_valid_bcs("GradientC2F", kwargs, Union{SetValue, SetGradient})
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     GradientC2F(bcs) = GradientC2F(; bcs...)
 end
 
-return_space(::GradientC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::GradientC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::GradientC2F, arg) = ((-half, half),)
 
@@ -2054,9 +2338,11 @@ struct DivergenceF2C{BCS} <: DivergenceOperator
     DivergenceF2C(bcs) = DivergenceF2C(; bcs...)
 end
 
-return_space(::DivergenceF2C, arg) = Spaces.center_space(axes(arg))
+return_space(::DivergenceF2C, arg) = f2c_space(arg)
 
 stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
+# Any Extrapolate order copies the closest interior output (see MatrixFields.op_matrix_row).
+boundary_width(::DivergenceF2C, ::Extrapolate, args...) = 1
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)
@@ -2074,28 +2360,26 @@ where `Jv³` is the Jacobian multiplied by the third contravariant component of
 
 The following boundary conditions are supported:
 
+  - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
+    boundary is `v₀`. For the left boundary, this becomes:
+    ```math
+    D(v)[\\tfrac{1}{2}] = 2 (Jv³[1] - Jv³₀) / J[\\tfrac{1}{2}]
+    ```
   - [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
     ```math
     D(v)[\\tfrac{1}{2}] = x
     ```
-
-To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
-the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`divergence_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary
-stencil exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
     function DivergenceC2F(; kwargs...)
-        has_setvalue_bc(kwargs) &&
-            return DirichletOperator{DivergenceC2F}(kwargs)
-        assert_valid_bcs("DivergenceC2F", kwargs, SetDivergence)
+        assert_valid_bcs("DivergenceC2F", kwargs, Union{SetValue, SetDivergence})
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     DivergenceC2F(bcs) = DivergenceC2F(; bcs...)
 end
 
-return_space(::DivergenceC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::DivergenceC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::DivergenceC2F, arg) = ((-half, half),)
 
@@ -2136,61 +2420,260 @@ where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, a
 
 The following boundary conditions are supported:
 
+  - [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
+    boundary is `v₀`. For the left boundary, this becomes:
+    ```math
+    \\begin{align*}
+    C(v)[\\tfrac{1}{2}]^1 &= -\\frac{2}{J[\\tfrac{1}{2}]} (v₂[1] - (v₀)₂) \\\\
+    C(v)[\\tfrac{1}{2}]^2 &= \\frac{2}{J[\\tfrac{1}{2}]} (v₁[1] - (v₀)₁)
+    \\end{align*}
+    ```
   - [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
     the contravariant vector `v⁰`.
-
-To prescribe the boundary value of `v` instead, pass a [`SetValue`](@ref):
-the constructor then returns a [`DirichletOperator`](@ref) that applies
-[`curl_c2f_dirichlet`](@ref), which reproduces the `SetValue` boundary stencil
-exactly and fuses into an enclosing broadcast with lazy boundary rows.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
     function CurlC2F(; kwargs...)
-        has_setvalue_bc(kwargs) && return DirichletOperator{CurlC2F}(kwargs)
-        assert_valid_bcs("CurlC2F", kwargs, SetCurl)
+        assert_valid_bcs("CurlC2F", kwargs, Union{SetValue, SetCurl})
         new{typeof(NamedTuple(kwargs))}(NamedTuple(kwargs))
     end
     CurlC2F(bcs) = CurlC2F(; bcs...)
 end
 
-return_space(::CurlC2F, arg) = Spaces.face_space(axes(arg))
+return_space(::CurlC2F, arg) = c2f_space(arg)
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 
-# Dirichlet (`SetValue`) replacements for the center-to-face operators.
+# SetValue stencils of the center-to-face operators.
 #
-# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` have no
-# `SetValue` boundary stencil of their own; each is exactly expressible with the
-# other operators and boundary conditions (the
-# "Boundary values and advection built from the primitive operators" testset
-# in `test/Operators/finitedifference/unit_column.jl` pins the replacement
-# expressions against the stencils they reproduce). The helpers below build
-# those replacements, and requesting a `SetValue` from one of those operators'
-# constructors returns a `DirichletOperator` that applies the matching helper.
-# Each helper has a lazy `*_broadcasted` form, which returns the replacement
-# as an unmaterialized stencil broadcast that fuses into an enclosing
-# broadcast like any other operator application; the public helpers
-# materialize that broadcast. The boundary rows are lazy as well: each row is a
-# pointwise function of the values adjacent to the boundary face, stored as an
-# unmaterialized broadcast over the full argument fields that is only read at
-# the boundary index (see `imposed_boundary_value` and
-# `BoundaryAdjacentCenter`), so applying a helper allocates nothing.
+# A SetValue on GradientC2F, DivergenceC2F, CurlC2F or UpwindBiasedProductC2F makes the
+# boundary face an affine function of the argument at the closest center (e.g., G(x)[1/2] =
+# 2 (x[1] - x₀)). Their other conditions either fix the output, which a SetBoundaryOperator
+# imposes on their matrix products, or reconstruct ghost points in their matrix rows (see
+# MatrixFields.operator_broadcasted), but a SetBoundaryOperator would have to evaluate the
+# argument a second time for a SetValue, materializing a lazy argument (or, on GPUs, reading
+# the registers of other threads). So these operators need
+# SetValue methods of their own: with a SetValue, they remain stencils, whose boundary
+# stencils below read the same (cached) argument as their interior stencils (the rows of
+# their matrices; see MatrixFields).
+const SetValueC2FOperator =
+    Union{GradientC2F, DivergenceC2F, CurlC2F, UpwindBiasedProductC2F}
+has_setvalue_stencil(op) =
+    op isa SetValueC2FOperator && unrolled_any(Base.Fix2(isa, SetValue), op.bcs)
+
+# At the left boundary face, the value below the face is the prescribed one and the value
+# above it is the closest center's, and vice versa at the right one. Extrapolate, which only
+# UpwindBiasedProductC2F accepts, prescribes the closest center's value (the only one in
+# range of any order), and the other conditions impose the output.
+for (stencil_boundary, offset, row_values) in (
+    (:stencil_left_boundary, half, (:outer, :idx, :inner, :inner_idx)),
+    (:stencil_right_boundary, -half, (:inner, :inner_idx, :outer, :idx)),
+)
+    @eval begin
+        Base.@propagate_inbounds function $stencil_boundary(
+            op::SetValueC2FOperator,
+            bc::Union{SetValue, Extrapolate},
+            space,
+            idx,
+            args...,
+        )
+            inner_idx = idx + $offset
+            inner = column_value(last(args), space, inner_idx)
+            outer = bc isa SetValue ? boundary_value(bc.val, space, idx) : inner
+            return setvalue_row(op, space, idx, $(row_values...), Base.front(args)...)
+        end
+        Base.@propagate_inbounds $stencil_boundary(
+            op::SetValueC2FOperator,
+            bc::Union{SetGradient, SetDivergence, SetCurl},
+            space,
+            idx,
+            args...,
+        ) = imposed_boundary_value(bc, space, idx, return_eltype(op, args...))
+    end
+end
+
+# The value at the boundary face idx, given the values below and above it and their indices.
+Base.@propagate_inbounds setvalue_row(::GradientC2F, space, idx, x⁻, _, x⁺, _) =
+    Geometry.Covariant3Vector(2 * (x⁺ - x⁻))
+Base.@propagate_inbounds setvalue_row(::DivergenceC2F, space, idx, v⁻, idx⁻, v⁺, idx⁺) =
+    (
+        Geometry.Jcontravariant3(v⁺, Geometry.LocalGeometry(space, idx⁺)) -
+        Geometry.Jcontravariant3(v⁻, Geometry.LocalGeometry(space, idx⁻))
+    ) * 2 / Geometry.LocalGeometry(space, idx).J
+Base.@propagate_inbounds function setvalue_row(::CurlC2F, space, idx, u⁻, _, u⁺, _)
+    Δu = u⁺ - u⁻
+    J = Geometry.LocalGeometry(space, idx).J
+    return Geometry.Contravariant12Vector(
+        -2 * Δu.components.data.:2 / J,
+        2 * Δu.components.data.:1 / J,
+    )
+end
+Base.@propagate_inbounds setvalue_row(
+    ::UpwindBiasedProductC2F,
+    space,
+    idx,
+    x⁻,
+    _,
+    x⁺,
+    _,
+    velocity,
+) = Geometry.Contravariant3Vector(
+    upwind_biased_product(ct3_data(velocity, space, idx), x⁻, x⁺),
+)
+
+# Unlike other advection operators, UpwindBiasedProductC2F is only a stencil with a SetValue,
+# so its boundary faces branch to the stencils above (and it reads its argument with
+# branching), where any Extrapolate order only changes the boundary face.
+Base.@propagate_inbounds stencil_value(op::UpwindBiasedProductC2F, space, idx, args...) =
+    invoke(stencil_value, Tuple{Any, Any, Any, Vararg{Any}}, op, space, idx, args...)
+reads_without_branching(::UpwindBiasedProductC2F) = false
+boundary_width(::UpwindBiasedProductC2F, ::Extrapolate, args...) = 1
+
+# Split the user-provided boundary values into the values at the space's left
+# (bottom) and right (top) boundaries, validating the boundary names.
+# Names are in the topology's type, so the check folds away and the message is @generated.
+@inline function dirichlet_boundary_values(f, space, boundary_values)
+    names =
+        (Spaces.left_boundary_name(space), Spaces.right_boundary_name(space))
+    unrolled_all(in(names), keys(boundary_values)) ||
+        error(invalid_dirichlet_names_string(f, Val(keys(boundary_values)), Val(names)))
+    (names..., get(boundary_values, names[1], nothing),
+        get(boundary_values, names[2], nothing))
+end
+@generated invalid_dirichlet_names_string(
+    f,
+    ::Val{bc_names},
+    ::Val{space_names},
+) where {bc_names, space_names} = "$(nameof(f.instance)): every boundary value \
+    must be named after a boundary of the space ($(join(space_names, ", "))); \
+    got $(join(filter(!in(space_names), bc_names), ", "))"
+
+# Apply the operator of a Dirichlet helper with a SetValue for each boundary value that is
+# not a boundary condition. The divergence and upwind helpers impose conditions on the
+# result instead of giving them to the operator (see their docstrings).
+dirichlet_helper(f, ::Type{Op}, args...; boundary_values...) where {Op} =
+    Base.Broadcast.materialize(dirichlet_broadcasted(f, Op, args...; boundary_values...))
+function dirichlet_broadcasted(f, ::Type{Op}, args...; boundary_values...) where {Op}
+    (lname, rname, x_bot, x_top) =
+        dirichlet_boundary_values(f, axes(last(args)), NamedTuple(boundary_values))
+    imposes = Op <: Union{DivergenceC2F, UpwindBiasedProductC2F}
+    op_bcs = merge(dirichlet_bc(lname, x_bot, imposes), dirichlet_bc(rname, x_top, imposes))
+    result = Base.Broadcast.broadcasted(Op(; op_bcs...), args...)
+    imposed_bcs =
+        merge(imposed_bc(lname, x_bot, imposes), imposed_bc(rname, x_top, imposes))
+    isempty(imposed_bcs) && return result
+    return Base.Broadcast.broadcasted(SetBoundaryOperator(; imposed_bcs...), result)
+end
+dirichlet_bc(name, val, imposes) =
+    isnothing(val) || imposes && val isa VerticalBoundaryCondition ? (;) :
+    NamedTuple{(name,)}((val isa VerticalBoundaryCondition ? val : SetValue(val),))
+imposed_bc(name, val, imposes) =
+    imposes && val isa VerticalBoundaryCondition ? NamedTuple{(name,)}((val,)) : (;)
+
+"""
+    gradient_c2f_dirichlet(x; <boundary_name> = x₀...)
+
+Return the vertical gradient of the center-valued field `x` at faces, with the
+value of `x` prescribed to be `x₀` at each named boundary face: the same as
+`GradientC2F(<boundary_name> = SetValue(x₀)...).(x)`, materialized on the face
+space.
+
+`x` must have a scalar eltype. Each boundary value may be a number, a `Field`
+(on the corresponding boundary level of `x`'s space, or on a whole space, of
+which only the level closest to the boundary is read), or an unmaterialized
+lazy broadcast of such fields; a boundary value that is already a
+[`VerticalBoundaryCondition`](@ref) (e.g. a `SetGradient`) is instead applied
+as given, so a Dirichlet value on one boundary can be combined with an
+explicit condition on the other; and a boundary without a prescribed value is
+computed as by `GradientC2F` without a boundary condition there.
+"""
+gradient_c2f_dirichlet(x; boundary_values...) =
+    dirichlet_helper(gradient_c2f_dirichlet, GradientC2F, x; boundary_values...)
+
+"""
+    divergence_c2f_dirichlet(v; <boundary_name> = v₀...)
+
+Return the vertical contribution to the divergence of the center-valued vector
+field `v` at faces, with the value of `v` prescribed to be `v₀` at each named
+boundary face: the same as `DivergenceC2F(<boundary_name> = SetValue(v₀)...).(v)`,
+materialized on the face space.
+
+Each boundary value may be an axis tensor such as `Geometry.WVector(0.0)` (a
+number is not meaningful here), a `Field` of such values (on the corresponding
+boundary level, or on a whole space, of which only the level closest to the
+boundary is read), or an unmaterialized lazy broadcast of such fields. A
+boundary value that is already a [`VerticalBoundaryCondition`](@ref) (one
+accepted by [`SetBoundaryOperator`](@ref), e.g. a `SetValue` or
+`SetDivergence` of the result) is instead imposed as given on the result with
+a `SetBoundaryOperator`, and a boundary without a prescribed value is computed
+as by `DivergenceC2F` without a boundary condition there.
+"""
+divergence_c2f_dirichlet(v; boundary_values...) =
+    dirichlet_helper(divergence_c2f_dirichlet, DivergenceC2F, v; boundary_values...)
+
+"""
+    curl_c2f_dirichlet(u; <boundary_name> = u₀...)
+
+Return the vertical-derivative contribution to the curl of the center-valued
+covariant vector field `u` at faces, with the value of `u` prescribed to be
+`u₀` at each named boundary face: the same as
+`CurlC2F(<boundary_name> = SetValue(u₀)...).(u)`, materialized on the face
+space.
+
+Each boundary value must have the covariant 1 and 2 components of `eltype(u)`
+(e.g. a `Geometry.Covariant12Vector`), and may be an axis tensor, a `Field` of
+such values (on the corresponding boundary level, or on a whole space, of
+which only the level closest to the boundary is read), or an unmaterialized
+lazy broadcast of such fields. A boundary value that is already a
+[`VerticalBoundaryCondition`](@ref) (e.g. a `SetCurl`) is instead applied as
+given, and a boundary without a prescribed value is computed as by `CurlC2F`
+without a boundary condition there.
+"""
+curl_c2f_dirichlet(u; boundary_values...) =
+    dirichlet_helper(curl_c2f_dirichlet, CurlC2F, u; boundary_values...)
+
+"""
+    upwind_biased_product_c2f_dirichlet(v, x; <boundary_name> = x₀...)
+
+Return the first-order upwind product of the face-valued vector field `v` and
+the center-valued field `x`, with the value of `x` on the outside of each named
+boundary prescribed to be `x₀`: the same as
+`UpwindBiasedProductC2F(<boundary_name> = SetValue(x₀)...).(v, x)`,
+materialized on the face space.
+
+Each boundary value may be a number, a `Field` (on the corresponding boundary
+level of `x`'s space, or on a whole space, of which only the level closest to
+the boundary is read), or an unmaterialized lazy broadcast of such fields; a
+boundary value that is already a [`VerticalBoundaryCondition`](@ref) (one
+accepted by [`SetBoundaryOperator`](@ref), e.g. a `SetValue` of the flux) is
+instead imposed as given on the result with a `SetBoundaryOperator`; and a
+boundary without a prescribed value is computed as by `UpwindBiasedProductC2F`
+without a boundary condition there.
+"""
+upwind_biased_product_c2f_dirichlet(v, x; boundary_values...) = dirichlet_helper(
+    upwind_biased_product_c2f_dirichlet,
+    UpwindBiasedProductC2F,
+    v,
+    x;
+    boundary_values...,
+)
 
 """
     DirichletOperator{Op}(bcs)
 
-The operator returned by the constructor of `Op` (one of [`GradientC2F`](@ref),
-[`DivergenceC2F`](@ref), [`CurlC2F`](@ref) or [`UpwindBiasedProductC2F`](@ref))
-when one of the requested boundary conditions is a [`SetValue`](@ref), which
-those operators do not support directly. Applying it with `.` calls the
-corresponding Dirichlet helper ([`gradient_c2f_dirichlet`](@ref),
+Operator that applies the Dirichlet helper of `Op` (one of [`GradientC2F`](@ref),
+[`DivergenceC2F`](@ref), [`CurlC2F`](@ref) or [`UpwindBiasedProductC2F`](@ref)): applying
+it with `.` gives the unmaterialized broadcast of [`gradient_c2f_dirichlet`](@ref),
 [`divergence_c2f_dirichlet`](@ref), [`curl_c2f_dirichlet`](@ref) or
-[`upwind_biased_product_c2f_dirichlet`](@ref)) with each `SetValue(x₀)`
-unwrapped to its value `x₀` and every other boundary condition passed through
-as given. The helper's result is a lazy stencil broadcast with lazy boundary
-rows, so it fuses into an enclosing broadcast like a true operator application
-and allocates nothing.
+[`upwind_biased_product_c2f_dirichlet`](@ref), with each `SetValue(x₀)` in `bcs` unwrapped
+to its value `x₀` and every other boundary condition passed through as given.
+
+!!! warning
+
+    `DirichletOperator` is only kept for backward compatibility, and it can be removed in
+    a future breaking release. The constructors of these operators no longer return it for
+    a [`SetValue`](@ref), since the operators have `SetValue` boundary stencils of their
+    own.
 
 # Fields
 
@@ -2203,479 +2686,24 @@ struct DirichletOperator{Op, BCS}
         new{Op, typeof(bcs)}(bcs)
     )
 end
-
 dirichlet_bc_value(bc::SetValue) = bc.val
 dirichlet_bc_value(bc) = bc
 
-dirichlet_helper_broadcasted(::DirichletOperator{GradientC2F}) =
-    gradient_c2f_dirichlet_broadcasted
-dirichlet_helper_broadcasted(::DirichletOperator{DivergenceC2F}) =
-    divergence_c2f_dirichlet_broadcasted
-dirichlet_helper_broadcasted(::DirichletOperator{CurlC2F}) =
-    curl_c2f_dirichlet_broadcasted
-dirichlet_helper_broadcasted(::DirichletOperator{UpwindBiasedProductC2F}) =
-    upwind_biased_product_c2f_dirichlet_broadcasted
+dirichlet_helper_function(::DirichletOperator{GradientC2F}) = gradient_c2f_dirichlet
+dirichlet_helper_function(::DirichletOperator{DivergenceC2F}) = divergence_c2f_dirichlet
+dirichlet_helper_function(::DirichletOperator{CurlC2F}) = curl_c2f_dirichlet
+dirichlet_helper_function(::DirichletOperator{UpwindBiasedProductC2F}) =
+    upwind_biased_product_c2f_dirichlet
 
-# Applying a DirichletOperator returns the helper's lazy stencil broadcast,
-# which fuses into any enclosing broadcast; lazy arguments are passed through
-# unmaterialized.
-Base.Broadcast.broadcasted(op::DirichletOperator, args...) =
-    dirichlet_helper_broadcasted(op)(args...; op.bcs...)
+Base.Broadcast.broadcasted(op::DirichletOperator{Op}, args...) where {Op} =
+    dirichlet_broadcasted(dirichlet_helper_function(op), Op, args...; op.bcs...)
 
-# Wrap a boundary value for use in a lazy boundary row: numbers and axis
-# tensors broadcast as scalars (as 1-tuples rather than `Ref`s, which would
-# heap-allocate on every application), while fields and lazy broadcasts (over
-# the boundary level or over the whole space) broadcast as themselves.
-dirichlet_value(val) = (val,)
-dirichlet_value(val::MaybeLazyField) = val
+# These recurse per operator, alternating center and face spaces, which limits would widen.
+@drop_recursion_limits column_value, stencil_value, stencil_interior, stencil_left_boundary,
+stencil_right_boundary, stencil_arg, neighbor_arg, cached_arg, materialize_buffer,
+register_values, apply_stencil!
 
-# Wraps a center-staggered argument of a lazy Dirichlet boundary row (`S` is
-# the name of the boundary the row belongs to, as validated by
-# `dirichlet_boundary_values`). The row is read at a boundary face index, but
-# its center-staggered arguments are only meaningful at the center level
-# adjacent to that face, so `getidx` on the wrapper translates the face index
-# (bottom face 1/2 -> center 1, top face n+1/2 -> center n) before recursing
-# into the wrapped argument.
-struct BoundaryAdjacentCenter{S, A}
-    arg::A
-end
-BoundaryAdjacentCenter{S}(arg::A) where {S, A} =
-    BoundaryAdjacentCenter{S, A}(arg)
-
-Adapt.adapt_structure(to, w::BoundaryAdjacentCenter{S}) where {S} =
-    BoundaryAdjacentCenter{S}(Adapt.adapt(to, w.arg))
-
-# The wrapper broadcasts like its wrapped argument, so `combine_styles` over a
-# boundary row's arguments still resolves to a field style.
-Base.Broadcast.BroadcastStyle(
-    ::Type{BoundaryAdjacentCenter{S, A}},
-) where {S, A} = Base.Broadcast.BroadcastStyle(A)
-
-Base.@propagate_inbounds function getidx(
-    w::BoundaryAdjacentCenter{S},
-    idx::PlusHalf,
-    hidx,
-) where {S}
-    # At the left (bottom) boundary the adjacent center level is above the
-    # face, and at the right (top) boundary it is below. The boundary names
-    # are part of the vertical topology's type, so the comparison
-    # constant-folds.
-    shift = S === Spaces.left_boundary_name(axes(w.arg)) ? half : -half
-    return getidx(w.arg, idx + shift, hidx)
-end
-# Keep a stray wrapper read at a non-face index from reaching the generic
-# scalar `getidx` fallback, which would silently return the wrapper itself.
-@inline getidx(w::BoundaryAdjacentCenter, idx, hidx) =
-    error("a BoundaryAdjacentCenter can only be read at a boundary face index")
-
-# Wrap the center-staggered arguments of a boundary row (the boundary the row
-# belongs to is known when the row is built); everything else -- face-staggered
-# fields, boundary-level fields, and scalars -- is read at the boundary face
-# index as given. Wrapped arguments are instantiated so that their axes are not
-# recomputed in GPU kernels, where slices of extruded grids cannot be compared.
-boundary_adjacent_arg(::Val, arg) = arg
-boundary_adjacent_arg(bname::Val, arg::MaybeLazyField) =
-    _boundary_adjacent_arg(bname, axes(arg), arg)
-_boundary_adjacent_arg(
-    ::Val{S},
-    ::AllCenterFiniteDifferenceSpace,
-    arg,
-) where {S} = BoundaryAdjacentCenter{S}(Base.Broadcast.instantiate(arg))
-_boundary_adjacent_arg(::Val, space, arg) = arg
-
-# The lazy broadcast holding a Dirichlet boundary row, anchored to the face
-# space whose boundary it is read at. The arguments may mix center- and
-# face-staggered fields (center-staggered ones are wrapped in
-# `BoundaryAdjacentCenter`, which reads them at the level adjacent to the
-# boundary face), so their axes cannot be combined by `instantiate`; the
-# `Broadcasted` is constructed with the face space as its axes instead.
-function dirichlet_row_broadcasted(f::F, bname::Val, face_space, args...) where {F}
-    row_args = map(arg -> boundary_adjacent_arg(bname, arg), args)
-    style = Base.Broadcast.combine_styles(row_args...)
-    return Base.Broadcast.Broadcasted(style, f, row_args, face_space)
-end
-
-# The Dirichlet boundary rows as pointwise functions of the values adjacent to
-# the boundary face. `_upper`/`_lower` follow the vertical direction: at the
-# bottom boundary the prescribed value is the lower argument and the first
-# center level is the upper one, and at the top boundary the roles are
-# reversed, so each helper builds both of its boundary rows from one function.
-dirichlet_gradient_row(x_upper, x_lower) =
-    Geometry.Covariant3Vector(2 * (x_upper - x_lower))
-dirichlet_divergence_row(v_upper, lg_upper, v_lower, lg_lower, face_lg) =
-    (
-        Geometry.Jcontravariant3(v_upper, lg_upper) -
-        Geometry.Jcontravariant3(v_lower, lg_lower)
-    ) * 2 / face_lg.J
-function dirichlet_curl_row(u_upper, u_lower, face_lg)
-    Δu = u_upper - u_lower
-    return Geometry.Contravariant12Vector(
-        -2 * Δu.components.data.:2 / face_lg.J,
-        2 * Δu.components.data.:1 / face_lg.J,
-    )
-end
-dirichlet_upwind_row(v, x_lower, x_upper, face_lg) =
-    Geometry.Contravariant3Vector(
-        upwind_biased_product(
-            Geometry.contravariant3(v, face_lg),
-            x_lower,
-            x_upper,
-        ),
-    )
-
-# Split the user-provided boundary values into the values at the space's left
-# (bottom) and right (top) boundaries, validating the boundary names.
-function dirichlet_boundary_values(fname, space, boundary_values)
-    names =
-        (Spaces.left_boundary_name(space), Spaces.right_boundary_name(space))
-    foreach(keys(boundary_values)) do name
-        name in names || error(
-            "$fname: every boundary value must be named after a boundary of \
-             the space ($(join(names, ", "))); got $name",
-        )
-    end
-    (names..., get(boundary_values, names[1], nothing),
-        get(boundary_values, names[2], nothing))
-end
-
-"""
-    gradient_c2f_dirichlet(x; <boundary_name> = x₀...)
-
-Return the vertical gradient of the center-valued field `x` at faces, with the
-value of `x` prescribed to be `x₀` at each named boundary face: the Dirichlet
-form of [`GradientC2F`](@ref), equivalent to
-`GradientC2F(<boundary_name> = SetValue(x₀)).(x)` and built (for `bottom` and
-`top` boundaries) as
-
-```julia
-GradientC2F(
-    bottom = SetGradient(Geometry.Covariant3Vector.(2 .* (Fields.level(x, 1) .- x₀))),
-    top = SetGradient(Geometry.Covariant3Vector.(2 .* (x₀ .- Fields.level(x, nlevels)))),
-).(
-    x,
-)
-```
-
-`x` must have a scalar eltype. Each boundary value may be a number, a `Field`
-(on the corresponding boundary level of `x`'s space, or on a whole space, of
-which only the level adjacent to the boundary is read), or an unmaterialized
-lazy broadcast of such fields; a boundary value that is already a
-[`VerticalBoundaryCondition`](@ref) (e.g. a `SetGradient`) is instead applied
-as given, so a Dirichlet value on one boundary can be combined with an
-explicit condition on the other; and a boundary without a prescribed value is
-computed as by `GradientC2F` without a boundary condition there. The result is
-materialized on the face space.
-"""
-gradient_c2f_dirichlet(x; boundary_values...) = Base.Broadcast.materialize(
-    gradient_c2f_dirichlet_broadcasted(x; boundary_values...),
-)
-
-# The lazy form of `gradient_c2f_dirichlet`: the same replacement, returned as
-# an unmaterialized stencil broadcast with lazy boundary rows.
-function gradient_c2f_dirichlet_broadcasted(x; boundary_values...)
-    space = axes(x)
-    face_space = Spaces.face_space(space)
-    fname = "gradient_c2f_dirichlet"
-    (lname, rname, x_bot, x_top) =
-        dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
-    bcs = (;)
-    if x_bot !== nothing
-        bc = if x_bot isa VerticalBoundaryCondition
-            x_bot
-        else
-            # G(x)[1/2] = 2 (x[1] - x₀)
-            SetGradient(
-                dirichlet_row_broadcasted(
-                    dirichlet_gradient_row,
-                    Val(lname),
-                    face_space,
-                    x,
-                    dirichlet_value(x_bot),
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
-    end
-    if x_top !== nothing
-        bc = if x_top isa VerticalBoundaryCondition
-            x_top
-        else
-            # G(x)[n+1/2] = 2 (x₀ - x[n])
-            SetGradient(
-                dirichlet_row_broadcasted(
-                    dirichlet_gradient_row,
-                    Val(rname),
-                    face_space,
-                    dirichlet_value(x_top),
-                    x,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
-    end
-    return Base.Broadcast.broadcasted(GradientC2F(; bcs...), x)
-end
-
-"""
-    divergence_c2f_dirichlet(v; <boundary_name> = v₀...)
-
-Return the vertical contribution to the divergence of the center-valued vector
-field `v` at faces, with the value of `v` prescribed to be `v₀` at each named
-boundary face: the Dirichlet form of [`DivergenceC2F`](@ref), equivalent to
-`DivergenceC2F(<boundary_name> = SetValue(v₀)).(v)` and built by wrapping a
-plain `DivergenceC2F` in a [`SetBoundaryOperator`](@ref) that overrides each
-prescribed boundary face with the Dirichlet stencil's value,
-
-```math
-D(v)[\\tfrac{1}{2}] = (Jv³[1] - Jv³₀) \\frac{2}{J[\\tfrac{1}{2}]}
-```
-
-(and its mirror image at the top), where `Jv³₀` is computed from `v₀` and the
-boundary face's local geometry.
-
-Each boundary value may be an axis tensor such as `Geometry.WVector(0.0)` (a
-number is not meaningful here), a `Field` of such values (on the corresponding
-boundary level, or on a whole space, of which only the level adjacent to the
-boundary is read), or an unmaterialized lazy broadcast of such fields. A
-boundary value that is already a [`VerticalBoundaryCondition`](@ref) (one
-accepted by `SetBoundaryOperator`, e.g. a `SetValue` or `SetDivergence` of the
-operator's output) is instead imposed as given on the wrapping
-`SetBoundaryOperator`, and a boundary without a prescribed value is computed
-as by `DivergenceC2F` without a boundary condition there. The result is
-materialized on the face space.
-"""
-divergence_c2f_dirichlet(v; boundary_values...) = Base.Broadcast.materialize(
-    divergence_c2f_dirichlet_broadcasted(v; boundary_values...),
-)
-
-# The lazy form of `divergence_c2f_dirichlet` (see
-# `gradient_c2f_dirichlet_broadcasted`).
-function divergence_c2f_dirichlet_broadcasted(v; boundary_values...)
-    space = axes(v)
-    face_space = Spaces.face_space(space)
-    fname = "divergence_c2f_dirichlet"
-    (lname, rname, v_bot, v_top) =
-        dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
-    face_lg = Fields.local_geometry_field(face_space)
-    center_lg = Fields.local_geometry_field(space)
-    bcs = (;)
-    if v_bot !== nothing
-        bc = if v_bot isa VerticalBoundaryCondition
-            v_bot
-        else
-            # D(v)[1/2] = (Jv³[1] - Jv³₀) 2 / J[1/2], with Jv³₀ computed from
-            # the prescribed value and the boundary face's local geometry
-            SetValue(
-                dirichlet_row_broadcasted(
-                    dirichlet_divergence_row,
-                    Val(lname),
-                    face_space,
-                    v,
-                    center_lg,
-                    dirichlet_value(v_bot),
-                    face_lg,
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
-    end
-    if v_top !== nothing
-        bc = if v_top isa VerticalBoundaryCondition
-            v_top
-        else
-            # D(v)[n+1/2] = (Jv³₀ - Jv³[n]) 2 / J[n+1/2]
-            SetValue(
-                dirichlet_row_broadcasted(
-                    dirichlet_divergence_row,
-                    Val(rname),
-                    face_space,
-                    dirichlet_value(v_top),
-                    face_lg,
-                    v,
-                    center_lg,
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
-    end
-    return Base.Broadcast.broadcasted(
-        SetBoundaryOperator(; bcs...),
-        Base.Broadcast.broadcasted(DivergenceC2F(), v),
-    )
-end
-
-"""
-    curl_c2f_dirichlet(u; <boundary_name> = u₀...)
-
-Return the vertical-derivative contribution to the curl of the center-valued
-covariant vector field `u` at faces, with the value of `u` prescribed to be
-`u₀` at each named boundary face: the Dirichlet form of [`CurlC2F`](@ref),
-equivalent to `CurlC2F(<boundary_name> = SetValue(u₀)).(u)` and built by
-supplying the Dirichlet stencil's boundary rows,
-
-```math
-C(u)[\\tfrac{1}{2}]^1 = -(u_2[1] - u_{2,0}) \\frac{2}{J[\\tfrac{1}{2}]}, \\quad
-C(u)[\\tfrac{1}{2}]^2 = (u_1[1] - u_{1,0}) \\frac{2}{J[\\tfrac{1}{2}]}
-```
-
-(and their mirror images at the top), as [`SetCurl`](@ref) boundary
-conditions.
-
-Each boundary value must have the covariant 1 and 2 components of `eltype(u)`
-(e.g. a `Geometry.Covariant12Vector`), and may be an axis tensor, a `Field` of
-such values (on the corresponding boundary level, or on a whole space, of
-which only the level adjacent to the boundary is read), or an unmaterialized
-lazy broadcast of such fields. A boundary value that is already a
-[`VerticalBoundaryCondition`](@ref) (e.g. a `SetCurl`) is instead applied as
-given, and a boundary without a prescribed value is computed as by `CurlC2F`
-without a boundary condition there. The result is materialized on the face
-space.
-"""
-curl_c2f_dirichlet(u; boundary_values...) = Base.Broadcast.materialize(
-    curl_c2f_dirichlet_broadcasted(u; boundary_values...),
-)
-
-# The lazy form of `curl_c2f_dirichlet` (see
-# `gradient_c2f_dirichlet_broadcasted`).
-function curl_c2f_dirichlet_broadcasted(u; boundary_values...)
-    space = axes(u)
-    face_space = Spaces.face_space(space)
-    fname = "curl_c2f_dirichlet"
-    (lname, rname, u_bot, u_top) =
-        dirichlet_boundary_values(fname, space, NamedTuple(boundary_values))
-    face_lg = Fields.local_geometry_field(face_space)
-    bcs = (;)
-    if u_bot !== nothing
-        bc = if u_bot isa VerticalBoundaryCondition
-            u_bot
-        else
-            # C(u)[1/2] from Δu = u[1] - u₀
-            SetCurl(
-                dirichlet_row_broadcasted(
-                    dirichlet_curl_row,
-                    Val(lname),
-                    face_space,
-                    u,
-                    dirichlet_value(u_bot),
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
-    end
-    if u_top !== nothing
-        bc = if u_top isa VerticalBoundaryCondition
-            u_top
-        else
-            # C(u)[n+1/2] from Δu = u₀ - u[n]
-            SetCurl(
-                dirichlet_row_broadcasted(
-                    dirichlet_curl_row,
-                    Val(rname),
-                    face_space,
-                    dirichlet_value(u_top),
-                    u,
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
-    end
-    return Base.Broadcast.broadcasted(CurlC2F(; bcs...), u)
-end
-
-"""
-    upwind_biased_product_c2f_dirichlet(v, x; <boundary_name> = x₀...)
-
-Return the first-order upwind product of the face-valued vector field `v` and
-the center-valued field `x`, with the value of `x` on the outside of each named
-boundary prescribed to be `x₀`: the Dirichlet form of
-[`UpwindBiasedProductC2F`](@ref), equivalent to
-`UpwindBiasedProductC2F(<boundary_name> = SetValue(x₀)).(v, x)` and built by
-wrapping a plain `UpwindBiasedProductC2F` in a [`SetBoundaryOperator`](@ref)
-that overrides each prescribed boundary face with the Dirichlet stencil's
-value, the upwind product of `v³` there with `x₀` on the boundary side and the
-closest center value of `x` on the interior side.
-
-Each boundary value may be a number, a `Field` (on the corresponding boundary
-level of `x`'s space, or on a whole space, of which only the level adjacent to
-the boundary is read), or an unmaterialized lazy broadcast of such fields; a
-boundary value that is already a [`VerticalBoundaryCondition`](@ref) (one
-accepted by `SetBoundaryOperator`, e.g. a `SetValue` of the flux) is instead
-imposed as given on the wrapping `SetBoundaryOperator`; and a boundary without
-a prescribed value is computed as by `UpwindBiasedProductC2F` without a
-boundary condition there. The result is materialized on the face space.
-"""
-upwind_biased_product_c2f_dirichlet(v, x; boundary_values...) =
-    Base.Broadcast.materialize(
-        upwind_biased_product_c2f_dirichlet_broadcasted(
-            v,
-            x;
-            boundary_values...,
-        ),
-    )
-
-# The lazy form of `upwind_biased_product_c2f_dirichlet` (see
-# `gradient_c2f_dirichlet_broadcasted`).
-function upwind_biased_product_c2f_dirichlet_broadcasted(
-    v,
-    x;
-    boundary_values...,
-)
-    center_space = axes(x)
-    face_space = Spaces.face_space(center_space)
-    fname = "upwind_biased_product_c2f_dirichlet"
-    (lname, rname, x_bot, x_top) = dirichlet_boundary_values(
-        fname,
-        center_space,
-        NamedTuple(boundary_values),
-    )
-    face_lg = Fields.local_geometry_field(face_space)
-    bcs = (;)
-    if x_bot !== nothing
-        bc = if x_bot isa VerticalBoundaryCondition
-            x_bot
-        else
-            # U(v, x)[1/2] = upwind product of v³[1/2] with x₀ below and x[1]
-            # above
-            SetValue(
-                dirichlet_row_broadcasted(
-                    dirichlet_upwind_row,
-                    Val(lname),
-                    face_space,
-                    v,
-                    dirichlet_value(x_bot),
-                    x,
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(lname,)}((bc,)))
-    end
-    if x_top !== nothing
-        bc = if x_top isa VerticalBoundaryCondition
-            x_top
-        else
-            # U(v, x)[n+1/2] = upwind product of v³[n+1/2] with x[n] below and
-            # x₀ above
-            SetValue(
-                dirichlet_row_broadcasted(
-                    dirichlet_upwind_row,
-                    Val(rname),
-                    face_space,
-                    v,
-                    x,
-                    dirichlet_value(x_top),
-                    face_lg,
-                ),
-            )
-        end
-        bcs = merge(bcs, NamedTuple{(rname,)}((bc,)))
-    end
-    return Base.Broadcast.broadcasted(
-        SetBoundaryOperator(; bcs...),
-        Base.Broadcast.broadcasted(UpwindBiasedProductC2F(), v, x),
-    )
-end
+# Constant propagation on these never improves inference; it re-infers the whole expression.
+@drop_constprop apply_operators, inline_apply_operators, noinline_apply_operators,
+apply_operators!, operator_arg, pointwise_arg, apply_operator, apply_stencil,
+apply_stencil!, materialize_buffer, column_value, stencil_value

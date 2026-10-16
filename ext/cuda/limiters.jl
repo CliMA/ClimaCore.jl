@@ -280,12 +280,12 @@ function apply_limiter_kernel!(
     q_min_tuple,
 ) where {LM <: VerticalMassBorrowingLimiter}
     (_, Ni, _, Nh) = size(q_data)
-    j_idx, i_idx = divrem(CUDA.threadIdx().x - Int32(1), Ni)
-    j_idx += Int32(1)
-    i_idx += Int32(1)
+    j_idx, i_idx = divrem(CUDA.threadIdx().x - UInt32(1), Ni)
+    j_idx += UInt32(1)
+    i_idx += UInt32(1)
     f_idx = CUDA.threadIdx().y
     # each z in a block is a different element
-    h_idx = CUDA.blockDim().z * (CUDA.blockIdx().x - Int32(1)) + CUDA.threadIdx().z
+    h_idx = CUDA.blockDim().z * (CUDA.blockIdx().x - UInt32(1)) + CUDA.threadIdx().z
     @inbounds if h_idx <= Nh
         q_min = q_min_tuple[f_idx]
         q_column_data = column(q_data, i_idx, j_idx, h_idx)
