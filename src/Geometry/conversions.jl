@@ -5,7 +5,8 @@
 # both halves at once: `metric_for_components_type` extracts just that metric
 # (`nothing` when none is needed) and `_to_components_type` consumes it. The
 # metric is always one of `lg`'s *stored* fields, never a derived property, so
-# it can be a `Field` view of a `LocalGeometry` field's backing array.
+# it can be a `Field` view of a `LocalGeometry` field's backing array. Conversions that need
+# no metric accept any, so that values of several types can share one metric.
 for (basis, V, metric, converted) in (
     (:Contravariant, :ContravariantTensor, :nothing, :v),
     (:Covariant, :CovariantTensor, :nothing, :v),
@@ -17,7 +18,7 @@ for (basis, V, metric, converted) in (
     (:Orthonormal, :ContravariantTensor, :(lg.∂x∂ξ), :(metric * v)),
     (:Orthonormal, :CovariantTensor, :(lg.∂x∂ξ), :(inv(metric)' * v)),
 )
-    M = metric == :nothing ? :Nothing : :(AbstractTensor{2})
+    M = metric == :nothing ? :(Union{Nothing, AbstractTensor{2}}) : :(AbstractTensor{2})
     @eval @inline metric_for_components_type(::$basis, ::Type{<:$V}, lg) = $metric
     @eval @inline _to_components_type(::$basis, v::$V, metric::$M) = $converted
 end
@@ -147,12 +148,11 @@ end
     curl_result_type(Val(I), V)
 
 Return the element type of the curl along the dimensions `I` of a field with element type
-`V`. The result is always the full `Contravariant123Vector`; dimensions outside the curl
-range carry zeros, consistent with the identity-padded metric convention of
-`LocalGeometry`.
+`V`: the full `Contravariant123Vector` (zero outside the curl range, as in the
+identity-padded metrics of `LocalGeometry`), or a `Contravariant12Vector` for `I == (3,)`.
 """
-@inline curl_result_type(_, ::Type{<:CovariantVector{FT}}) where {FT} =
-    Contravariant123Vector{FT}
+@inline curl_result_type(val, ::Type{<:CovariantVector{FT}}) where {FT} =
+    val isa Val{(3,)} ? Contravariant12Vector{FT} : Contravariant123Vector{FT}
 
 ## Norm and cross-product (used in broadcast.jl)
 ##

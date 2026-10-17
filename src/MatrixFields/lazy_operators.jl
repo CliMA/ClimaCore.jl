@@ -28,11 +28,13 @@ Base.Broadcast.BroadcastStyle(
     },
 ) = LazyOperatorStyle()
 
-struct LazyOperatorBroadcasted{F, A} <:
-       Operators.OperatorBroadcasted{LazyOperatorStyle}
+# Broadcast with lazy operators, typed separately so materialize does not invalidate Base.
+struct LazyOperatorBroadcasted{F, A} <: Base.AbstractBroadcasted
     f::F
     args::A
 end
+Base.Broadcast.BroadcastStyle(::Type{<:LazyOperatorBroadcasted}) = LazyOperatorStyle()
+Base.Broadcast.broadcastable(bc::LazyOperatorBroadcasted) = bc
 
 # TODO: This definition of Base.Broadcast.broadcasted results in 2 additional
 # method invalidations when using Julia 1.8.5. However, if we were to delete it,
@@ -44,8 +46,11 @@ end
 Base.Broadcast.broadcasted(::LazyOperatorStyle, f::F, args...) where {F} =
     LazyOperatorBroadcasted(f, args)
 
+Fields.shared_space(bc::LazyOperatorBroadcasted) =
+    Fields.shared_space_ignoring_staggering(bc.args)
+
 function Base.Broadcast.materialize(bc::LazyOperatorBroadcasted)
-    space = largest_space(bc)
+    space = Fields.shared_space(bc)
     isnothing(space) && error("Cannot materialize broadcast expression with \
                                AbstractLazyOperator because it does not contain any Fields")
     return Base.Broadcast.materialize(replace_lazy_operators(space, bc))
@@ -65,47 +70,11 @@ replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
 """
     replace_lazy_operator(space, lazy_op)
 
-Return an instance of `Base.AbstractBroadcasted` that corresponds to the
-expression `lazy_op.()`, where the broadcast in which this expression appears is
-evaluated on the given `space`. The staggering (`CellCenter` or `CellFace`) of
-this `space` depends on the specifics of the broadcast and is not predetermined.
+Return a `LazyField` that corresponds to the expression `lazy_op.()`, where the
+broadcast in which this expression appears is evaluated on the given `space`.
+The staggering (`CellCenter` or `CellFace`) of this `space` depends on the
+specifics of the broadcast and is not predetermined.
 """
 replace_lazy_operator(_, ::AbstractLazyOperator) =
     error("Every subtype of AbstractLazyOperator must implement a method for
            replace_lazy_operator(space, lazy_op)")
-
-largest_space(_) = nothing
-largest_space(field::Fields.Field) = axes(field)
-largest_space(bc::Base.AbstractBroadcasted) =
-    unrolled_reduce(larger_space, unrolled_map(largest_space, bc.args); init = nothing)
-
-larger_space(::Nothing, ::Nothing) = nothing
-larger_space(space1, ::Nothing) = space1
-larger_space(::Nothing, space2) = space2
-larger_space(space1::S, ::S) where {S} = space1 # Neither space is larger.
-larger_space(
-    space1::Spaces.FiniteDifferenceSpace,
-    ::Spaces.FiniteDifferenceSpace,
-) = space1 # The staggering does not matter here, so neither space is larger.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space1 # The staggering does not matter here, so neither space is larger.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.FiniteDifferenceSpace,
-) = space1 # The types indicate that space2 is a subspace of space1.
-larger_space(
-    ::Spaces.FiniteDifferenceSpace,
-    space2::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space2 # The types indicate that space1 is a subspace of space2.
-larger_space(
-    space1::Spaces.ExtrudedFiniteDifferenceSpace,
-    ::Spaces.AbstractSpectralElementSpace,
-) = space1 # The types indicate that space2 is a subspace of space1.
-larger_space(
-    ::Spaces.AbstractSpectralElementSpace,
-    space2::Spaces.ExtrudedFiniteDifferenceSpace,
-) = space2 # The types indicate that space1 is a subspace of space2.
-larger_space(::S1, ::S2) where {S1, S2} =
-    error("Mismatched spaces ($(S1.name.name) and $(S2.name.name))")

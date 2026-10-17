@@ -96,8 +96,8 @@ and `CurlC2F` differences the horizontal covariant components to give the
 horizontal contravariant components of the curl. Boundary conditions
 prescribe the operator's output at the boundary face (`SetGradient`,
 `SetDivergence`, `SetCurl`) or, through a `SetValue` on the argument, replace
-the boundary stencil by one built from a prescribed argument value
-(`DirichletOperator`, e.g. `gradient_c2f_dirichlet`).
+the boundary stencil by one built from a prescribed argument value (also
+applied by helpers such as `gradient_c2f_dirichlet`).
 
 **Advective reconstructions.** A centered average of an advected scalar
 produces dispersive oscillations and negative concentrations. The

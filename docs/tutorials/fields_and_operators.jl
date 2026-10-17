@@ -11,9 +11,8 @@ using ClimaComms
 ClimaComms.@import_required_backends
 using LinearAlgebra
 using IntervalSets
-import ClimaCore
-import ClimaCore:
-    Domains, Meshes, Topologies, Quadratures, Spaces, Fields, Geometry, Operators
+import ClimaCore: Geometry, Domains, Meshes, Topologies, Quadratures, Spaces
+import ClimaCore: DataLayouts, Fields, Operators
 using CairoMakie
 import ClimaCore.Visualize: fieldheatmap!
 CairoMakie.activate!(type = "png")
@@ -226,19 +225,41 @@ divf2c = Operators.DivergenceF2C(
     bottom = Operators.SetValue(Geometry.WVector(cos(0.0))),
     top = Operators.SetValue(Geometry.WVector(cos(10.0))),
 )
-∇∇sinz = @. divf2c(gradc2f(sinz))
+∇²sinz = @. divf2c(gradc2f(sinz))
 fig = Figure(size = (400, 400))
-ax = Axis(fig[1, 1], xlabel = "∂zz sin z", ylabel = "z")
-lines!(ax, column_values(∇∇sinz), column_values(column_center_coords.z), label = "computed")
+ax = Axis(fig[1, 1], xlabel = "∇²(sin z)", ylabel = "z")
+lines!(ax, column_values(∇²sinz), column_values(column_center_coords.z), label = "computed")
 lines!(
     ax,
     column_values(.-sinz),
     column_values(column_center_coords.z),
     linestyle = :dash,
-    label = "-sin z",
+    label = "exact",
 )
 axislegend(ax)
 fig
+
+# ### 7.1 Columns of an extruded space
+#
+# Extruding the square along the column gives a three-dimensional space with a
+# column of cells above every spectral-element node. Finite-difference operators
+# are evaluated in parallel over every column.
+
+extruded_space =
+    Spaces.ExtrudedFiniteDifferenceSpace(rectangle_space, column_center_space)
+extruded_sinz = sin.(Fields.coordinate_field(extruded_space).z)
+extruded_∇²sinz = @. divf2c(gradc2f(extruded_sinz))
+
+# Column operations can be fused by `DataLayouts.foreach_column(f, fields...)`,
+# which applies `f` to column views of each field. For example, the Laplacian
+# above can be fused with `maximum` to determine the largest error per column.
+
+max_errors = similar(Fields.level(extruded_sinz, 1))
+DataLayouts.foreach_column(max_errors, extruded_sinz) do max_error, sinz_column
+    ∇²sinz_column = @. divf2c(gradc2f(sinz_column))
+    max_error[] = maximum(abs, ∇²sinz_column .+ sinz_column)
+end
+heatmap_with_colorbar(max_errors; title = "∇²(sin z) error, max over z")
 
 # The next tutorials use these pieces to solve equations in time:
 # [Solve a column PDE](column_heat.md) and

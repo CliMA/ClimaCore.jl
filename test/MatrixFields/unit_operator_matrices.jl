@@ -140,6 +140,7 @@ end
     test_op_matrix(UpwindBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(UpwindBiasedProductC2F, Extrapolate{0}, (ᶠuvw, ᶜscalar))
     test_op_matrix(UpwindBiasedProductC2F, Extrapolate{2}, (ᶠuvw, ᶜscalar))
+    test_op_matrix(UpwindBiasedProductC2F, SetValue, (ᶠuvw, ᶜscalar))
     test_op_matrix(Upwind3rdOrderBiasedProductC2F, Nothing, (ᶠuvw, ᶜscalar))
     test_op_matrix(
         Upwind3rdOrderBiasedProductC2F,
@@ -158,17 +159,20 @@ end
     )
     test_op_matrix(SetBoundaryOperator, SetValue, (ᶠnested,))
     test_op_matrix(GradientC2F, Nothing, (ᶜscalar,), true)
+    test_op_matrix(GradientC2F, SetValue, (ᶜscalar,))
     test_op_matrix(GradientC2F, SetGradient, (ᶜscalar,))
     test_op_matrix(GradientF2C, Nothing, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetValue, (ᶠscalar,))
     test_op_matrix(GradientF2C, SetGradient, (ᶠscalar,))
     test_op_matrix(DivergenceC2F, Nothing, (ᶜuvw,), true)
+    test_op_matrix(DivergenceC2F, SetValue, (ᶜuvw,))
     test_op_matrix(DivergenceC2F, SetDivergence, (ᶜuvw,))
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
+    test_op_matrix(CurlC2F, SetValue, (ᶜc12,))
     test_op_matrix(CurlC2F, SetCurl, (ᶜc12,))
 
     @test_throws "nonlinear" MatrixFields.operator_matrix(FCTBorisBook())
@@ -278,6 +282,16 @@ end
         face_space,
     ) ≈ stack(
         [i == 1 ? [0, 1] : i == n ? [-1, 0] : [-1, 1] for i in 1:n];
+        dims = 1,
+    )
+
+    # GradientC2F with SetValue: G(x)[1/2] = 2 (x[1] - x₀) e³, so the linear
+    # part of a boundary row is twice the closest center's coefficient.
+    @test matrix_rows(
+        GradientC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
+        center_space,
+    ) ≈ stack(
+        [f == 1 ? [0, 2] : f == n + 1 ? [-2, 0] : [-1, 1] for f in 1:(n + 1)];
         dims = 1,
     )
 
@@ -406,6 +420,8 @@ end
     ᶠgrad = GradientC2F(; set_c3_gradients...)
     ᶜdiv = DivergenceF2C()
     ᶠcurl = CurlC2F(; set_ct12_curls...)
+    ᶜinterp = InterpolateF2C()
+    ᶜinterp_matrix = MatrixFields.operator_matrix(ᶜinterp)
     ᶠinterp_matrix = MatrixFields.operator_matrix(ᶠinterp)
     ᶜlbias_matrix = MatrixFields.operator_matrix(ᶜlbias)
     ᶠrbias_matrix = MatrixFields.operator_matrix(ᶠrbias)
@@ -419,6 +435,89 @@ end
 
     @test_throws "does not contain any Fields" @. ᶜlbias_matrix() *
                                                   ᶠinterp_matrix()
+
+    for (ᶜarg, ᶠarg) in (
+        (view(ᶜscalar, 1), ᶠscalar),
+        (Spaces.level(ᶜscalar, 1), ᶠscalar),
+        (Spaces.slab(ᶜscalar, 1, 1), ᶠscalar),
+        (Spaces.column(ᶜscalar, 1, 1, 1), ᶠscalar),
+        (ᶜscalar, Spaces.column(ᶠscalar, 1, 1, 1)),
+        (view(ᶜscalar, 1), Spaces.column(ᶠscalar, 1, 1, 1)),
+        (Spaces.column(ᶜscalar, 1, 1, 1), Spaces.column(ᶠscalar, 1, 1, 1)),
+    )
+        test_field_broadcast(
+            test_name = "operator matrix combined with Field slices",
+            get_result = @lazy(@. ᶜarg * ᶜinterp_matrix() * ᶠarg),
+            set_result = @lazy(@. ᶜarg * ᶜinterp_matrix() * ᶠarg),
+            ref_set_result = @lazy(@. ᶜarg * ᶜinterp(ᶠarg)),
+        )
+    end
+
+    # Every element of a column loop reads a slab's one element, as in a full-field copy,
+    # also through a nested broadcast with the slab's space (e.g., a constructor call,
+    # whose space GPU kernels have to adapt).
+    ᶠextrap_interp = InterpolateC2F(; bottom = Extrapolate(), top = Extrapolate())
+    slab_expressions(ᶜs, ᶠs) = (
+        @lazy(@. ᶜinterp(ᶠextrap_interp(ᶜscalar)) * ᶜs),
+        @lazy(@. ᶜinterp(ᶠextrap_interp(ᶜscalar) * FT(ᶠs))),
+        @lazy(@. ᶜdiv(ᶠextrap_interp(ᶜscalar) * Geometry.WVector(ᶠs))),
+        @lazy(@. ᶜdiv(ᶠupwind(Geometry.WVector(ᶠextrap_interp(ᶜscalar)) * ᶠs, ᶜscalar))),
+        @lazy(@. ᶜs * ᶜinterp_matrix() * ᶠscalar),
+    )
+    (ᶜslab_copy, ᶠslab_copy) = (similar(ᶜscalar), similar(ᶠscalar))
+    for (ᶜslab, ᶠslab) in (
+        (Spaces.slab(ᶜscalar, 1, 2), Spaces.slab(ᶠscalar, half, 2)),
+        (copy(Spaces.slab(ᶜscalar, 1, 1)), copy(Spaces.slab(ᶠscalar, half, 1))),
+    )
+        @. ᶜslab_copy = ᶜslab
+        @. ᶠslab_copy = ᶠslab
+        for (result, ref_result) in zip(
+            slab_expressions(ᶜslab, ᶠslab),
+            slab_expressions(ᶜslab_copy, ᶠslab_copy),
+        )
+            @test parent(materialize(result)) ≈ parent(materialize(ref_result))
+        end
+    end
+
+    # Matrices only multiply fields of the staggering that their bands map from, and a
+    # matrix on one column multiplies every column of a field on the whole space.
+    @test_throws DimensionMismatch Base.materialize(@lazy(@. ᶜinterp_matrix() * ᶜscalar))
+    ᶠcolumn_winterp = WeightedInterpolateC2F(; bottom = Extrapolate(), top = Extrapolate())
+    ᶜcolumn_weight = ClimaCore.Spaces.column(ᶜscalar, 1, 1, 1)
+    ᶜweight = similar(ᶜscalar)
+    @. ᶜweight = ᶜcolumn_weight
+    @test parent(@. ᶠcolumn_winterp(ᶜcolumn_weight, ᶜscalar)) ==
+          parent(@. ᶠcolumn_winterp(ᶜweight, ᶜscalar))
+
+    # So does a column in the velocity or the advected argument of an advection operator,
+    # whose result matches that of a copy of the column on the whole space.
+    ᶠcolumn = Spaces.column(ᶠscalar, 1, 1, 1)
+    ᶠcolumn_copy = similar(ᶠscalar)
+    @. ᶠcolumn_copy = ᶠcolumn
+    ᶠextrapolate = InterpolateC2F(; bottom = Extrapolate(), top = Extrapolate())
+    ᶠct3 = @. Geometry.Contravariant3Vector(ᶠextrapolate(ᶜscalar))
+    advect(ᶠadvect, ᶠv, ᶜx, args...) =
+        @. ᶜdiv(ᶠadvect(Geometry.WVector(ᶠextrapolate(ᶜscalar)) * ᶠv, ᶜx, args...))
+    for (ᶠadvect, args) in (
+            (ᶠupwind, ()),
+            (Upwind3rdOrderBiasedProductC2F(), ()),
+            (LinVanLeerC2F(; constraint = Operators.MonotoneLocalExtrema()), (FT(0.1),)),
+            (FCTBorisBook(), ()),
+            (TVDLimitedFluxC2F(; method = Operators.MinModLimiter()), (ᶠct3,)),
+        ),
+        (ᶠv, ᶜx, ᶠv_copy, ᶜx_copy) in (
+            (ᶠcolumn, ᶜscalar, ᶠcolumn_copy, ᶜscalar),
+            (ᶠscalar, ᶜcolumn_weight, ᶠscalar, ᶜweight),
+        )
+
+        @test parent(advect(ᶠadvect, ᶠv, ᶜx, args...)) ≈
+              parent(advect(ᶠadvect, ᶠv_copy, ᶜx_copy, args...))
+    end
+    # However, different columns are not broadcast together.
+    ᶠother_column = Spaces.column(ᶠscalar, 2, 1, 1)
+    @test_throws DimensionMismatch @. ᶜdiv(
+        ᶠupwind(Geometry.WVector(ᶠcolumn) * ᶠother_column, ᶜcolumn_weight),
+    )
 
     ᶜ0 = @. zero(ᶜscalar)
     ᶜ1 = @. one(ᶜscalar)

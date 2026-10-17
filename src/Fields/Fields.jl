@@ -361,6 +361,29 @@ Base.@propagate_inbounds slab(field::Field, v, h) = Field(
 Base.@propagate_inbounds column(field::Field, indices...) =
     Field(column(field_values(field), indices...), column(axes(field), indices...))
 
+Base.@propagate_inbounds DataLayouts.slice_arg(::typeof(level), field::Field, v) = Field(
+    DataLayouts.slice_arg(
+        level,
+        field_values(field),
+        Spaces.integer_level_index(axes(field), v),
+    ),
+    level(axes(field), v),
+)
+Base.@propagate_inbounds DataLayouts.slice_arg(::typeof(slab), field::Field, v, h) = Field(
+    DataLayouts.slice_arg(
+        slab,
+        field_values(field),
+        Spaces.integer_level_index(axes(field), v),
+        h,
+    ),
+    slab(axes(field), v, h),
+)
+Base.@propagate_inbounds DataLayouts.slice_arg(::typeof(column), field::Field, indices...) =
+    Field(
+        DataLayouts.slice_arg(column, field_values(field), indices...),
+        DataLayouts.slice_arg(column, axes(field), indices...),
+    )
+
 # nice printing
 # follow x-array like printing?
 # repl: #https://earth-env-data-science.github.io/lectures/xarray/xarray.html

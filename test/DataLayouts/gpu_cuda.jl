@@ -2,8 +2,10 @@ using Test
 import ClimaComms
 using CUDA
 import ClimaCore
-import ClimaCore: slab
+import ClimaCore: slab, DataLayouts, Fields, Geometry
 import ClimaCore.DataLayouts: VIJFH
+include(joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"))
+import .TestUtilities as TU
 ClimaComms.@import_required_backends
 
 # Cross-check every launch configuration computed by this test against CUDA's
@@ -105,5 +107,63 @@ Base.broadcastable(f::ScaledSum) = tuple(f)
             @. dest_point = f(arg_points..., c)
         end
         @test all(==(2 * (sum(1:n) + 1)), Array(parent(dest)))
+    end
+end
+
+@testset "point views of compact device views" begin
+    CUDA_EXT = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+    # Each component of a point in a view of a parent array must be found at the parent
+    # index of the corresponding view element, including in views of single levels.
+    for (parent_size, indices, F) in (
+        ((3, 2, 2, 3, 2), (2:2, :, :, :, :), 5), # VIJHF level
+        ((3, 2, 2, 2, 1), (2:2, :, :, :, :), 4), # VIJFH level with one element
+        ((3, 2, 2, 2, 3), (2:2, :, :, :, :), 4), # VIJFH level
+        ((3, 2, 2, 3, 2), (:, 2:2, 1:1, 2:2, :), 5), # VIJHF column
+        ((3, 2, 2, 2, 3), (2:2, :, :, :, 3:3), 4), # VIJFH slab
+    )
+        array = reshape(collect(1.0:prod(parent_size)), parent_size)
+        array_view = view(array, indices...)
+        R = filter(d -> indices[d] isa UnitRange, ntuple(identity, length(parent_size)))
+        compact_view = CUDA_EXT.CompactDeviceView{
+            Float64, length(parent_size), size(array_view), R, length(R), 0,
+            typeof(array),
+        }(
+            array,
+            map(d -> UInt32(first(indices[d]) - 1), R),
+            (),
+        )
+        point_indices = CartesianIndices(size(array_view)[filter(!=(F), 1:length(indices))])
+        for point_index in point_indices
+            index = (Tuple(point_index)[1:(F - 1)]..., 1, Tuple(point_index)[F:end]...)
+            (parent_array, (offset, parent_stride)) = CUDA_EXT.device_offset_and_stride(
+                compact_view,
+                LinearIndices(array_view)[index...],
+                prod(size(array_view)[1:(F - 1)]),
+            )
+            @test [
+                parent_array[offset + (f - 1) * parent_stride] for
+                f in 1:size(array_view, F)
+            ] ==
+                  array_view[Base.setindex(index, :, F)...]
+        end
+    end
+
+    # Writing to a level of a field with multiple components.
+    FT = Float64
+    for VIJH in (DataLayouts.VIJHF, DataLayouts.VIJFH), helem in (1, 2)
+        space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 2, helem, VIJH)
+        cpu_space = TU.CenterExtrudedFiniteDifferenceSpace(
+            FT;
+            zelem = 2,
+            helem,
+            VIJH,
+            context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+        )
+        value = Geometry.Covariant12Vector(FT(1), FT(2))
+        uₕ = fill(zero(value), space)
+        cpu_uₕ = fill(zero(value), cpu_space)
+        fill!(Fields.level(uₕ, 1), value)
+        fill!(Fields.level(cpu_uₕ, 1), value)
+        @test Array(parent(uₕ)) == parent(cpu_uₕ)
     end
 end

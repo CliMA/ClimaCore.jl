@@ -245,294 +245,198 @@ This means that we can express the bounds on the interior values of ``i`` as
 """
 struct MultiplyColumnwiseBandMatrixField <: Operators.FiniteDifferenceOperator end
 
-# These name the two corners of the band matrix, not the ends of the column.
-# The vertical index runs from the domain bottom (the `LeftBoundaryWindow`) to
-# the domain top (the `RightBoundaryWindow`), so the matrix's top-left corner
-# (its first rows and columns) sits at the domain bottom and its bottom-right
-# corner at the domain top.
-struct TopLeftMatrixCorner <: Operators.VerticalBoundaryCondition end
-struct BottomRightMatrixCorner <: Operators.VerticalBoundaryCondition end
-
-Operators.get_boundary(
-    ::MultiplyColumnwiseBandMatrixField,
-    ::Operators.LeftBoundaryWindow{name},
-) where {name} = TopLeftMatrixCorner()
-Operators.get_boundary(
-    ::MultiplyColumnwiseBandMatrixField,
-    ::Operators.RightBoundaryWindow{name},
-) where {name} = BottomRightMatrixCorner()
-
-Operators.stencil_interior_width(
-    ::MultiplyColumnwiseBandMatrixField,
-    matrix1,
-    arg,
-) = ((0, 0), outer_diagonals(eltype(matrix1)))
-
-function Operators.left_interior_idx(
-    space::Spaces.AbstractSpace,
-    ::MultiplyColumnwiseBandMatrixField,
-    ::TopLeftMatrixCorner,
-    matrix1,
-    arg,
-)
-    column_space1 = column_axes(matrix1, space)
-    li1 = Operators.left_idx(column_space1)
-    ld1 = outer_diagonals(eltype(matrix1))[1]
-    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
-        matrix2 = arg
-        column_space2 = column_axes(matrix2, column_space1)
-        li2 = Operators.left_idx(column_space2)
-        ld2 = outer_diagonals(eltype(matrix2))[1]
-        return max(li1, li2 - ld2) - ld1
-    else # matrix-vector multiplication
-        return li1 - ld1
-    end
-end
-
-function Operators.right_interior_idx(
-    space::Spaces.AbstractSpace,
-    ::MultiplyColumnwiseBandMatrixField,
-    ::BottomRightMatrixCorner,
-    matrix1,
-    arg,
-)
-    column_space1 = column_axes(matrix1, space)
-    ri1 = Operators.right_idx(column_space1)
-    ud1 = outer_diagonals(eltype(matrix1))[2]
-    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
-        matrix2 = arg
-        column_space2 = column_axes(matrix2, column_space1)
-        ri2 = Operators.right_idx(column_space2)
-        ud2 = outer_diagonals(eltype(matrix2))[2]
-        return min(ri1, ri2 - ud2) - ud1
-    else # matrix-vector multiplication
-        return ri1 - ud1
-    end
-end
-
-function Operators.return_eltype(
-    ::MultiplyColumnwiseBandMatrixField,
-    matrix1,
-    arg,
-)
+function Operators.return_eltype(::MultiplyColumnwiseBandMatrixField, matrix1, arg)
     et_mat1 = eltype(matrix1)
     et_arg = eltype(arg)
     # eltype may be the inference-failure sentinel Union{} when this is called
     # while probing an expression with unsafe_eltype; propagate it instead of
     # treating it as a BandMatrixRow (Union{} is a subtype of everything).
     (et_mat1 == Union{} || et_arg == Union{}) && return Union{}
-    et_mat1 <: BandMatrixRow || error(
-        "The first argument of MultiplyColumnwiseBandMatrixField must have
-         elements of type BandMatrixRow, but the given argument has $et_mat1",
-    )
+    et_mat1 <: BandMatrixRow || invalid_matrix_eltype_error(et_mat1)
+    # The entries of arg are already projected (see projected_operand).
     if et_arg <: BandMatrixRow # matrix-matrix multiplication
         ld1, ud1 = outer_diagonals(et_mat1)
         ld2, ud2 = outer_diagonals(et_arg)
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type = mul_return_type(eltype(et_mat1), eltype(et_arg))
+        prod_value_type = return_type(*, Tuple{eltype(et_mat1), eltype(et_arg)})
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
-        return mul_return_type(eltype(et_mat1), et_arg)
+        return return_type(*, Tuple{eltype(et_mat1), et_arg})
     end
 end
 
-Operators.return_space(::MultiplyColumnwiseBandMatrixField, space, _) = space
+# The message is built at generation time, since GPU kernels cannot build strings.
+@generated invalid_matrix_eltype_error(::Type{T}) where {T} =
+    :(error($("The first argument of MultiplyColumnwiseBandMatrixField must have \
+               elements of type BandMatrixRow, but the given argument has $T")))
 
-# Compute max(li - i, ld) and min(ri - i, ud). Both corners clamp both ends of
-# the band: on columns too short for the interior stencil, the boundary windows
-# are clamped (`Operators.window_bounds`) and can overlap, so a point in one
-# boundary's window can also have band entries that reach past the other end of
-# the column.
-boundary_modified_ld(_, ld, column_space, i) = ld
-boundary_modified_ld(
-    ::Union{TopLeftMatrixCorner, BottomRightMatrixCorner},
-    ld,
-    column_space,
-    i,
-) =
-    max(Operators.left_idx(column_space) - i, ld)
-boundary_modified_ud(_, ud, column_space, i) = ud
-boundary_modified_ud(
-    ::Union{TopLeftMatrixCorner, BottomRightMatrixCorner},
-    ud,
-    column_space,
-    i,
-) =
-    min(Operators.right_idx(column_space) - i, ud)
+# A product is on the staggering of matrix1, over the larger of the spaces of its arguments
+# (e.g., a matrix on one column multiplies every column of an extruded field). A matrix band
+# with half-integer offsets maps values from the other staggering.
+function Operators.return_space(::MultiplyColumnwiseBandMatrixField, matrix1, arg)
+    space1 = Fields.shared_space(matrix1)
+    staggering = Spaces.staggering(space1)
+    isnothing(staggering) && return space1
+    staggers = first(outer_diagonals(eltype(matrix1))) isa PlusHalf
+    arg_staggering =
+        staggers == (staggering isa Spaces.CellCenter) ? Spaces.CellFace : Spaces.CellCenter
+    Operators.check_staggering(arg, arg_staggering)
+    space2 = Fields.staggered_like(Fields.shared_space(arg), space1)
+    return Spaces.maybe_issubspace(space1, space2) ? space2 : space1
+end
 
-# TODO: Use @propagate_inbounds here, and remove @inbounds from this function.
-# As of Julia 1.8, doing this increases compilation time by more than an order
-# of magnitude, and it also makes type inference fail for some complicated
-# matrix field broadcast expressions (in particular, those that involve products
-# of linear combinations of matrix fields). Not using @propagate_inbounds causes
-# matrix field broadcast expressions to take roughly 3 or 4 times longer to
-# evaluate, but this is less significant than the decrease in compilation time.
-# matrix-matrix multiplication
-function multiply_matrix_at_index(
+"""
+    projected_operand(matrix1, arg)
+
+Return the second argument of the product of `matrix1` and `arg`, which projects the values
+of `arg` with `Geometry.project_for_mul` (once per evaluation) when the entries of `matrix1`
+need it (see `Geometry._dual_axes_for_projection`), reading only the needed metric. This
+also covers values that a `SetBoundaryOperator` in `arg` imposes, whose types can differ
+from its eltype (see `Operators.imposed_values_metric`).
+"""
+function projected_operand(matrix1, arg)
+    et_mat1 = eltype(matrix1)
+    (et_mat1 == Union{} || !(et_mat1 <: BandMatrixRow)) && return arg
+    axes = Geometry._dual_axes_for_projection(eltype(et_mat1))
+    isnothing(axes) && return arg
+    et_arg = eltype(Base.Broadcast.broadcastable(arg))
+    et_arg == Union{} && return arg
+    value_type = et_arg <: BandMatrixRow ? eltype(et_arg) : et_arg
+    lg_field = Fields.local_geometry_field(column_axes(matrix1))
+    has_boundary_values = Operators.has_set_boundary_operator(arg)
+    value_metric = Geometry.projection_metric(axes, value_type, lg_field)
+    metric = Geometry.combine_projected_metrics(
+        isnothing(value_metric) ? nothing : Some(value_metric),
+        Operators.imposed_values_metric(axes, arg, lg_field),
+        lg_field,
+    )
+    metric = isnothing(metric) ? nothing : something(metric)
+    projected_arg =
+        isnothing(metric) ?
+        Base.Broadcast.broadcasted(Base.Fix2(ProjectForMul(axes), nothing), arg) :
+        Base.Broadcast.broadcasted(ProjectForMul(axes), arg, metric)
+    # Skip the projection if it changes no value's type (see Operators.imposes_only), unless
+    # a cached arg imposes values, which it then imposes once instead of at every read.
+    return eltype(projected_arg) == et_arg && (
+        !has_boundary_values ||
+        Operators.imposes_only(arg, value_type) && !Operators.is_cached_arg(arg)
+    ) ? arg : projected_arg
+end
+
+# Projection of every value of the second argument of a product (mapped over row entries).
+struct ProjectForMul{A}
+    axes::A
+end
+@inline (f::ProjectForMul)(value, lg) = Geometry.project_for_mul(f.axes, value, lg)
+@inline (f::ProjectForMul)(row::BandMatrixRow, lg) = map(value -> f(value, lg), row)
+
+# A projection that reads the local geometry is not recomputed (the Fix2 form above can be).
+Operators.recomputable_node(::ProjectForMul) = false
+
+# Rows read only their own row of matrix1, and the second argument at fixed offsets.
+Operators.reads_neighbors(::MultiplyColumnwiseBandMatrixField, _, _) =
+    (Val(false), Val(true))
+Operators.reads_without_branching(::MultiplyColumnwiseBandMatrixField) = true
+
+# Whether every row band of a matrix in space lies in column_space (folds at compile time).
+@inline band_in_column(space, column_space, ld, ud) =
+    Operators.is_valid_column_index(column_space, Operators.left_idx(space) + ld) &&
+    Operators.is_valid_column_index(column_space, Operators.right_idx(space) + ud)
+
+# Every row of a product spans the full bands of its factors, with zeros outside of the
+# matrices, so rows need no boundary stencils; the second argument is read at every offset
+# (clamped to the column) and zeroed afterwards, keeping reads branch-free.
+Base.@propagate_inbounds Operators.stencil_value(
+    ::MultiplyColumnwiseBandMatrixField,
     space,
     idx,
-    hidx,
     matrix1,
     arg,
-    bc,
-    ::Type{T},
-) where {T <: BandMatrixRow}
-    prod_type = Operators.return_eltype(
-        MultiplyColumnwiseBandMatrixField(),
-        matrix1,
-        arg,
-    )
+) = multiply_matrix_row(space, idx, matrix1, arg, eltype(arg))
 
-    column_space1 = isnothing(bc) ? nothing : column_axes(matrix1, space)
-    ld1, ud1 = outer_diagonals(eltype(matrix1))
-    boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
-    boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
+# The value of arg at band entry d of the row at idx, read at an index clamped into the
+# column (a branch would serialize GPU reads), and whether the entry lies in the column.
+Base.@propagate_inbounds function clamped_band_entry(
+    arg,
+    space,
+    column_space,
+    idx,
+    d,
+    all_in_column,
+)
+    in_column = all_in_column || Operators.is_valid_column_index(column_space, idx + d)
+    read_idx =
+        all_in_column ? idx + d : Operators.clamped_column_index(column_space, idx + d)
+    return (Operators.column_value(arg, space, read_idx), in_column)
+end
 
-    # Precompute the row that is needed from matrix1 so that it does not get
-    # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(matrix1, idx, hidx)
+# Row idx of a matrix-matrix product, always inlined (a call per point recomputes offsets).
+Base.@propagate_inbounds function multiply_matrix_row(
+    space,
+    idx,
+    matrix1,
+    matrix2,
+    ::Type{<:BandMatrixRow},
+)
+    prod_type =
+        Operators.return_eltype(MultiplyColumnwiseBandMatrixField(), matrix1, matrix2)
+    column_space1 = column_axes(matrix1, space)
+    column_space2 = column_axes(matrix2, column_space1)
+    (ld1, ud1) = outer_diagonals(eltype(matrix1))
+    (ld2, ud2) = outer_diagonals(eltype(matrix2))
+    (prod_ld, prod_ud) = outer_diagonals(prod_type)
+    all_in_column1 = band_in_column(space, column_space1, ld1, ud1)
 
-    matrix2 = arg
-    column_space2 = isnothing(bc) ? nothing : column_axes(matrix2, column_space1)
-    ld2, ud2 = outer_diagonals(eltype(matrix2))
-    prod_ld, prod_ud = outer_diagonals(prod_type)
-    boundary_modified_prod_ld =
-        boundary_modified_ld(bc, prod_ld, column_space2, idx)
-    boundary_modified_prod_ud =
-        boundary_modified_ud(bc, prod_ud, column_space2, idx)
-
-    # Precompute the rows that are needed from matrix2 so that they do not
-    # get recomputed multiple times. To avoid inference issues at boundary
-    # points, this is implemented as a padded map from ld1 to ud1, instead
-    # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
-    # simplicity, use zero padding for rows that are outside the matrix.
-    # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-    matrix2_rows = unrolled_map((ld1:ud1...,)) do d
-        # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-        Base.@_inline_meta
-        if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-            @inbounds Operators.getidx(matrix2, idx + d, hidx)
-        else
-            zero(eltype(matrix2)) # This row is outside the matrix.
-        end
+    # Read each row into registers, with zeros for entries outside the matrices (every entry
+    # of the rows of matrix2 contributes to some entry of the product).
+    matrix1_row = Operators.column_value(matrix1, space, idx)
+    zero_entry1 = zero(eltype(eltype(matrix1)))
+    matrix1_values = unrolled_map((ld1:ud1...,)) do d
+        in_column1 =
+            all_in_column1 | Operators.is_valid_column_index(column_space1, idx + d)
+        ifelse(in_column1, matrix1_row[d], zero_entry1)
     end
-    matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
+    matrix2_rows = unrolled_map((ld1:ud1...,)) do d
+        Base.@_propagate_inbounds_meta
+        (row, in_column1) =
+            clamped_band_entry(matrix2, space, column_space1, idx, d, all_in_column1)
+        ifelse(in_column1, row, zero(eltype(matrix2)))
+    end
 
-    # Precompute the zero value to avoid inference issues caused by passing
-    # prod_type into the function closure below.
+    # Set out-of-bounds values to zero after computing them, keeping the product branch-free.
     zero_value = zero(eltype(prod_type))
-
-    # Compute the entries of the product matrix row. To avoid inference
-    # issues at boundary points, this is implemented as a padded map from
-    # prod_ld to prod_ud, instead of as a map from boundary_modified_prod_ld
-    # to boundary_modified_prod_ud. For simplicity, use zero padding for
-    # entries that are outside the matrix. Wrap the entries in a
-    # BandMatrixRow before returning them.
+    all_in_column2 = band_in_column(space, column_space2, prod_ld, prod_ud)
     prod_entries = map((prod_ld:prod_ud...,)) do prod_d
-        # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-        Base.@_inline_meta
-        if isnothing(bc) ||
-           boundary_modified_prod_ld <= prod_d <= boundary_modified_prod_ud
-            prod_entry = zero_value
-            min_d = max(boundary_modified_ld1, prod_d - ud2)
-            max_d = min(boundary_modified_ud1, prod_d - ld2)
-            @inbounds for d in min_d:max_d
-                value1 = matrix1_row[d]
-                value2 = matrix2_rows_wrapper[d][prod_d - d]
-                value2_lg =
-                    isnothing(Geometry._dual_axes_for_projection(typeof(value1))) ?
-                    nothing : Geometry.LocalGeometry(space, idx + d, hidx)
-                prod_entry += mul_with_projection(value1, value2, value2_lg)
-            end # Using a for-loop is currently faster than using mapreduce.
-            prod_entry
-        else
-            zero_value # This entry is outside the matrix.
+        Base.@_propagate_inbounds_meta
+        prod_entry = zero_value
+        for d in max(ld1, prod_d - ud2):min(ud1, prod_d - ld2)
+            value1 = matrix1_values[d - ld1 + 1]
+            value2 = matrix2_rows[d - ld1 + 1][prod_d - d]
+            prod_entry += value1 * value2
         end
+        in_column2 =
+            all_in_column2 || Operators.is_valid_column_index(column_space2, idx + prod_d)
+        ifelse(in_column2, prod_entry, zero_value)
     end
     return BandMatrixRow{prod_ld}(prod_entries...)
 end
-# matrix-vector multiplication
-function multiply_matrix_at_index(
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-    bc,
-    ::Type{T},
-) where {T}
-    prod_type = Operators.return_eltype(
-        MultiplyColumnwiseBandMatrixField(),
-        matrix1,
-        arg,
-    )
 
-    column_space1 = isnothing(bc) ? nothing : column_axes(matrix1, space)
-    ld1, ud1 = outer_diagonals(eltype(matrix1))
-    boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
-    boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
-
-    # Precompute the row that is needed from matrix1 so that it does not get
-    # recomputed multiple times.
-    matrix1_row = @inbounds Operators.getidx(matrix1, idx, hidx)
-
-    vector = arg
-    prod_value = zero(prod_type)
-    @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
-        value1 = matrix1_row[d]
-        value2 = Operators.getidx(vector, idx + d, hidx)
-        value2_lg =
-            isnothing(Geometry._dual_axes_for_projection(typeof(value1))) ?
-            nothing : Geometry.LocalGeometry(space, idx + d, hidx)
-        prod_value += mul_with_projection(value1, value2, value2_lg)
-    end # Using a for-loop is currently faster than using mapreduce.
-    return prod_value
-end
-
-Base.@propagate_inbounds Operators.stencil_interior(
-    ::MultiplyColumnwiseBandMatrixField,
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-) = multiply_matrix_at_index(
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-    nothing,
-    eltype(arg),
-)
-
-Base.@propagate_inbounds Operators.stencil_left_boundary(
-    ::MultiplyColumnwiseBandMatrixField,
-    bc::TopLeftMatrixCorner,
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-) = multiply_matrix_at_index(space, idx, hidx, matrix1, arg, bc, eltype(arg))
-
-Base.@propagate_inbounds Operators.stencil_right_boundary(
-    ::MultiplyColumnwiseBandMatrixField,
-    bc::BottomRightMatrixCorner,
-    space,
-    idx,
-    hidx,
-    matrix1,
-    arg,
-) = multiply_matrix_at_index(space, idx, hidx, matrix1, arg, bc, eltype(arg))
-
-# For matrix field broadcast expressions involving 4 or more matrices, we
-# sometimes hit a recursion limit and de-optimize.
-# We know that the recursion will terminate due to the fact that broadcast
-# expressions are not self-referential.
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(multiply_matrix_at_index)
-        m.recursion_relation = dont_limit
+# Row with index idx of a matrix-vector product.
+Base.@propagate_inbounds function multiply_matrix_row(space, idx, matrix1, vector, ::Type)
+    (idx, matrix1) = replicated_product_row(space, idx, matrix1)
+    prod_type =
+        Operators.return_eltype(MultiplyColumnwiseBandMatrixField(), matrix1, vector)
+    column_space1 = column_axes(matrix1, space)
+    (ld1, ud1) = outer_diagonals(eltype(matrix1))
+    all_in_column = band_in_column(space, column_space1, ld1, ud1)
+    matrix1_row = Operators.column_value(matrix1, space, idx)
+    zero_value = zero(prod_type)
+    prod_terms = unrolled_map((ld1:ud1...,)) do d
+        Base.@_propagate_inbounds_meta
+        (value2, in_column) =
+            clamped_band_entry(vector, space, column_space1, idx, d, all_in_column)
+        # Multiply before zeroing entries outside of the column (matrix1 can have NaNs).
+        ifelse(in_column, matrix1_row[d] * value2, zero_value)
     end
+    return unrolled_reduce(+, prod_terms; init = zero_value)
 end

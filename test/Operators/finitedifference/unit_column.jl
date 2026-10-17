@@ -5,6 +5,10 @@ using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
 
 device = ClimaComms.device()
 
@@ -310,7 +314,6 @@ end
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/994
-# TODO: make this test more low-level / granular (test `getidx`).
 @testset "Spatially varying BC with Grad [$FT]" for FT in (Float32, Float64)
     zmin = FT(1.0)
     zmax = FT(2.0)
@@ -370,12 +373,12 @@ end
     @test all(isfinite, parent(ClimaCore.to_cpu(∇ψ)))
 end
 
-# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` take no
-# `SetValue` boundary condition, and there are no center-to-center or
-# face-to-face advection or flux-correction operators. These tests pin the
-# recommended way of writing each of those in terms of the operators that do
-# exist against the stencil it reproduces, on a stretched mesh (so that a
-# dropped metric term would show up).
+# There are no center-to-center or face-to-face advection or flux-correction
+# operators. These tests pin the recommended way of writing each of those in
+# terms of the operators that do exist, and the `SetValue` stencils of
+# `GradientC2F`, `DivergenceC2F`, `CurlC2F` and `UpwindBiasedProductC2F` (with
+# their equivalent expressions and Dirichlet helpers), against the stencils they
+# reproduce, on a stretched mesh (so that a dropped metric term would show up).
 @testset "Boundary values and advection built from the primitive operators" begin
     FT = Float64
     n = 8
@@ -436,14 +439,13 @@ end
         # Field-valued boundary values
         helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀, top = θ₀)
         @test cpu_parent(helped)[:] ≈ ref
-        # requesting the removed SetValue from the constructor applies the
-        # same helper
-        routed = Operators.GradientC2F(
+        # the SetValue stencil that the helper applies
+        setvalue_op = Operators.GradientC2F(
             bottom = Operators.SetValue(θ₀),
             top = Operators.SetValue(θ₀),
         )
-        @test routed isa Operators.DirichletOperator{Operators.GradientC2F}
-        @test cpu_parent(routed.(θᶜ))[:] ≈ ref
+        @test setvalue_op isa Operators.GradientC2F
+        @test cpu_parent(setvalue_op.(θᶜ))[:] ≈ ref
         θ₀_bot = @. 0 * θ_bot + θ₀
         helped = Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀_bot, top = θ₀)
         @test cpu_parent(helped)[:] ≈ ref
@@ -456,7 +458,7 @@ end
         )
         @test cpu_parent(helped)[:] ≈ ref
         # lazy operator arguments are passed through unmaterialized
-        @test cpu_parent(@. routed(θᶜ + 0))[:] ≈ ref
+        @test cpu_parent(@. setvalue_op(θᶜ + 0))[:] ≈ ref
         # an explicit boundary condition is passed through unchanged
         helped = Operators.gradient_c2f_dirichlet(
             θᶜ;
@@ -522,15 +524,14 @@ end
         ]
         helped = Operators.divergence_c2f_dirichlet(wᶜ; bottom = w₀, top = w₀)
         @test cpu_parent(helped)[:] ≈ ref
-        # requesting the removed SetValue from the constructor applies the
-        # same helper
-        routed = Operators.DivergenceC2F(
+        # the SetValue stencil that the helper applies
+        setvalue_op = Operators.DivergenceC2F(
             bottom = Operators.SetValue(w₀),
             top = Operators.SetValue(w₀),
         )
-        @test cpu_parent(routed.(wᶜ))[:] ≈ ref
+        @test cpu_parent(setvalue_op.(wᶜ))[:] ≈ ref
         # an explicit boundary condition is passed through unchanged, imposed
-        # on the wrapping SetBoundaryOperator
+        # on the result with a SetBoundaryOperator
         helped = Operators.divergence_c2f_dirichlet(
             wᶜ;
             bottom = w₀,
@@ -574,16 +575,15 @@ end
         helped = Operators.curl_c2f_dirichlet(uᶜ; bottom = u₀, top = u₀)
         @test cpu_parent(helped.components.data.:1)[:] ≈ ref₁
         @test cpu_parent(helped.components.data.:2)[:] ≈ ref₂
-        # requesting the removed SetValue from the constructor applies the
-        # same helper
-        routed = Operators.CurlC2F(
+        # the SetValue stencil that the helper applies
+        setvalue_curl = Operators.CurlC2F(
             bottom = Operators.SetValue(u₀),
             top = Operators.SetValue(u₀),
         ).(
             uᶜ,
         )
-        @test cpu_parent(routed.components.data.:1)[:] ≈ ref₁
-        @test cpu_parent(routed.components.data.:2)[:] ≈ ref₂
+        @test cpu_parent(setvalue_curl.components.data.:1)[:] ≈ ref₁
+        @test cpu_parent(setvalue_curl.components.data.:2)[:] ≈ ref₂
         # an explicit boundary condition is passed through unchanged
         helped = Operators.curl_c2f_dirichlet(
             uᶜ;
@@ -596,6 +596,22 @@ end
               [ref₁[1:n]..., zero(FT)]
         @test cpu_parent(helped.components.data.:2)[:] ≈
               [ref₂[1:n]..., zero(FT)]
+    end
+
+    @testset "CurlC2F element type" begin
+        # The vertical curl only has horizontal components, so a lazy curl
+        # has the same element type as its result
+        zᶜ = Fields.coordinate_field(cs).z
+        uᶜ = @. Geometry.Covariant12Vector(zᶜ, 1)
+        zero_curl = Operators.SetCurl(Geometry.Contravariant12Vector(FT(0), FT(0)))
+        curl = Operators.CurlC2F(; bottom = zero_curl, top = zero_curl)
+        lazy_curl = Base.Broadcast.broadcasted(curl, uᶜ)
+        @test Operators.return_eltype(curl, uᶜ) == Geometry.Contravariant12Vector{FT}
+        @test eltype(lazy_curl) == Geometry.Contravariant12Vector{FT}
+        @test eltype(Base.materialize(lazy_curl)) == Geometry.Contravariant12Vector{FT}
+        # Horizontal curls keep the full vector type
+        @test Geometry.curl_result_type(Val((1, 2)), eltype(uᶜ)) ==
+              Geometry.Contravariant123Vector{FT}
     end
 
     @testset "UpwindBiasedProductC2F with a prescribed boundary value" begin
@@ -633,15 +649,32 @@ end
             top = θ₀,
         )
         @test cpu_parent(helped)[:] ≈ ref
-        # requesting the removed SetValue from the constructor applies the
-        # same helper
-        routed = Operators.UpwindBiasedProductC2F(
+        # the SetValue stencil that the helper applies
+        setvalue_op = Operators.UpwindBiasedProductC2F(
             bottom = Operators.SetValue(θ₀),
             top = Operators.SetValue(θ₀),
         )
-        @test cpu_parent(routed.(wᶠ, θᶜ))[:] ≈ ref
+        @test cpu_parent(setvalue_op.(wᶠ, θᶜ))[:] ≈ ref
+        # with a lazy operator velocity, which the boundary faces read as well
+        interpc2f = Operators.InterpolateC2F(
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+        lazy_wᶠ = Base.Broadcast.broadcasted(interpc2f, wᶜ)
+        @test cpu_parent(setvalue_op.(lazy_wᶠ, θᶜ)) ≈
+              cpu_parent(setvalue_op.(Base.materialize(lazy_wᶠ), θᶜ))
+        # any Extrapolate (the default) at the other boundary uses the closest
+        # center value on the outside
+        bottom_op = Operators.UpwindBiasedProductC2F(bottom = Operators.SetValue(θ₀))
+        extrapolated = Operators.upwind_biased_product(w³ᶠ[n + 1], tᶜ[n], tᶜ[n])
+        @test cpu_parent(bottom_op.(wᶠ, θᶜ))[:] ≈ [ref[1:n]..., extrapolated]
+        bottom_op2 = Operators.UpwindBiasedProductC2F(
+            bottom = Operators.SetValue(θ₀),
+            top = Operators.Extrapolate(2),
+        )
+        @test cpu_parent(bottom_op2.(wᶠ, θᶜ)) == cpu_parent(bottom_op.(wᶠ, θᶜ))
         # an explicit boundary condition is passed through unchanged, imposed
-        # on the wrapping SetBoundaryOperator
+        # on the result with a SetBoundaryOperator
         helped = Operators.upwind_biased_product_c2f_dirichlet(
             wᶠ,
             θᶜ;
@@ -651,6 +684,49 @@ end
             ),
         )
         @test cpu_parent(helped)[:] ≈ [ref[1:n]..., zero(FT)]
+    end
+
+    @testset "DirichletOperator, kept for backward compatibility" begin
+        w₀ = Geometry.WVector(FT(0.3))
+        zᶜ = Fields.coordinate_field(cs).z
+        uᶜ = @. Geometry.Covariant12Vector(sin(zᶜ), cos(zᶜ))
+        u₀ = Geometry.Covariant12Vector(FT(0.1), FT(0.2))
+        for (Op, helper, args, x₀) in (
+            (Operators.GradientC2F, Operators.gradient_c2f_dirichlet, (θᶜ,), θ₀),
+            (Operators.DivergenceC2F, Operators.divergence_c2f_dirichlet, (wᶜ,), w₀),
+            (Operators.CurlC2F, Operators.curl_c2f_dirichlet, (uᶜ,), u₀),
+            (
+                Operators.UpwindBiasedProductC2F,
+                Operators.upwind_biased_product_c2f_dirichlet,
+                (wᶠ, θᶜ),
+                θ₀,
+            ),
+        )
+            # SetValues are unwrapped, and applying the operator applies the helper lazily
+            op = Operators.DirichletOperator{Op}((;
+                bottom = Operators.SetValue(x₀),
+                top = x₀,
+            ))
+            @test op.bcs == (; bottom = x₀, top = x₀)
+            @test Base.Broadcast.broadcasted(op, args...) isa Base.AbstractBroadcasted
+            @test cpu_parent(op.(args...)) ==
+                  cpu_parent(helper(args...; bottom = x₀, top = x₀))
+            native_op = Op(; bottom = Operators.SetValue(x₀), top = Operators.SetValue(x₀))
+            @test cpu_parent(op.(args...)) == cpu_parent(native_op.(args...))
+        end
+        # other boundary conditions are passed through to the helper as given
+        set_gradient = Operators.SetGradient(Geometry.Covariant3Vector(FT(0)))
+        op = Operators.DirichletOperator{Operators.GradientC2F}((;
+            bottom = Operators.SetValue(θ₀),
+            top = set_gradient,
+        ))
+        helped =
+            Operators.gradient_c2f_dirichlet(θᶜ; bottom = θ₀, top = set_gradient)
+        @test cpu_parent(@. op(θᶜ + 0)) == cpu_parent(helped)
+        # the error for a boundary name that is not in the space lists only that name
+        bcs = (; bottom = θ₀, outer_space = θ₀)
+        op = Operators.DirichletOperator{Operators.GradientC2F}(bcs)
+        @test_throws "got outer_space" op.(θᶜ)
     end
 
     @testset "Centered advection of a center field" begin
@@ -712,6 +788,39 @@ end
         # `GradientF2C` returns a `Covariant3Vector`, whose component is the
         # difference of the fluxes across the cell
         @test cpu_parent(gradf2c.(flux))[:] ≈ ref
+    end
+end
+
+@testset "Divergence with value-fixing conditions of a lazy flux" begin
+    # Constructing these divergences decides whether the flux is cached in its unsliced
+    # scope, where the number of columns of an extruded space is only known at run time.
+    FT = Float64
+    ᶜspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2)
+    ᶠspace = Spaces.face_space(ᶜspace)
+    ᶜz = Fields.coordinate_field(ᶜspace).z
+    ᶠz = Fields.coordinate_field(ᶠspace).z
+    ᶜJ = Fields.local_geometry_field(ᶜspace).J
+    ᶜx = @. ᶜz / (ᶜz + 1) + FT(0.5)
+    ᶠw = @. Geometry.WVector(ᶠz / (ᶠz + 1) + FT(0.5))
+    ᶠu³ = @. Geometry.Contravariant3Vector(ᶠz + 1)
+    ᶠinterp = Operators.InterpolateC2F()
+    ᶠwinterp = Operators.WeightedInterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠupwind3 = Operators.Upwind3rdOrderBiasedProductC2F(;
+        bottom = Operators.Extrapolate(1),
+        top = Operators.Extrapolate(1),
+    )
+    zero_flux = Operators.SetValue(Geometry.Contravariant3Vector(FT(0)))
+    ᶜdiv = Operators.DivergenceF2C(; bottom = zero_flux, top = zero_flux)
+    for ᶠflux in (
+        Base.broadcasted(*, Base.broadcasted(ᶠinterp, ᶜx), ᶠu³),
+        Base.broadcasted(*, Base.broadcasted(ᶠwinterp, ᶜJ, ᶜx), ᶠu³),
+        Base.broadcasted(ᶠupwind3, ᶠw, ᶜx),
+    )
+        @test parent(Base.materialize(@inferred Base.broadcasted(ᶜdiv, ᶠflux))) ≈
+              parent(ᶜdiv.(Base.materialize(ᶠflux)))
     end
 end
 
@@ -856,26 +965,41 @@ end
     end
 end
 
+@testset "Extrapolation of any order on interpolations and divergences" begin
+    # Only the boundary rows of these operators read ghost points (or replicate
+    # an interior output), where every order of extrapolation is equivalent
+    for FT in (Float32, Float64), nelems in (2, 3, 10)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0),
+            Geometry.ZPoint{FT}(1);
+            boundary_names = (:bottom, :top),
+        )
+        context = ClimaComms.SingletonCommsContext(device)
+        topology = Topologies.IntervalTopology(context, Meshes.IntervalMesh(domain; nelems))
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
+        ᶜz = Fields.coordinate_field(center_space).z
+        ᶠz = Fields.coordinate_field(Spaces.face_space(center_space)).z
+        ᶜx = @. sin(7 * ᶜz) + ᶜz^3
+        ᶜJ = Fields.local_geometry_field(center_space).J
+        ᶠu = @. Geometry.WVector(cos(5 * ᶠz) + ᶠz^2)
+        bcs(n) = (; bottom = Operators.Extrapolate(n), top = Operators.Extrapolate(n))
+        interp(n) = Operators.InterpolateC2F(; bcs(n)...)
+        winterp(n) = Operators.WeightedInterpolateC2F(; bcs(n)...)
+        div(n) = Operators.DivergenceF2C(; bcs(n)...)
+        for n in (1, 2)
+            @test parent(interp(n).(ᶜx)) == parent(interp(0).(ᶜx))
+            @test parent(winterp(n).(ᶜJ, ᶜx)) == parent(winterp(0).(ᶜJ, ᶜx))
+            @test parent(div(n).(ᶠu)) == parent(div(0).(ᶠu))
+        end
+    end
+end
+
 @testset "Removed boundary conditions are rejected" begin
     # These operator/boundary-condition combinations were removed; each can be
     # written in terms of the remaining operators and boundary conditions (see
     # the testset above and NEWS.md). Pin the removals, so that they cannot
-    # silently come back without boundary rows to support them: requesting a
-    # `SetValue` from a C2F operator constructor returns a `DirichletOperator`
-    # wrapping the replacement expression instead of an operator of that type.
+    # silently come back without boundary rows to support them.
     FT = Float64
-    @test Operators.GradientC2F(;
-        bottom = Operators.SetValue(FT(0)),
-    ) isa Operators.DirichletOperator{Operators.GradientC2F}
-    @test Operators.DivergenceC2F(;
-        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
-    ) isa Operators.DirichletOperator{Operators.DivergenceC2F}
-    @test Operators.CurlC2F(;
-        bottom = Operators.SetValue(Geometry.Covariant12Vector(FT(0), FT(0))),
-    ) isa Operators.DirichletOperator{Operators.CurlC2F}
-    @test Operators.UpwindBiasedProductC2F(;
-        bottom = Operators.SetValue(FT(0)),
-    ) isa Operators.DirichletOperator{Operators.UpwindBiasedProductC2F}
     @test_throws AssertionError Operators.InterpolateC2F(;
         bottom = Operators.SetGradient(Geometry.WVector(FT(0))),
     )
@@ -927,4 +1051,115 @@ end
         @test maximum(x -> abs(ForwardDiff.value(x)), dest) == 0
         @test maximum(x -> maximum(abs, ForwardDiff.partials(x)), dest) == 0
     end
+end
+
+@testset "Operators check the spaces of their arguments and destinations" begin
+    import ForwardDiff
+    FT = Float64
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(1.0);
+        boundary_names = (:bottom, :top),
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = 4)
+    topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), mesh)
+    ᶜspace = Spaces.CenterFiniteDifferenceSpace(topology)
+    ᶜfield = ones(ᶜspace)
+    ᶠfield = ones(Spaces.face_space(ᶜspace))
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    # Arguments on the wrong staggering are rejected.
+    @test_throws DimensionMismatch Operators.InterpolateF2C().(ᶜfield)
+    @test_throws DimensionMismatch ᶠinterp.(ᶠfield)
+    @test_throws DimensionMismatch Operators.WeightedInterpolateF2C().(ᶜfield, ᶠfield)
+    # So are destinations that differ from the space of the operator's result, including
+    # center destinations of face values on periodic columns (where the sizes are equal).
+    @test_throws DimensionMismatch (@. ᶜfield = ᶠinterp(ᶜfield))
+    periodic_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(1.0);
+        periodic = true,
+    )
+    periodic_topology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        Meshes.IntervalMesh(periodic_domain; nelems = 4),
+    )
+    ᶜperiodic_field = ones(Spaces.CenterFiniteDifferenceSpace(periodic_topology))
+    ᶠperiodic_interp = Operators.InterpolateC2F()
+    @test_throws DimensionMismatch (@. ᶜperiodic_field = ᶠperiodic_interp(ᶜperiodic_field))
+
+    # The arguments of an operator must be on one space up to staggering, so arguments with
+    # other levels or horizontal spaces are rejected, as are columns of other spaces, but
+    # columns of that space are broadcast against it.
+    W = Geometry.WVector
+    C3 = Geometry.Contravariant3Vector
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶜdiv = Operators.DivergenceF2C()
+    ᶠupwind = Operators.UpwindBiasedProductC2F()
+    ᶠupwind3 = Operators.Upwind3rdOrderBiasedProductC2F()
+    ᶠvanleer = Operators.LinVanLeerC2F(; constraint = Operators.MonotoneLocalExtrema())
+    ᶠfct = Operators.FCTBorisBook()
+    ᶠzalesak = Operators.FCTZalesak()
+    ᶠtvd = Operators.TVDLimitedFluxC2F(; method = Operators.MinModLimiter())
+    ᶠwinterp = Operators.WeightedInterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜwinterp = Operators.WeightedInterpolateF2C()
+    bidiagonal_row = ClimaCore.MatrixFields.BidiagonalMatrixRow
+    # The argument whose space is that of an operator's result is from ᶜa or ᶠa, and the
+    # other arguments are from ᶜb or ᶠb.
+    expressions = (
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠupwind(W(ᶠinterp(ᶜa)), ᶜb))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠupwind3(W(ᶠa), ᶜb))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠvanleer(W(ᶠinterp(ᶜa)), ᶜb, FT(0.1)))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠfct(C3(ᶠa), ᶜb))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠzalesak(C3(ᶠa), tuple(ᶜb, ᶜb)))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜdiv(ᶠtvd(C3(ᶠa), ᶜb, C3(ᶠb)))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜinterp(ᶠwinterp(ᶜb, ᶜa))),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. ᶜwinterp(ᶠb, ᶠa)),
+        (ᶜa, ᶠa, ᶜb, ᶠb) -> (@. bidiagonal_row(ᶜb, ᶜb) * ᶠa),
+    )
+    ᶜextruded_space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2)
+    ᶜz = Fields.coordinate_field(ᶜextruded_space).z
+    ᶠz = Fields.coordinate_field(Spaces.face_space(ᶜextruded_space)).z
+    (ᶜx, ᶠy) = (@. 1 + sin(ᶜz), @. 2 + cos(ᶠz))
+    for (zelem, helem) in ((7, 2), (10, 3))
+        ᶜother_space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem, helem)
+        (ᶜx_other, ᶠy_other) = (ones(ᶜother_space), ones(Spaces.face_space(ᶜother_space)))
+        (ᶜcolumn_other, ᶠcolumn_other) =
+            (Spaces.column(ᶜx_other, 1, 1, 1), Spaces.column(ᶠy_other, 1, 1, 1))
+        for expression in expressions
+            @test_throws DimensionMismatch expression(ᶜx_other, ᶠy_other, ᶜx, ᶠy)
+            @test_throws DimensionMismatch expression(ᶜx, ᶠy, ᶜx_other, ᶠy_other)
+            @test_throws DimensionMismatch expression(ᶜx, ᶠy, ᶜcolumn_other, ᶠcolumn_other)
+        end
+    end
+    (ᶜcolumn, ᶠcolumn) = (Spaces.column(ᶜx, 2, 2, 3), Spaces.column(ᶠy, 2, 2, 3))
+    (ᶜcolumn_copy, ᶠcolumn_copy) = (similar(ᶜx), similar(ᶠy))
+    @. ᶜcolumn_copy = ᶜcolumn
+    @. ᶠcolumn_copy = ᶠcolumn
+    for expression in expressions
+        @test parent(expression(ᶜx, ᶠy, ᶜcolumn, ᶠcolumn)) ≈
+              parent(expression(ᶜx, ᶠy, ᶜcolumn_copy, ᶠcolumn_copy))
+    end
+    # Spaces are compared before slice loops, so a column captured by the body of a column
+    # loop is broadcast against the column of each slice.
+    ᶜresult = similar(ᶜx)
+    ClimaCore.DataLayouts.foreach_column(ᶜresult, ᶜx) do ᶜresult, ᶜx
+        @. ᶜresult = ᶜdiv(ᶠupwind3(Geometry.WVector(ᶠcolumn), ᶜx))
+        return nothing
+    end
+    @test parent(ᶜresult) ≈ parent(@. ᶜdiv(ᶠupwind3(W(ᶠcolumn), ᶜx)))
+
+    # Integer and floating-point boundary values are converted to the type of the space,
+    # but any other value (e.g., a Dual number used for differentiation) is kept.
+    dual = ForwardDiff.Dual{Nothing}(FT(1), FT(2))
+    @test Operators.promote_val(1, FT) === FT(1)
+    @test Operators.promote_val(1.0, Float32) === 1.0f0
+    @test Operators.promote_val(dual, FT) === dual
+    @test Operators.promote_bc(Operators.SetValue(dual), FT) === Operators.SetValue(dual)
 end

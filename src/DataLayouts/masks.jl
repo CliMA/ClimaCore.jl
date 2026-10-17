@@ -107,10 +107,8 @@ struct ActiveColumnIndices{M, V} <: AbstractVector{CartesianIndex{3}}
 end
 ActiveColumnIndices(mask) =
     ActiveColumnIndices(mask, Base.OneTo(Int(@inbounds mask.N[1])))
-Base.size(inds::ActiveColumnIndices) = (length(inds.indices),)
-Base.@propagate_inbounds function Base.getindex(inds::ActiveColumnIndices, n::Int)
+@inline function active_index(inds::ActiveColumnIndices, real_n)
     (; i_map, j_map, h_map) = inds.mask
-    real_n = inds.indices[n]
     @inbounds CartesianIndex(i_map[real_n], j_map[real_n], h_map[real_n])
 end
 Adapt.@adapt_structure ActiveColumnIndices
@@ -126,15 +124,16 @@ ActivePointIndices{Nv}(mask, indices) where {Nv} =
     ActivePointIndices{Nv, typeof(mask), typeof(indices)}(mask, indices)
 ActivePointIndices{Nv}(mask) where {Nv} =
     ActivePointIndices{Nv}(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])))
-Base.size(inds::ActivePointIndices) = (length(inds.indices),)
-Base.@propagate_inbounds function Base.getindex(
-    inds::ActivePointIndices{Nv},
-    n::Int,
-) where {Nv}
+@inline function active_index(inds::ActivePointIndices{Nv}, real_n) where {Nv}
     (; i_map, j_map, h_map) = inds.mask
-    (n_zero, v_zero) = divrem(inds.indices[n] - 1, Nv)
+    (n_zero, v_zero) = divrem(real_n - 1, Nv)
     (v, col) = (v_zero + 1, n_zero + 1)
     @inbounds CartesianIndex(v, i_map[col], j_map[col], h_map[col])
 end
 Adapt.adapt_structure(to, inds::ActivePointIndices{Nv}) where {Nv} =
     ActivePointIndices{Nv}(Adapt.adapt(to, inds.mask), Adapt.adapt(to, inds.indices))
+
+const ActiveIndices = Union{ActiveColumnIndices, ActivePointIndices}
+Base.size(inds::ActiveIndices) = (length(inds.indices),)
+Base.@propagate_inbounds Base.getindex(inds::ActiveIndices, n::Int) =
+    active_index(inds, inds.indices[n])

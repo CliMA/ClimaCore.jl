@@ -74,14 +74,14 @@ CurlC2F
 SetBoundaryOperator
 ```
 
-## Dirichlet (`SetValue`) replacement helpers
+## Dirichlet (`SetValue`) helpers
 
 ```@docs
-DirichletOperator
 gradient_c2f_dirichlet
 divergence_c2f_dirichlet
 curl_c2f_dirichlet
 upwind_biased_product_c2f_dirichlet
+DirichletOperator
 ```
 
 ## Boundary conditions

@@ -17,7 +17,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     ::Nothing,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nitems = length(out)
     args = (
         out,
         local_horiz_indices,
@@ -27,14 +26,7 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
         vert_bounding_indices,
         field_values,
     )
-    threads = threads_via_occupancy(set_interpolated_values_linear_2d_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_linear_2d_kernel!,
-        args;
-        threads_s = (p.threads,),
-        blocks_s = (p.blocks,),
-    )
+    auto_launch!(set_interpolated_values_linear_2d_kernel!, args; nitems = length(out))
 end
 
 function set_interpolated_values_linear_2d_kernel!(
@@ -83,7 +75,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     local_bilinear_j,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nitems = length(out)
     args = (
         out,
         local_horiz_indices,
@@ -95,14 +86,7 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
         vert_bounding_indices,
         field_values,
     )
-    threads = threads_via_occupancy(set_interpolated_values_bilinear_3d_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_bilinear_3d_kernel!,
-        args;
-        threads_s = (p.threads,),
-        blocks_s = (p.blocks,),
-    )
+    auto_launch!(set_interpolated_values_bilinear_3d_kernel!, args; nitems = length(out))
 end
 
 function set_interpolated_values_bilinear_3d_kernel!(
@@ -166,7 +150,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     ::Nothing,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nitems = length(out)
     args = (
         out,
         local_horiz_indices,
@@ -174,14 +157,7 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
         local_bilinear_i,
         field_values,
     )
-    threads = threads_via_occupancy(set_interpolated_values_linear_1d_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_linear_1d_kernel!,
-        args;
-        threads_s = (p.threads,),
-        blocks_s = (p.blocks,),
-    )
+    auto_launch!(set_interpolated_values_linear_1d_kernel!, args; nitems = length(out))
 end
 
 function set_interpolated_values_linear_1d_kernel!(
@@ -219,7 +195,6 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
     local_bilinear_j,
 )
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nitems = length(out)
     args = (
         out,
         local_horiz_indices,
@@ -229,14 +204,7 @@ function ClimaCore.Remapping._set_interpolated_values_bilinear!(
         local_bilinear_j,
         field_values,
     )
-    threads = threads_via_occupancy(set_interpolated_values_bilinear_2d_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_bilinear_2d_kernel!,
-        args;
-        threads_s = (p.threads,),
-        blocks_s = (p.blocks,),
-    )
+    auto_launch!(set_interpolated_values_bilinear_2d_kernel!, args; nitems = length(out))
 end
 
 function set_interpolated_values_bilinear_2d_kernel!(
@@ -285,11 +253,8 @@ function _set_interpolated_values_device!(
     # FIXME: Avoid allocation of tuple
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
 
-    purely_vert_space = isnothing(interpolation_matrix)
-    nitems = length(out)
-
     # For purely vertical spaces, `Nq` is not used, so we pass in -1 here.
-    _, Nq = purely_vert_space ? (-1, -1) : size(interpolation_matrix[1])
+    _, Nq = isnothing(interpolation_matrix) ? (-1, -1) : size(interpolation_matrix[1])
     args = (
         out,
         interpolation_matrix,
@@ -299,14 +264,7 @@ function _set_interpolated_values_device!(
         field_values,
         Val(Nq),
     )
-    threads = threads_via_occupancy(set_interpolated_values_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_kernel!,
-        args;
-        threads_s = (p.threads),
-        blocks_s = (p.blocks),
-    )
+    auto_launch!(set_interpolated_values_kernel!, args; nitems = length(out))
     call_post_op_callback() && post_op_callback(
         out,
         out,
@@ -446,7 +404,6 @@ function _set_interpolated_values_device!(
 
     # FIXME: Avoid allocation of tuple
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
-    nitems = length(out)
 
     args = (
         out,
@@ -455,14 +412,7 @@ function _set_interpolated_values_device!(
         field_values,
         Val(Nq),
     )
-    threads = threads_via_occupancy(set_interpolated_values_kernel!, args)
-    p = linear_partition(nitems, threads)
-    auto_launch!(
-        set_interpolated_values_kernel!,
-        args;
-        threads_s = p.threads,
-        blocks_s = p.blocks,
-    )
+    auto_launch!(set_interpolated_values_kernel!, args; nitems = length(out))
 end
 
 function set_interpolated_values_kernel!(

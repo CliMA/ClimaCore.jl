@@ -210,11 +210,7 @@ end
 
         ifelse_broadcast_allocating(a, b, c)
         p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
-        if VERSION ≥ v"1.11.0-beta"
-            TU.@test_allocations p_allocated == 0
-        else
-            @test_broken p_allocated == 0
-        end
+        TU.@test_allocations p_allocated == 0
 
         ifelse_broadcast_or(a, b, c)
         p_allocated = @allocated ifelse_broadcast_or(a, b, c)
@@ -868,6 +864,44 @@ end
             Spaces.local_geometry_data(lg_field_space).coordinates,
         )
         @test all(Fields.zeros(lg_space) == Fields.zeros(lg_field_space))
+    end
+end
+
+@testset "Point views of slices" begin
+    FT = Float64
+    for VIJH in (DataLayouts.VIJFH, DataLayouts.VIJHF)
+        space = TU.CenterExtrudedFiniteDifferenceSpace(FT; VIJH)
+        coords = Fields.coordinate_field(space)
+        (Nv, Ni, Nj, Nh) = size(coords)
+
+        @test view(Spaces.level(coords, 1), 1) == view(coords, 1)
+        @test view(Spaces.slab(coords, 1, 1), 1) == view(coords, 1)
+        @test view(Spaces.column(coords, 1, 1, 1), 1) == view(coords, 1)
+        @test view(Spaces.level(coords, 2), 1) == view(coords, 2)
+        @test view(Spaces.slab(coords, 2, 1), 1) == view(coords, 2)
+        @test view(Spaces.column(coords, 1, 1, 1), 2) == view(coords, 2)
+        @test view(Spaces.level(coords, 1), 2) == view(coords, Nv + 1)
+        @test view(Spaces.slab(coords, 1, 1), 2) == view(coords, Nv + 1)
+        @test view(Spaces.column(coords, 2, 1, 1), 1) == view(coords, Nv + 1)
+        @test view(Spaces.level(coords, 2), 2) == view(coords, Nv + 2)
+        @test view(Spaces.slab(coords, 2, 1), 2) == view(coords, Nv + 2)
+        @test view(Spaces.column(coords, 2, 1, 1), 2) == view(coords, Nv + 2)
+
+        @test view(Spaces.slab(coords, 1, 2), 1) == view(coords, Nv * Ni * Nj + 1)
+        @test view(Spaces.column(coords, 1, 1, 2), 1) == view(coords, Nv * Ni * Nj + 1)
+        @test view(Spaces.slab(coords, 2, 2), 1) == view(coords, Nv * Ni * Nj + 2)
+        @test view(Spaces.column(coords, 1, 1, 2), 2) == view(coords, Nv * Ni * Nj + 2)
+        @test view(Spaces.slab(coords, 1, 2), 2) == view(coords, Nv * Ni * Nj + Nv + 1)
+        @test view(Spaces.column(coords, 2, 1, 2), 1) == view(coords, Nv * Ni * Nj + Nv + 1)
+        @test view(Spaces.slab(coords, 2, 2), 2) == view(coords, Nv * Ni * Nj + Nv + 2)
+        @test view(Spaces.column(coords, 2, 1, 2), 2) == view(coords, Nv * Ni * Nj + Nv + 2)
+
+        @test view(Spaces.column(coords, 2, 2, 1), 1) == view(coords, Nv * Ni + Nv + 1)
+        @test view(Spaces.column(coords, 2, 2, 1), 2) == view(coords, Nv * Ni + Nv + 2)
+        @test view(Spaces.column(coords, 2, 2, 2), 1) ==
+              view(coords, Nv * Ni * Nj + Nv * Ni + Nv + 1)
+        @test view(Spaces.column(coords, 2, 2, 2), 2) ==
+              view(coords, Nv * Ni * Nj + Nv * Ni + Nv + 2)
     end
 end
 

@@ -28,5 +28,5 @@ test_opt =
     )
 
     test_opt && opt_test_field_broadcast(result, bc; ref_set_result!)
-    test_opt && !USING_CUDA && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_apply_operators(bc)
 end

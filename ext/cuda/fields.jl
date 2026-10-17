@@ -31,7 +31,7 @@ function Adapt.adapt_structure(
     Base.Broadcast.Broadcasted{Style}(
         (x...) -> T(x...),
         Adapt.adapt(to, bc.args),
-        bc.axes,
+        Adapt.adapt(to, bc.axes),
     )
 end
 

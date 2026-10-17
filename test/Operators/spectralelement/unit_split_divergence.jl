@@ -99,3 +99,30 @@ for FT in (Float32, Float64)
         end
     end
 end
+
+@testset "split divergence checks the spaces of its arguments" begin
+    FT = Float64
+    split_div = Operators.SplitDivergence()
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2)
+    coords = Fields.coordinate_field(space)
+    u = @. Geometry.UVVector(cosd(coords.lat), sind(coords.long))
+    psi = @. sind(coords.lat + coords.long) + coords.z
+    # Arguments with other numbers of levels or on other horizontal spaces are rejected.
+    for (zelem, helem) in ((7, 2), (10, 3))
+        other_space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem, helem)
+        @test_throws DimensionMismatch split_div.(u, ones(other_space))
+        @test_throws DimensionMismatch split_div.(
+            fill(Geometry.UVVector(FT(1), FT(0)), other_space),
+            psi,
+        )
+    end
+    # A level of the space or its horizontal space is broadcast against it.
+    psi_level = Fields.level(psi, 1)
+    psi_horizontal =
+        Fields.Field(Fields.field_values(psi_level), Spaces.horizontal_space(space))
+    psi_level_copy = similar(psi)
+    @. psi_level_copy = psi_level
+    for psi_slice in (psi_level, psi_horizontal)
+        @test parent(split_div.(u, psi_slice)) ≈ parent(split_div.(u, psi_level_copy))
+    end
+end

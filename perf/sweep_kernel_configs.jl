@@ -70,45 +70,35 @@ results = Dict{String, Any}()
 
 # The launch-configuration cache is flushed on every change so that no
 # configuration is timed with block sizes computed for an earlier one.
-function set_config!(; waves = 1, fd = 128, dss = 256)
+function set_config!(; waves = 1, dss = 256)
     CUDAExt.MAX_WAVES[] = waves
-    CUDAExt.FD_MAX_THREADS[] = fd
     CUDAExt.DSS_MAX_THREADS[] = dss
     empty!(CUDAExt.LAUNCH_CONFIGURATION_CACHE)
     return nothing
 end
 
-println("\n=== 1. Baseline Configuration (MAX_WAVES=1, FD_MAX=128, DSS_MAX=256) ===")
+println("\n=== 1. Baseline Configuration (MAX_WAVES=1, DSS_MAX=256) ===")
 set_config!()
-results["baseline"] = run_benchmark("Baseline (W=1, FD=128, DSS=256)")
+results["baseline"] = run_benchmark("Baseline (W=1, DSS=256)")
 
-println("\n=== 2. Sweep FD_MAX_THREADS (waves=1, DSS=256) ===")
-for fd in (64, 128, 192, 256, 384, 512)
-    set_config!(; fd)
-    results["FD_$fd"] = run_benchmark("FD_MAX_THREADS=$fd")
-end
-
-println("\n=== 3. Sweep MAX_WAVES (FD=128, DSS=256) ===")
+println("\n=== 2. Sweep MAX_WAVES (DSS=256) ===")
 for w in (1, 2, 3, 4)
     set_config!(; waves = w)
     results["WAVES_$w"] = run_benchmark("MAX_WAVES=$w")
 end
 
-println("\n=== 4. Sweep DSS_MAX_THREADS (waves=1, FD=128) ===")
+println("\n=== 3. Sweep DSS_MAX_THREADS (waves=1) ===")
 for dss in (64, 128, 256, 512, 1024)
     set_config!(; dss)
     results["DSS_$dss"] = run_benchmark("DSS_MAX_THREADS=$dss")
 end
 
-println("\n=== 5. Combinations of Top Candidates ===")
-for fd in (128, 256, 512)
-    for w in (1, 2)
-        for dss in (256, 512)
-            (fd == 128 && w == 1 && dss == 256) && continue
-            set_config!(; waves = w, fd, dss)
-            results["Combo_FD$(fd)_W$(w)_DSS$(dss)"] =
-                run_benchmark("Combo (FD=$fd, W=$w, DSS=$dss)")
-        end
+println("\n=== 4. Combinations of Top Candidates ===")
+for w in (1, 2)
+    for dss in (256, 512)
+        (w == 1 && dss == 256) && continue
+        set_config!(; waves = w, dss)
+        results["Combo_W$(w)_DSS$(dss)"] = run_benchmark("Combo (W=$w, DSS=$dss)")
     end
 end
 

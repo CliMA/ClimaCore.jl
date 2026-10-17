@@ -75,7 +75,7 @@ Return the [`DataScope`](@ref) that [`foreach_slice`](@ref) assigns to slices of
 the given arguments when parallelizing over `scope`. By default, this is the
 smallest scope, out of `scope` itself and its subsets, that does not require any
 thread to process more than one point from the largest slice returned by `op`.
-When no such scope is available, the largest subset is used in order to minimize
+When no such scope is available, the largest of these scopes is used in order to minimize
 the number of points per thread.
 
 `scope` itself is only used when its thread count is a compile-time constant
@@ -95,21 +95,15 @@ end
     subscope = partition(scope)
     subscope == ThisThread() && return subscope
     max_slice_points > num_threads(partition(subscope)) &&
-        return fits_in_scope(scope, subscope, max_slice_points) ? scope : subscope
+        return slice_exceeds_subscope(scope, subscope, max_slice_points) ? scope : subscope
     return points_subscope(subscope, max_slice_points)
 end
 
-# Whether a slice is too wide for every subset of scope but not for scope
-# itself (re-slicing a slab inside another slab loop's body). A subset would
-# give it half the threads it has points and double the shared memory that
-# scoped_static_array reserves for every buffer the loop allocates.
-@inline function fits_in_scope(scope, subscope, max_slice_points)
-    scope_threads = static_num_threads(scope)
-    subscope_threads = static_num_threads(subscope)
-    isnothing(scope_threads) && return false
-    isnothing(subscope_threads) && return false
-    return subscope_threads < max_slice_points <= scope_threads
-end
+# Whether every subset of scope is too small for a slice (re-slicing in a slice loop): a
+# subset's stride would not match outer register arrays, and shared buffers would double.
+@inline slice_exceeds_subscope(scope, subscope, max_slice_points) =
+    !isnothing(static_num_threads(scope)) &&
+    something(static_num_threads(subscope), typemax(Int)) < max_slice_points
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
@@ -130,7 +124,10 @@ of the following:
 
 Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, by default the
 largest available [`DataScope`](@ref) that can access every argument, and a
-[`DataMask`](@ref) may be used to skip a particular subset of slices.
+[`DataMask`](@ref) may be used to skip a particular subset of slices. On CUDA
+devices, `foreach_slice` supports at most `2^31 - 1` slices and 31 arguments
+after `f`, since Julia does not infer calls that splat more than 32 values,
+which would leave dynamic calls in the kernel.
 
 Statements in `f` execute in order at the slice's scope: same-shaped pointwise
 broadcasts assign every point to the same thread in each statement, and
@@ -214,35 +211,25 @@ end
     # reaches neither.
     one_thread = isone(default_pool_size())
     in_pool = one_thread || pool_thread_info() != (0, 0)
+    # The thread count stays an Int: a run-time-typed scope is a union in every call below.
     threads =
         one_thread ? 1 : (in_pool ? num_threads(scope) : resolve_pool_threads())
     try
-        return foreach_pool_slice(threads, scope, op, f, mask, enumerate, args...)
+        return isone(threads) ?
+               scoped_slice_loop(
+            ThisThread(), ThisThread(), op, f, mask, enumerate, args...,
+        ) :
+               parallelize_over(
+            () -> scoped_slice_loop(
+                slice_subscope(scope, op, args...), scope, op, f, mask, enumerate,
+                args...,
+            ),
+            scope,
+        )
     finally
         in_pool || release_pool_threads()
     end
 end
-
-# Loop over the threads a pool loop resolved to. The count is passed as an integer rather
-# than as a resolved scope, because a scope whose type is only known at run time becomes a
-# union at every call below it, which uses up inference budget that the point loops need.
-@inline foreach_pool_slice(
-    threads::Int,
-    scope::ThisThreadPool,
-    op::O,
-    f::F,
-    mask,
-    enumerate,
-    args...,
-) where {O, F} =
-    isone(threads) ?
-    scoped_slice_loop(ThisThread(), ThisThread(), op, f, mask, enumerate, args...) :
-    parallelize_over(
-        () -> scoped_slice_loop(
-            slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
-        ),
-        scope,
-    )
 
 @inline _foreach_slice(
     scope::DataScope, op::O, f::F, mask, enumerate, args...,
@@ -280,12 +267,37 @@ end
 ) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
     scoped_args = unrolled_map(Base.Fix2(reassign, subscope), args)
-    @simd_if (op == view && simd_over_indices(indices)) for i in 1:length(indices)
-        index = @inbounds indices[i]
+    @simd_if (op == view && simd_over_indices(indices)) for i in index_positions(indices)
+        index = @inbounds slice_index(indices, i)
         slices = @inbounds slice_every_arg(op, index, scoped_args...)
         @inline enumerate isa Val{true} ? f(index, slices...) : f(slices...)
     end
 end
+
+# Strided subsets (see StridedRange) are iterated by value, in their own integer type, so
+# that GPUs neither divide out their length nor emulate a 64-bit loop counter.
+@inline index_positions(indices) = 1:length(indices)
+@inline index_positions(range::StridedRange) = range
+@inline index_positions(strided::StridedCartesianIndices) = strided.view_range
+const StridedActiveIndices = Union{
+    ActiveColumnIndices{<:Any, <:StridedRange},
+    ActivePointIndices{<:Any, <:Any, <:StridedRange},
+}
+@inline index_positions(indices::StridedActiveIndices) = indices.indices
+Base.@propagate_inbounds slice_index(::StridedRange, i) = i
+Base.@propagate_inbounds slice_index(strided::StridedCartesianIndices, i) =
+    single_axis_cartesian_index(strided.indices, i)
+Base.@propagate_inbounds slice_index(indices::StridedActiveIndices, i) =
+    active_index(indices, i)
+
+# When only the first axis of CartesianIndices is longer than 1, i is the position on it:
+# LLVM does not always remove Base's division, which keeps CPU loops from vectorizing.
+Base.@propagate_inbounds slice_index(indices, i) = indices[i]
+Base.@propagate_inbounds slice_index(indices::CartesianIndices, i) =
+    ndims(indices) > 1 && unrolled_all(isone, Base.tail(size(indices))) ?
+    CartesianIndex(
+        indices.indices[1][i], unrolled_map(first, Base.tail(indices.indices))...,
+    ) : indices[i]
 
 # One slice of every argument. A generated function rather than an unrolled_map
 # over a closure (two method instances per slice loop per argument-type
@@ -295,9 +307,44 @@ end
     Base.@_propagate_inbounds_meta
     return Base.Cartesian.@ntuple $N n -> $(
         O === typeof(view) ? :(view(getfield(args, n), index)) :
-        :(op(getfield(args, n), Tuple(index)...))
+        :(slice_arg(op, getfield(args, n), Tuple(index)...))
     )
 end
+
+# Slices at a slice loop's own (valid) indices, so that types can skip their own checks
+# (see Fields.slice_arg): Julia 1.10 keeps checks that @inbounds makes dead in the IR.
+Base.@propagate_inbounds slice_arg(op::O, arg, indices...) where {O} = op(arg, indices...)
+
+"""
+    update_points!(f, op, data, slice_op)
+
+Replace each value `x` at a point `index` of `data` with `op(x, f(index))` (or `f(index)`
+if `op` is `nothing`), where the points are the slices that `slice_op` returns (e.g.,
+`view`, or `column` for the single-point columns of a slab). Unlike [`foreach_point`](@ref),
+this can be specialized for a [`DataScope`](@ref) to call `f` with all of its threads in
+rounds, in which a thread without a point calls `f` at the last point and discards the
+result, so that `f` can read values that every thread of the scope must read together (see
+`Operators.allows_branching`).
+"""
+@inline function update_points!(f::F, op::O, data, slice_op::S) where {F, O, S}
+    update_point!(index, point) =
+        (@inbounds point[] = updated_value(op, point, @inline f(index)))
+    scope = DataScope(data)
+    needs_loop_setup(scope) ?
+    _foreach_slice(slice_op, update_point!, NoMask(), Val(true), data) :
+    scoped_slice_loop(
+        slice_subscope(scope, slice_op, data),
+        scope,
+        slice_op,
+        update_point!,
+        NoMask(),
+        Val(true),
+        data,
+    )
+    return data
+end
+@inline updated_value(::Nothing, _, value) = value
+@inline updated_value(op::O, point, value) where {O} = op(point[], value)
 
 # Alternative to scoped_slice_loop that generates ordinary, unfused for loops,
 # with every slice processed by the full scope instead of a slice_subscope.

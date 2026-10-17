@@ -39,13 +39,38 @@ Adapt.@adapt_structure ColumnGrid
 
 local_geometry_type(::Type{<:ColumnGrid{G}}) where {G} = local_geometry_type(G)
 
-column(grid::AbstractExtrudedFiniteDifferenceGrid, indices...) = ColumnGrid(grid, indices)
+# Throw for out-of-range indices instead of reading another column (slice loops skip this).
+# Compare extents rather than slice (a view per call); throw with integers only, since data
+# passed to a non-inlined function makes a kernel copy all its arguments to local memory.
+Base.@propagate_inbounds function column(
+    grid::AbstractExtrudedFiniteDifferenceGrid,
+    indices...,
+)
+    @boundscheck check_column_indices(local_geometry_data(grid, CellCenter()), indices)
+    return unchecked_column(grid, indices...)
+end
+@inline unchecked_column(grid::AbstractExtrudedFiniteDifferenceGrid, indices...) =
+    ColumnGrid(grid, indices)
+# Columns of grids with one horizontal dimension are indexed by (i, h), i.e., (i, 1, h).
+@inline full_column_indices((i, h)::NTuple{2, Integer}) = (i, 1, h)
+@inline full_column_indices(indices) = indices
+@inline function check_column_indices(data, indices)
+    (i, j, h) = full_column_indices(indices)
+    (; Ni, Nj) = DataLayouts.vijh_params(data)
+    Nh = DataLayouts.nelems(data)
+    (1 <= i <= Ni) & (1 <= j <= Nj) & (1 <= h <= Nh) ||
+        throw_column_indices((Ni, Nj, Nh), (i, j, h))
+    return nothing
+end
+@noinline throw_column_indices(extents, indices) =
+    throw(BoundsError(CartesianIndices(extents), indices))
 
 topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
+# A column grid's indices are valid for its full grid, so kernels need not repeat the check.
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) =
-    column(local_geometry_data(colgrid.full_grid, staggering), colgrid.indices...)
+    @inbounds column(local_geometry_data(colgrid.full_grid, staggering), colgrid.indices...)
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
 
 issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = subgrid === grid

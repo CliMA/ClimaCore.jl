@@ -138,7 +138,7 @@ end
 function uncached_launch_configuration(
     cu_func,
     strict,
-    default_max_waves,
+    max_waves,
     default_granularity,
     config_args...,
 )
@@ -164,17 +164,6 @@ function uncached_launch_configuration(
     user_max_threads_per_block = get_user_max_threads_per_block(config_args...)
     user_constraints_ignorable = user_max_threads_per_block >= default_max_threads_per_block
     max_threads_per_block = min(user_max_threads_per_block, default_max_threads_per_block)
-
-    # Launch a single wave of blocks unless a caller asks for more. An A100
-    # sweep over max_waves in (1, 2, 4) on small unit benchmarks found one
-    # wave at least as fast throughout and fastest for reductions (the
-    # equal-shape lazy reduction: 129 us at one wave, 145 us at more). On a
-    # realistic problem with zero per-step device allocations (baroclinic
-    # wave, h_elem = 30, z_elem = 63, A100; see perf/sweep_kernel_configs.jl),
-    # 4-8 waves measured ~6% faster per step (215 vs 228 ms). The default
-    # stays at one wave until the reduction slowdown at higher wave counts is
-    # revisited; CLIMA_CUDA_MAX_WAVES overrides it for tuning experiments.
-    max_waves = something(default_max_waves, MAX_WAVES[])
 
     # Block sizes are searched in whole multiples of this unit, one warp unless
     # a caller needs a coarser one: a partially populated sub-block skips the
@@ -233,14 +222,18 @@ function uncached_launch_configuration(
     )
 end
 
+# Keyed by function handles, so that lookups allocate nothing (the type of the handle is
+# CUDA.CUfunction before CUDA.jl v6 and CUDA.CUDACore.CUfunction after).
+const CUfunction = fieldtype(CUDA.CuFunction, :handle)
+const MISSING_LAUNCH_CONFIGURATION = (; threads = -1, blocks = -1, limit = :missing)
 const LAUNCH_CONFIGURATION_CACHE =
-    IdDict{Any, @NamedTuple{threads::Int, blocks::Int, limit::Symbol}}()
+    Dict{Tuple{CUfunction, Bool, Int, Int, Int, Int}, typeof(MISSING_LAUNCH_CONFIGURATION)}()
 const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
 
 """
-    launch_configuration(f, args; max_waves = nothing)
-    launch_configuration(f, args, max_threads; strict = true, max_waves = nothing)
-    launch_configuration(f, args, max_threads_per_block, max_blocks; max_waves = nothing)
+    launch_configuration(kernel; [max_waves], [granularity])
+    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity])
+    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity])
 
 Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
 which maximizes occupancy across the entire device instead of just one
@@ -259,20 +252,19 @@ as possible. While `CUDA.launch_configuration` and its underlying C function
     and grid dimensions of the launch configuration are individually limited
     (similar to CUDA's implementation, but with the addition of `max_blocks`).
 
-A `granularity` may also be specified, in which case only block sizes that are
-whole multiples of it are considered. This defaults to the warp size, which is
-the smallest unit a block can usefully be made of; a loop that hands each slice
-to a sub-block needs the coarser unit of one sub-block (see
-`DataLayouts.subscope_launch_threads`).
-
 In each case, `max_waves` can be specified to control how many waves of blocks
 are scheduled. Kernels with uneven load distributions (e.g., due to conditional
 branches or nonuniform memory accesses) may require multiple waves to prevent
 some multiprocessors from idling while others are still active. However, block
 scheduling also adds measurable latency, so the number of waves should not be
-increased unless load redistribution is necessary. Setting `max_waves` to
-`nothing` gives it the default of one wave, which the `CLIMA_CUDA_MAX_WAVES`
-environment variable overrides.
+increased unless load redistribution is necessary. By default, `max_waves` is
+set to 1, but the `CLIMA_CUDA_MAX_WAVES` environment variable overrides this.
+
+A `granularity` may also be specified, in which case only block sizes that are
+whole multiples of it are considered. This defaults to the warp size, which is
+the smallest unit a block can usefully be made of; a loop that hands each slice
+to a sub-block needs the coarser unit of one sub-block (see
+`DataLayouts.subscope_launch_threads`).
 
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
@@ -286,38 +278,40 @@ also returns a symbol identifying the dominant factor that limits occupancy:
 
 Computing a launch configuration requires querying the C driver for the kernel's
 register pressure and shared memory requirements, which adds measurable latency
-if done more than once per kernel, so the result is cached in an `IdDict`. A
+if done more than once per kernel, so the result is cached in a `Dict`. A
 lock is used to prevent multiple threads from updating the cache simultaneously,
-since an `IdDict` should never be read as it is being rehashed.
+since a `Dict` should never be read as it is being rehashed.
 """
 function launch_configuration(
-    f::F,
-    args,
+    kernel::CUDA.HostKernel,
     config_args...;
     strict = true,
-    max_waves = nothing,
+    max_waves = MAX_WAVES[],
     granularity = nothing,
-) where {F}
-    cu_func = (CUDA.@cuda always_inline = true launch = false f(args...)).fun
-    # The default is resolved before the cache key is built, so that changing
-    # MAX_WAVES[] at runtime (as perf/sweep_kernel_configs.jl does) misses the
-    # cache instead of returning configurations computed for the old value.
-    max_waves = something(max_waves, MAX_WAVES[])
-    cache_key = (cu_func, strict, max_waves, granularity, config_args...)
-    lock(LAUNCH_CONFIGURATION_CACHE_LOCK)
-    try
-        return get!(LAUNCH_CONFIGURATION_CACHE, cache_key) do
-            uncached_launch_configuration(cache_key...)
+)
+    cu_func = kernel.fun
+    cache_key = (
+        cu_func.handle,
+        strict,
+        max_waves,
+        something(granularity, -1),
+        get(config_args, 1, -1),
+        get(config_args, 2, -1),
+    )
+    return @lock LAUNCH_CONFIGURATION_CACHE_LOCK begin
+        config = get(LAUNCH_CONFIGURATION_CACHE, cache_key, MISSING_LAUNCH_CONFIGURATION)
+        if config == MISSING_LAUNCH_CONFIGURATION
+            config = uncached_launch_configuration(
+                cu_func,
+                strict,
+                max_waves,
+                granularity,
+                config_args...,
+            )
+            LAUNCH_CONFIGURATION_CACHE[cache_key] = config
         end
-    finally
-        unlock(LAUNCH_CONFIGURATION_CACHE_LOCK)
+        config
     end
-end
-
-threads_via_occupancy(f::F, args) where {F} = launch_configuration(f, args).threads
-function config_via_occupancy(f::F, nitems, args) where {F}
-    threads_per_block = launch_configuration(f, args, nitems; strict = false).threads
-    return (; threads = threads_per_block, blocks = cld(nitems, threads_per_block))
 end
 
 const reported_stats = Dict()
@@ -333,6 +327,9 @@ const kernel_names = Dict{Tuple{Type, Type}, Union{String, Nothing}}()
 # `CLIMA_COLLECT_KERNEL_STATS` before the extension precompiles to enable it,
 # or redefine this method (as perf/stress_test_compiler.jl does).
 collect_kernel_stats() = COLLECT_KERNEL_STATS
+# Every kernel launched while RECORD_KERNELS[] is true, for tests of kernel resources.
+const RECORD_KERNELS = Ref(false)
+const RECORDED_KERNELS = CUDA.HostKernel[]
 
 function _memory_bytes(memory, key::Symbol)
     if hasproperty(memory, key)
@@ -390,14 +387,12 @@ function _getenv_int(
 end
 
 # Refs to hold settings read from environment variables in __init__: kernel
-# naming from stack traces, per-launch kernel statistics, the wave count used
-# by the launch-configuration search, and the block-size cap of the eager FD
-# kernel.
+# naming from stack traces, per-launch kernel statistics, and the wave count
+# used by the launch-configuration search.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
 const COLLECT_KERNEL_STATS =
     _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
 const MAX_WAVES = Ref{Int}(1)
-const FD_MAX_THREADS = Ref{Int}(128)
 const DSS_MAX_THREADS = Ref{Int}(256)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
@@ -406,9 +401,8 @@ function __init__()
         "CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE"; default = false,
     )
     MAX_WAVES[] = _getenv_int("CLIMA_CUDA_MAX_WAVES", 1)
-    # 1024 is CUDA's threads-per-block limit; these caps feed block sizes
+    # 1024 is CUDA's threads-per-block limit; this cap feeds block sizes
     # directly, so a larger value would fail at the first kernel launch.
-    FD_MAX_THREADS[] = _getenv_int("CLIMA_FD_MAX_THREADS", 128; max = 1024)
     DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
 end
 
@@ -424,9 +418,15 @@ const IGNORE_MODULES = (
     :ClimaCoreCUDAExt,
 )
 
-# Functions withing ClimaCore to ignore when determining relevant stack frames
-const CLIMACORE_IGNORE_FUNCS =
-    (:materialize, :materialize!, :foreach, :unrolled_foreach, Symbol("macro expansion"))
+# Functions within ClimaCore to ignore when determining relevant stack frames
+const CLIMACORE_IGNORE_FUNCS = (
+    :materialize,
+    :materialize!,
+    :copyto!,
+    :foreach,
+    :unrolled_foreach,
+    Symbol("macro expansion"),
+)
 # Helper function to check if a stack frame is relevant
 @inline function is_relevant_frame(frame::Base.StackTraces.StackFrame)
     frame_method = frame.linfo isa Core.CodeInstance ? frame.linfo.def : frame.linfo
@@ -443,38 +443,48 @@ end
     return string(mi.def.file::Symbol)::String
 end
 
-"""
-    auto_launch!(f!::F!, args,
-        ::Union{
-            Int,
-            NTuple{N, <:Int},
-            AbstractArray,
-            DataLayout,
-            Field,
-        };
-        auto = false,
-        threads_s,
-        blocks_s,
-        always_inline = true,
-        shmem = 0,
+# Arguments are converted once per launch, before its kernel is compiled: CUDA.jl v6
+# converts them in a KernelCall, which also tracks the memory that they use, and CUDA.jl v5
+# kernel calls skip their own conversion with convert = Val(false) (isbits closures need no
+# conversion, so they skip Adapt).
+@static if isdefined(CUDA, :KernelCall)
+    converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
+    compile_kernel(call, ::Nothing) = CUDA.kernel_compile(call; always_inline = true)
+    compile_kernel(call, name) = CUDA.kernel_compile(call; name, always_inline = true)
+    launch_kernel(kernel, call, threads, blocks) =
+        CUDA.kernel_launch(kernel, call; threads, blocks)
+else
+    converted_kernel_call(f!::F!, args) where {F!} = (;
+        f! = isbitstype(F!) ? f! : CUDA.cudaconvert(f!),
+        args = map(CUDA.cudaconvert, args),
+        source = (f!, args),
     )
+    compile_kernel(call, ::Nothing) =
+        CUDA.cufunction(call.f!, argument_types(call); always_inline = true)
+    compile_kernel(call, name) =
+        CUDA.cufunction(call.f!, argument_types(call); name, always_inline = true)
+    argument_types(call) = Tuple{map(Core.Typeof, call.args)...}
+    launch_kernel(kernel, call, threads, blocks) =
+        GC.@preserve call kernel(call.args...; threads, blocks, convert = Val(false))
+end
 
-Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
-to determine the number of threads/blocks.
+"""
+    auto_launch!(f!, args; [nitems], [config], [threads_s], [blocks_s])
 
-Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
-to benchmark compare against auto-determined threads/blocks (if `auto=false`).
+Launch a cuda kernel, using `launch_configuration` to determine the number of
+threads and blocks.
+
+The threads and blocks are computed from the compiled kernel by `config` if it is
+given, or else so that each of `nitems` items gets its own thread; otherwise, the
+suggested threads and blocks (`threads_s`, `blocks_s`) are used.
 """
 function auto_launch!(
     f!::F!,
-    args,
-    nitems::Union{Integer, Nothing} = nothing;
-    auto = false,
+    args;
+    nitems = nothing,
+    config = nothing,
     threads_s = nothing,
     blocks_s = nothing,
-    always_inline = true,
-    caller = :unknown,
-    shmem = 0,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -542,33 +552,25 @@ function auto_launch!(
         kernel_name = kernel_names[key]
     end
 
-    if auto
-        @assert !isnothing(nitems)
-        if nitems ≥ 0
-            # Note: `name = nothing` here will revert to default behavior
-            kernel = CUDA.@cuda name = kernel_name always_inline = true launch =
-                false f!(args...)
-            config = launch_configuration(f!, args)
-            threads = min(nitems, config.threads)
-            blocks = cld(nitems, threads)
-            kernel(args...; threads, blocks) # This knows to use always_inline from above.
-        end
+    # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
+    call = converted_kernel_call(f!, args)
+    kernel = compile_kernel(call, kernel_name)
+    if !isnothing(config)
+        (; threads, blocks) = config(kernel)
+    elseif isnothing(nitems)
+        (threads, blocks) = (threads_s, blocks_s)
     else
-        kernel =
-            CUDA.@cuda name = kernel_name always_inline = always_inline threads =
-                threads_s blocks = blocks_s shmem = shmem f!(args...)
+        threads = launch_configuration(kernel, nitems; strict = false).threads
+        blocks = cld(nitems, threads)
     end
+    launch_kernel(kernel, call, threads, blocks)
+    RECORD_KERNELS[] && push!(RECORDED_KERNELS, kernel)
 
     if collect_kernel_stats() # only for development use
         key = (F!, typeof(args), CUDA.registers(kernel))
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
-            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-            config = launch_configuration(f!, args)
-            threads = isnothing(nitems) ? nothing : min(nitems, config.threads)
-            blocks = isnothing(nitems) ? nothing : cld(nitems, threads)
-            # Collect the launch information for inspection.
 #! format: off
             s = ""
             s *= "Launching kernel $f! with following config:\n"
@@ -601,7 +603,6 @@ function auto_launch!(
             # error("Oops") # for debugging
             # Main.Infiltrator.@exfiltrate # for debugging/performance optimization
         end
-        # end
     end
     return nothing
 end
@@ -612,11 +613,11 @@ end
 Return the linear index of the current thread across all blocks:
 
 ```julia
-(CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+(CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
 ```
 """
 @inline thread_index() =
-    (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    (CUDA.blockIdx().x - UInt32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
 
 """
     kernel_indexes(tidx, n)

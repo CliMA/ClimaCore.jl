@@ -33,16 +33,7 @@ NVTX.@annotate function multiple_field_solve!(
     cart_inds =
         cartesian_indices_multiple_field_solve(Fields.field_values(x1); Nnames)
     args = (device, caches, xs, As, bs, space, mask, cart_inds, Val(Nnames))
-
-    nitems = Ni * Nj * Nh * Nnames
-    (; threads, blocks) = config_via_occupancy(multiple_field_solve_kernel!, nitems, args)
-    auto_launch!(
-        multiple_field_solve_kernel!,
-        args;
-        threads_s = threads,
-        blocks_s = blocks,
-        always_inline = true,
-    )
+    auto_launch!(multiple_field_solve_kernel!, args; nitems = Ni * Nj * Nh * Nnames)
     call_post_op_callback() && post_op_callback(x, dev, cache, x, A, b)
 end
 
@@ -88,7 +79,7 @@ function multiple_field_solve_kernel!(
     (caches, xs, As, bs) =
         Grids.toggle_placeholder_grid((caches′, xs′, As′, bs′), space)
     @inbounds begin
-        tidx = linear_thread_idx()
+        tidx = thread_index()
         if linear_is_valid_index(tidx, unval(cart_inds))
             (i, j, h, iname) = unval(cart_inds)[tidx].I
             ui = CartesianIndex((1, i, j, h))

@@ -6,7 +6,7 @@ has_inferred_slice_size(op::O, arg) where {O} =
     end
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
-DataLayouts._foreach_slice(
+@inline DataLayouts._foreach_slice(
     scope::ThisHost,
     op::O,
     f::F,
@@ -46,41 +46,48 @@ DataLayouts._foreach_slice(
             # partially populated sub-block skips its missing threads' points
             # (see the whole subscopes invariant in subscope_launch_threads).
             max_slices = length(DataLayouts.each_slice_index(op, first(args)))
+            check_slice_count(max_slices)
             subblock_threads = Int(DataLayouts.num_threads(subscope))
             max_block_threads = DataLayouts.subscope_launch_threads(
                 subscope,
                 max_subblock_launch_threads(subscope),
             )
-            slices_per_block = max_block_threads ÷ subblock_threads
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_block_threads,
-                cld(max_slices, slices_per_block); granularity = subblock_threads,
-            )
+            max_blocks = cld(max_slices, max_block_threads ÷ subblock_threads)
+            config =
+                kernel -> launch_configuration(
+                    kernel, max_block_threads, max_blocks;
+                    granularity = subblock_threads,
+                )
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            (; threads, blocks) = launch_configuration(
-                kernel_function, compact_args, max_points; strict = false,
-            )
+            check_slice_count(max_points)
+            config = kernel -> launch_configuration(kernel, max_points; strict = false)
         end
-        auto_launch!(kernel_function, compact_args; threads_s = threads, blocks_s = blocks)
+        auto_launch!(kernel_function, compact_args; config)
     end
+
+# Each thread steps through its indices in UInt32 by adding the thread count, which can be
+# as large as the index count, so half of the UInt32 range is left for the step.
+check_slice_count(n) =
+    2 * n <= typemax(UInt32) ||
+    throw(ArgumentError("GPU loops support at most 2^31 - 1 slice views"))
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))
 
 # The grid-synchronization counter is cached per task under its own key
 # (task_reduction_buffer is keyed by array type, so the counter would alias any
-# Int32 results buffer). Reductions read their result back before returning,
+# UInt32 results buffer). Reductions read their result back before returning,
 # so consecutive reductions on a task never share a live counter.
 function reduction_sync_counter()
     storage = current_task().storage
     if !isnothing(storage)
         counter =
             get(storage::IdDict{Any, Any}, :climacore_reduction_sync_counter, nothing)
-        isnothing(counter) || return counter::CUDA.CuVector{Int32}
+        isnothing(counter) || return counter::CUDA.CuVector{UInt32}
     end
-    counter = CUDA.CuVector{Int32}(undef, 1)
+    counter = CUDA.CuVector{UInt32}(undef, 1)
     task_local_storage(:climacore_reduction_sync_counter, counter)
     return counter
 end
@@ -112,8 +119,8 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
         CUDA.threadfence()
         is_last = DataLayouts.scoped_static_array(ThisBlock(), Bool, 1)
         if is_first_thread_in(ThisBlock())
-            old = CUDA.atomic_add!(pointer(finished_blocks, 1), Int32(1))
-            @inbounds is_last[1] = (old == num_blocks - Int32(1))
+            old = CUDA.atomic_add!(pointer(finished_blocks, 1), UInt32(1))
+            @inbounds is_last[1] = (old == num_blocks - UInt32(1))
         end
         DataLayouts.synchronize(ThisBlock())
 
@@ -146,17 +153,17 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
     T = return_type(op, NTuple{2, eltype(arg)})
     results = DataLayouts.scoped_array(scope, T, 0; buffer = true)
     finished_blocks = reduction_sync_counter()
-    (; threads, blocks) = launch_configuration(
-        kernel_function,
-        (results, finished_blocks, arg, Int32(1)),
-        length(arg),
+    # The launch needs results sized by the block count, so the kernel is compiled before it.
+    kernel = CUDA.@cuda always_inline = true launch = false kernel_function(
+        results, finished_blocks, arg, UInt32(1),
     )
+    (; threads, blocks) = launch_configuration(kernel, length(arg))
     results = DataLayouts.scoped_array(scope, T, blocks; buffer = true)
 
-    fill!(finished_blocks, Int32(0))
+    fill!(finished_blocks, UInt32(0))
     auto_launch!(
         kernel_function,
-        (results, finished_blocks, arg, Int32(blocks));
+        (results, finished_blocks, arg, UInt32(blocks));
         threads_s = threads,
         blocks_s = blocks,
     )
@@ -188,7 +195,7 @@ DataLayouts.reduce_points(
         shuffle_reduce(scope, op, thread_result, num_reduced_threads(scope, arg, mask))
     else
         num_warps = DataLayouts.num_subscopes(ThisWarp(), scope)
-        max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : num_warps
+        max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : Int(num_warps)
         warp_index = DataLayouts.subscope_rank(ThisWarp(), scope)
         warp_result = DataLayouts.reduce_points(ThisWarp(), op, arg; mask, init...)
         results = DataLayouts.scoped_static_array(scope, typeof(warp_result), max_results)
@@ -230,8 +237,7 @@ function shuffle_reduce(scope, op::O, value, num_values) where {O}
     num_inactive = THREADS_PER_WARP - num_active_threads(ThisWarp())
     thread_index = DataLayouts.thread_rank(scope)
     for offset in
-        ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)) ∘ Int32, Val(num_offsets))
-        # shfl_recurse fails if `offset` is not explicitly converted to an Int32
+        ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)), Val(num_offsets))
         shuffled_value =
             CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
         if thread_index <= num_values && xor(thread_index - 1, offset) + 1 <= num_values

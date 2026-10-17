@@ -79,7 +79,7 @@ function dg_fddg_volume_kernel!(
     i = threadIdx().x
     j = threadIdx().y
     h = blockIdx().x
-    v = threadIdx().z + (blockIdx().y - Int32(1)) * blockDim().z
+    v = threadIdx().z + (blockIdx().y - UInt32(1)) * blockDim().z
     if v ≤ Nv
         CI = CartesianIndex
         y_at = (a, b) -> y_data[CI(v, a, b, h)]
@@ -329,7 +329,7 @@ Base.@propagate_inbounds function _dg_flux_minus(
     face⁻ = Int(faces[2, f])
     idx⁺ = Int(faces[3, f])
     face⁺ = Int(faces[4, f])
-    reversed = faces[5, f] == Int32(1)
+    reversed = faces[5, f] == UInt32(1)
     i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
     i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
     CI = CartesianIndex
@@ -351,7 +351,7 @@ Base.@propagate_inbounds function dg_face_flux_kernel!(
     nfaces,
     mode,
 ) where {F, Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     @inbounds if gidx ≤ Nv * Nq * nfaces
         (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, elem⁺, i⁺, j⁺ =
@@ -387,7 +387,7 @@ function dg_face_pack_kernel!(
     Nv,
     nstrips,
 ) where {Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     if gidx ≤ Nv * Nq * nstrips
         (v, q, s) = Utilities.cart_ind((Nv, Nq, nstrips), gidx).I
         i, j = Topologies.face_node_index(Int(slot_face[s]), Nq, q, false)
@@ -417,12 +417,12 @@ function dg_ghost_face_flux_kernel!(
     Nv,
     nfaces,
 ) where {F, Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     if gidx ≤ Nv * Nq * nfaces
         (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, slot, _i⁺, _j⁺ =
             _dg_flux_minus(args_data, faces, sgeom, Val(Nq), v, q, f)
-        reversed = faces[5, f] == Int32(1)
+        reversed = faces[5, f] == UInt32(1)
         q′ = reversed ? Nq - q + 1 : q
         CI = CartesianIndex
         argvals⁺ = unrolled_map(
@@ -450,7 +450,7 @@ function dg_face_gather_kernel!(
     nbnodes,
     mode,
 )
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     if gidx ≤ nbnodes * Nv
         (v, n) = Utilities.cart_ind((Nv, nbnodes), gidx).I
         e = Int(node_elem[n])
@@ -558,7 +558,7 @@ function dg_boundary_face_flux_kernel!(
     Nv,
     nfaces,
 ) where {F, Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     if gidx ≤ Nv * Nq * nfaces
         (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
         elem⁻ = Int(faces[1, f])
@@ -648,7 +648,7 @@ function dg_tensor_product_kernel!(
     j = threadIdx().y
     k = threadIdx().z
     h = blockIdx().x
-    v = k + (blockIdx().y - Int32(1)) * blockDim().z
+    v = k + (blockIdx().y - UInt32(1)) * blockDim().z
     CI = CartesianIndex
     if v ≤ Nv
         work[i, j, k] = indata[CI(v, i, j, h)]

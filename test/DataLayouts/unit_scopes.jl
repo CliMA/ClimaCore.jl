@@ -27,6 +27,8 @@ import ClimaCore.DataLayouts:
     # Wrappers inherit the scope of their parent array.
     @test DataScope(view(zeros(4, 4), 1:2, :)) == ThisThreadPool()
     @test DataScope(reshape(zeros(4), 2, 2)) == ThisThreadPool()
+    # An array that is its own parent has no scope of its own.
+    @test_throws DataLayouts.UnknownScopeError DataScope(1:4)
     # A DataLayout carries its scope as a type parameter.
     data = VIJFH{Float64, 2, 3, 3, nothing}(Array{Float64}, 5)
     @test DataScope(data) == ThisThreadPool()

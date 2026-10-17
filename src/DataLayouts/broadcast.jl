@@ -26,8 +26,13 @@ Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = s
 Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
 # Enable automatic nested broadcasting over supported types of iterators.
-@inline Broadcast.broadcastable(data::DataLayout) =
-    reinterpret(add_auto_broadcasters(eltype(data)), data)
+# The wrappers keep the entries per value, so the parent check can be skipped; it is only
+# kept on CPUs, whose point loops need it to vectorize (see check_parent).
+@inline function Broadcast.broadcastable(data::DataLayout)
+    T = add_auto_broadcasters(eltype(data))
+    return parent(data) isa Union{Array, SubArray{<:Any, <:Any, <:Array}} ?
+           reinterpret(T, data) : @inbounds reinterpret(T, data)
+end
 @inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 

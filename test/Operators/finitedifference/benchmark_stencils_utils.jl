@@ -161,8 +161,8 @@ bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = ((;),)
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
     ((; inner = (;), outer = set_value_contra3_bcs(c)), )
 # The Laplacian of a center field (the most common composed vertical operator
-# downstream); the inner gradient carries the SetGradient boundary conditions,
-# since GradientC2F no longer accepts SetValue.
+# downstream); the inner gradient carries the SetGradient boundary conditions
+# used downstream.
 bcs_tested(c, ::typeof(op_divgrad_CC!)) =
     ((; inner = set_gradient_value_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_divgrad_FF!)) =

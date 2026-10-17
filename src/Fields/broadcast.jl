@@ -6,9 +6,6 @@ Abstract supertype of the broadcast styles of `Field`s. Subtypes: `FieldStyle` a
 """
 abstract type AbstractFieldStyle <: Base.BroadcastStyle end
 
-const LazyField{S <: AbstractFieldStyle} = Base.Broadcast.Broadcasted{S}
-const MaybeLazyField = Union{Field, LazyField}
-
 """
     FieldStyle{DS <: DataStyle}
 
@@ -55,6 +52,10 @@ Base.Broadcast.result_join(
     ::Base.Broadcast.Unknown,
 ) = FieldConflict()
 
+const LazyField{S <: AbstractFieldStyle} = Base.Broadcast.Broadcasted{S}
+const PointwiseBroadcasted{DS <: DataStyle} = LazyField{FieldStyle{DS}}
+const MaybeLazyField = Union{Field, LazyField}
+
 # Override the recursive unrolling used in combine_styles (which can lead to
 # inference failures in broadcast expressions with more than 10 arguments) with
 # manual unrolling (which can have higher latency but is always inferrable).
@@ -82,12 +83,29 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
         shared_space(arg) : space
     end
 
+# Like shared_space of a LazyField, but ignoring center/face staggering: every space is
+# compared with the staggering of the first staggered one (e.g., the arguments of operators).
+@inline shared_space_ignoring_staggering(args) =
+    unrolled_reduce(args; init = nothing) do space, arg
+        arg_space = staggered_like(shared_space(arg), space)
+        !isnothing(arg_space) &&
+        (isnothing(space) || Spaces.maybe_issubspace(space, arg_space)) ? arg_space : space
+    end
+# The space with the staggering of reference_space, if both spaces are staggered.
+@inline function staggered_like(space, reference_space)
+    stag1 = isnothing(reference_space) ? nothing : Spaces.staggering(reference_space)
+    stag2 = isnothing(space) ? nothing : Spaces.staggering(space)
+    return isnothing(stag1) || isnothing(stag2) || stag1 == stag2 ? space :
+           stag1 == Spaces.CellCenter() ? Spaces.center_space(space) :
+           Spaces.face_space(space)
+end
+
 # A similar recursive method takes the place of Base's check_broadcast_shape,
 # with an only_check_size flag used when checking broadcast destination spaces.
 @inline check_broadcast_space(_, _, _) = nothing
 @inline check_broadcast_space(space, field::Field, ::Val{true}) =
     Base.Broadcast.check_broadcast_axes(
-        axes(Fields.local_geometry_field(space)),
+        axes(Fields.field_values(Fields.local_geometry_field(space))),
         Fields.field_values(field),
     )
 @inline check_broadcast_space(space, field::Field, ::Val{false}) =
@@ -129,6 +147,22 @@ Base.Broadcast.broadcastable(bc::LazyField) =
 Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
+# Base's .&& and .|| capture a Broadcasted right operand in a closure, but kernels cannot
+# rebuild its Fields (see Grids.toggle_placeholder_grid), so only its function is captured.
+struct ShortCircuit{Op, F}
+    f::F
+end
+ShortCircuit{Op}(f::F) where {Op, F} = ShortCircuit{Op, F}(f)
+@inline (sc::ShortCircuit{Base.Broadcast.AndAnd})(a, args...) = a && sc.f(args...)
+@inline (sc::ShortCircuit{Base.Broadcast.OrOr})(a, args...) = a || sc.f(args...)
+for Op in (:AndAnd, :OrOr)
+    @eval function Base.Broadcast.broadcasted(::Base.Broadcast.$Op, a, bc::LazyField)
+        bcf = Base.Broadcast.flatten(bc)
+        f = ShortCircuit{Base.Broadcast.$Op}(bcf.f)
+        return Base.Broadcast.broadcasted(f, a, bcf.args...)
+    end
+end
+
 Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
     iszero(ndims(arg)) ? CartesianIndex() : index
 
@@ -136,28 +170,38 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) = copyto!(similar(bc), bc, Spaces.get_mask(axes(bc)))
+Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
-@inline field_values(bc::LazyField{FieldStyle{DS}}) where {DS} =
-    Broadcast.Broadcasted{DS}(
-        bc.f,
-        unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args),
-    )
+field_values(bc::LazyField{S}) where {S} =
+    throw(ArgumentError("field_values does not support $S broadcast expressions"))
+@inline field_values(bc::PointwiseBroadcasted{DS}) where {DS} = Broadcast.Broadcasted{DS}(
+    bc.f,
+    unrolled_map(arg -> arg isa MaybeLazyField ? field_values(arg) : arg, bc.args),
+)
 
-# Forward size primitives from Base and DataLayouts to the field_values.
+# Forward size primitives from Base and DataLayouts to the field_values when
+# possible, or use a representative field from the space otherwise.
 for f in (:size, :length, :ndims)
-    @eval Base.$f(arg::MaybeLazyField) = $f(field_values(arg))
+    @eval Base.$f(arg::Union{Field, PointwiseBroadcasted}) = $f(field_values(arg))
+    @eval Base.$f(bc::LazyField) = $f(local_geometry_field(axes(bc)))
 end
 for f in (:shape_params, :inferred_size, :nelems)
-    @eval DataLayouts.$f(arg::MaybeLazyField) = DataLayouts.$f(field_values(arg))
+    @eval DataLayouts.$f(arg::Union{Field, PointwiseBroadcasted}) =
+        DataLayouts.$f(field_values(arg))
+    @eval DataLayouts.$f(bc::LazyField) = DataLayouts.$f(local_geometry_field(axes(bc)))
 end
 
 @inline has_field_style(::T) where {T} =
     Base.Broadcast.BroadcastStyle(T) isa Fields.AbstractFieldStyle
 
+# Avoids unrolled_filter, whose output type promotion adds method instances per broadcast.
 @inline DataLayouts.DataScope(bc::LazyField) =
-    DataLayouts.DataScope(unrolled_filter(has_field_style, bc.args)...)
+    unrolled_mapreduce(field_arg_scope, combine_field_arg_scopes, bc.args)
+@inline field_arg_scope(arg) = has_field_style(arg) ? DataLayouts.DataScope(arg) : nothing
+@inline combine_field_arg_scopes(scope1, scope2) =
+    isnothing(scope1) ? scope2 :
+    isnothing(scope2) ? scope1 : DataLayouts.DataScope(scope1, scope2)
 @inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
@@ -184,24 +228,26 @@ Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
 @inline sliced_broadcasted(f::F, args, axes) where {F} =
     Broadcast.Broadcasted(Broadcast.combine_styles(args...), f, args, axes)
 
+# Only operators are sliced (e.g., their field-valued boundary conditions).
+sliced_function(_, f, _) = f
+
 # Body of a slice operator applied to one node of a broadcast expression; a
 # generated function makes slicing a node one method instance rather than three
 # per node per distinct expression type (as in DataLayouts/indexing.jl).
 sliced_broadcast_body(op, bc_type) = quote
     Base.@_propagate_inbounds_meta
-    f = getfield(bc, :f)
-    f′ = f isa Union{Function, Type} ? f : $op(f, inds...)
-    args = getfield(bc, :args)
     return sliced_broadcasted(
-        f′,
+        sliced_function($op, bc.f, inds),
         Base.Cartesian.@ntuple(
             $(length(bc_type.parameters[4].parameters)),
-            n -> let arg = getfield(args, n)
-                arg isa MaybeLazyField ? $op(arg, arg_slice_indices($op, arg, inds)...) :
-                arg
+            n -> let arg = bc.args[n]
+                arg isa Field ?
+                DataLayouts.slice_arg($op, arg, arg_slice_indices($op, arg, inds)...) :
+                arg isa MaybeLazyField ?
+                $op(arg, arg_slice_indices($op, arg, inds)...) : arg
             end,
         ),
-        $op(bc.axes, inds...),
+        DataLayouts.slice_arg($op, bc.axes, inds...),
     )
 end
 
@@ -213,6 +259,8 @@ end
 @inline function arg_slice_indices(op::O, arg, inds) where {O}
     space = arg isa Field ? axes(arg) : getfield(arg, :axes)
     (op == Base.view || isnothing(space)) && return inds
+    # A slab is a single element, which is read in place of every element.
+    space isa Spaces.SpectralElementSpaceSlab && (inds = (Base.front(inds)..., 1))
     v = Spaces.has_vertical(space) ? inds[1] : 1
     has_h = Spaces.has_horizontal(space)
     op == level && return (v,)
@@ -225,22 +273,27 @@ for op in (:(Base.view), :level, :slab, :column)
         sliced_broadcast_body($(QuoteNode(op)), bc)
 end
 
+Base.@propagate_inbounds Base.getindex(bc::PointwiseBroadcasted, index::PointIndex) =
+    getindex(field_values(bc), index)
+
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
     eachindex(field_values(arg), unrolled_map(field_values, args)...)
 
-Base.similar(bc::LazyField, ::Type{T}) where {T} = Field(T, axes(bc))
+# Reassign materialized results to the broadcast's scope, since the space is
+# shared by all available threads, but the arguments can have narrower scopes.
+Base.similar(bc::LazyField, ::Type{T}) where {T} =
+    DataLayouts.reassign(Field(T, axes(bc)), DataLayouts.DataScope(bc))
 
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view
 # even when the broadcast's layout shape is static.
-Base.similar(bc::LazyField{FieldStyle{DS}}, ::Type{T}) where {DS, T} =
+Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the
-# copyto! methods in DataLayouts/loops.jl), and every copyto! method for a
-# LazyField style accepts it in the same position.
+# copyto! methods in DataLayouts/loops.jl).
 @inline function Base.copyto!(
     dest::Field,
     bc::LazyField,
@@ -281,7 +334,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(LinearAlgebra.norm),
     arg,
 )
-    space = axes(arg)
+    space = shared_space(arg)
     # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
     # a no-op).
     Base.Broadcast.broadcasted(
@@ -296,7 +349,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(LinearAlgebra.norm_sqr),
     arg,
 )
-    space = axes(arg)
+    space = shared_space(arg)
     # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
     # a no-op).
     Base.Broadcast.broadcasted(
@@ -364,7 +417,7 @@ function Base.Broadcast.broadcasted(
     ::Type{V},
     arg,
 ) where {V <: Geometry.AbstractTensor{1}}
-    space = axes(arg)
+    space = shared_space(arg)
     # Wrap in a Field so that the axes line up (the Field is unwrapped again, so this is
     # a no-op).
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))

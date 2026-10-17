@@ -102,5 +102,5 @@ test_opt =
         ref_set_result!,
         USING_CUDA,
     )
-    test_opt && !USING_CUDA && perf_getidx(bc)
+    test_opt && !USING_CUDA && perf_apply_operators(bc)
 end
