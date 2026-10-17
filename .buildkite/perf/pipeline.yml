@@ -28,6 +28,8 @@ steps:
       # Instantiate and dev install ClimaCore
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.Registry.update(); Pkg.instantiate(;verbose=true)'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.develop(; path = ".")'
+      # Makie 0.24.16 breaks GeoMakie's precompilation (timed_ticklabelspace_reset).
+      - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.add(; name = "Makie", version = "0.24.15")'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.add("MPI")'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.precompile()'
       - julia --project=$COUPLER_PATH/experiments/AMIP/ -e 'using Pkg; Pkg.status()'
@@ -65,6 +67,9 @@ steps:
       - julia --project=$LAND_PATH -e 'using Pkg; Pkg.Registry.update(); Pkg.instantiate(;verbose=true)'
       # The benchmark scripts run against .buildkite, which devs ClimaLand itself
       - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.develop(; path = ENV["LAND_PATH"]); Pkg.develop(; path = pwd()); Pkg.instantiate(;verbose=true)'
+      # Makie 0.24.16 breaks GeoMakie's precompilation (timed_ticklabelspace_reset). CairoMakie
+      # requires an exact Makie version, so both are added, which keeps all other packages.
+      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.add([PackageSpec(; name = "Makie", version = "0.24.15"), PackageSpec(; name = "CairoMakie", version = "0.15.15")])'
       - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.precompile()'
       - julia --project=$LAND_PATH/.buildkite -e 'using CUDA; CUDA.precompile_runtime()'
       - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.status()'
