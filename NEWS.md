@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.5
+-------
+
 - ![][badge-✨feature/enhancement] Finite difference operators are now applied
   through the same `Operators.apply_operator` API as spectral element operators,
   one column at a time. A broadcast over several finite difference operators is
