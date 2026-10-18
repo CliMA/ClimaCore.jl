@@ -147,18 +147,19 @@ end
 @inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
     (StridedRange{Int}(index, stride, index + (Nf - 1) * stride),)
 
-# Check the bounds of struct_indices at their first and last entries, since last divides for
-# a StridedRange. Julia 1.10 keeps the dead checks of @inbounds reads, and inlining costs
-# count them, so a division here keeps closures that read points from inlining into loops.
+# Check the bounds of struct_indices at their first and last entries (none for zero-size
+# values), since last divides for a StridedRange. Julia 1.10 keeps the dead checks of
+# @inbounds reads, and inlining costs count them, so a division here keeps closures that
+# read points from inlining into loops.
 @inline check_struct_bounds(array, val_Nf, index...) =
     checkbounds(array, struct_indices(array, val_Nf, index...)...)
 @inline function check_struct_bounds(
     array, ::Val{Nf}, index::Integer, stride::Integer,
 ) where {Nf}
     in_bounds =
-        isone(Nf) ? checkbounds(Bool, array, index) :
+        iszero(Nf) ||
         checkbounds(Bool, array, index) &
-        checkbounds(Bool, array, index + (Nf - 1) * stride)
+        (isone(Nf) || checkbounds(Bool, array, index + (Nf - 1) * stride))
     in_bounds ||
         Base.throw_boundserror(array, struct_indices(array, Val(Nf), index, stride))
     return nothing
@@ -301,6 +302,6 @@ and it can be updated with `set_struct!(struct_view, new_value)`.
     @boundscheck check_struct_bounds(array, Val(Nf), index...)
     return unchecked_view_struct(array, Val(Nf), index...)
 end
-# Overridden by arrays whose points are not views of the array (see RegisterPointView).
+# Overridden by arrays whose points are not SubArrays (see PointView and RegisterPointView).
 @inline unchecked_view_struct(array, val_Nf, index...) =
     @inbounds stable_view(array, struct_indices(array, val_Nf, index...)...)

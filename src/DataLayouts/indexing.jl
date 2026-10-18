@@ -225,6 +225,34 @@ end
     (1 <= first(index) <= length(first(ranges))) &
     in_view(Base.tail(index), Base.tail(ranges), Val(F - 1))
 
+# A view of the Nf entries of a value in an Array or a GPU kernel's array, at a 1-based
+# linear index and a stride in the integer type I of the index (UInt32 in GPU kernels).
+struct PointView{T, Nf, A <: AbstractArray{T}, I} <: AbstractVector{T}
+    parent::A
+    offset::I
+    stride::I
+end
+Base.parent(view::PointView) = view.parent
+Base.size(::PointView{<:Any, Nf}) where {Nf} = (Nf,)
+Base.IndexStyle(::Type{<:PointView}) = IndexLinear()
+DataScope(::Type{<:PointView{<:Any, <:Any, A}}) where {A} = DataScope(A)
+@inline point_index(view::PointView{<:Any, <:Any, <:Any, I}, i::Integer) where {I} =
+    view.offset + (i % I - one(I)) * view.stride
+Base.@propagate_inbounds function Base.getindex(view::PointView, i::Integer)
+    @boundscheck checkbounds(view, i)
+    return @inbounds parent(view)[point_index(view, i)]
+end
+# Unchecked like Base's pointer: CUDA.@atomic (DSS kernels) calls it outside of @inbounds.
+@inline Base.pointer(view::PointView, i::Integer = 1) =
+    pointer(parent(view), Int(point_index(view, i)))
+Base.@propagate_inbounds function Base.setindex!(view::PointView, value, i::Integer)
+    @boundscheck checkbounds(view, i)
+    @inbounds parent(view)[point_index(view, i)] = value
+    return view
+end
+@inline unchecked_view_struct(array::Array, ::Val{Nf}, i::Integer, s::Integer) where {Nf} =
+    PointView{eltype(array), Nf, typeof(array), typeof(i)}(array, i, s)
+
 # Always convert to the element type of a DataLayout when modifying its values.
 @propagate_inbounds function Base.setindex!(data::DataLayout, value, index::PointIndex)
     (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
@@ -238,7 +266,7 @@ end
 
 # Represent every single-point DataLayout view using a zero-dimensional DataF.
 @propagate_inbounds function Base.view(data::DataLayout, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, index)
+    (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     return DataF{eltype(data), typeof(DataScope(data))}(
         view_struct(array, eltype(data), index_args...),
     )

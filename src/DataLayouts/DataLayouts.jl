@@ -493,9 +493,15 @@ end
     Nv == Nh == 1 && return data
     return unchecked_slice_view(data, (v:v, :, :, h:h); Nv = 1, Nh = 1)
 end
+# LLVM (in Julia 1.10) cannot hoist loads of an Array's third and later sizes out of
+# branches (e.g., stencils near boundaries), so columns load them all for an assumption.
+@inline assume_sizes(array::Array) = LLVM.Interop.assume(prod(size(array)) == length(array))
+@inline assume_sizes(array::UnitRangeSubArray) = assume_sizes(parent(array))
+@inline assume_sizes(_) = nothing
 @inline function slice_arg(::typeof(column), data::VIJHWithF, i, j, h)
     (; Nv, Ni, Nj, Nh) = vijh_params(data)
     Nv == 1 && return @inbounds view(data, CartesianIndex(1, i, j, h))
+    assume_sizes(parent(data))
     Ni == Nj == Nh == 1 && return data
     return unchecked_slice_view(data, (:, i:i, j:j, h:h); Ni = 1, Nj = 1, Nh = 1)
 end
