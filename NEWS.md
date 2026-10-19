@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on DG
+  (`DISCRETIZATION=DG`), in flux form (`ρuₕ`, `ρw`; Kennedy-Gruber flux
+  differencing with Roe or Rusanov interface fluxes, `DG_FLUX`) or in
+  vector-invariant form (`MOMENTUM_FORM=vector_invariant`).
+
 v1.0.5
 -------
 
