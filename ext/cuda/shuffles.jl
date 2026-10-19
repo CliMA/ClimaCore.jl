@@ -99,7 +99,7 @@ Base.@propagate_inbounds round_point_index(indices, position) = indices[position
     scope = DataLayouts.DataScope(data)
     shuffles_in_warp(scope) ||
         return Base.@invoke DataLayouts.update_points!(f::F, op::O, data::Any, slice_op::S)
-    indices = DataLayouts.maskable_slice_indices(scope, NoMask(), slice_op, data)
+    indices = DataLayouts.maskable_slice_indices(NoMask(), slice_op, data)
     rank = Int(DataLayouts.thread_rank(scope))
     for offset in 0:Int(DataLayouts.num_threads(scope)):(length(indices) - 1)
         i = offset + rank

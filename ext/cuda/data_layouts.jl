@@ -192,22 +192,8 @@ const ViewDimIndex = Union{
     UnitRange{<:Integer},
 }
 
-# Extent of every parent array dimension that is available from a DataLayout's
-# type, with 0 for dimensions whose extents are only available at runtime
-@inline inferred_parent_extents(data, array) = DataLayouts.add_f_dim(
-    map(extent -> something(extent, 0), DataLayouts.inferred_size(data)),
-    DataLayouts.num_basetypes(eltype(array), eltype(data)),
-    Val(DataLayouts.f_dim(data)),
-)
-
-@inline assume_extent(extent, array_extent) =
-    iszero(extent) || LLVM.Interop.assume(array_extent == extent)
-
-# A kernel reads the extents of a layout's device array at run time, because the
-# layout's parent size check ran on the host (when Adapt rebuilt the layout for
-# the launch). Assuming the extents that the layout's type fixes lets the
-# compiler fold every offset into constant strides, as on CPUs, where the check
-# is inlined.
+# Kernels inline every call, so every parent access in a kernel assumes the extents
+# that the layout's type fixes (see reassign), even in kernels that do not reassign.
 @inline function Base.parent(
     data::DataLayouts.VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, <:CUDA.CuDeviceArray},
 ) where {T, Nv, Ni, Nj, Nh, F, S}
@@ -257,7 +243,7 @@ function Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLay
 end
 
 # GPU point index arithmetic is in 32 bits (see adapt_structure above): 64-bit integer ops
-# take several instructions at every point. Points of views are UInt32 DevicePointViews.
+# take several instructions at every point. Point views have UInt32 indices.
 const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
 const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
@@ -296,51 +282,27 @@ for A in (:(CUDA.CuDeviceArray), :CompactDeviceView, :DeviceSubArray)
         array::$A,
         (index, val_F)::Tuple{CartesianIndex, Val},
     ) = device_offset_and_stride(array, index, val_F)
-    @eval @inline DataLayouts.view_struct(
-        array::$A,
-        ::Type{T},
-        index::CartesianIndex,
-        val_F::Val,
-    ) where {T} = device_point_view(array, T, index, val_F)
 end
+# Points of CuArrays outside of kernels stay Cartesian, so that their views are SubArrays
+# at Cartesian indices (which GPUArrays can broadcast over and copy), rather than SubArrays
+# of ReshapedArrays at StridedRanges.
+DataLayouts.parent_array_and_index_args(
+    array::Union{CUDA.CuArray, Utilities.UnitRangeSubArray{<:CUDA.CuArray}},
+    index_args::Tuple{CartesianIndex, Val},
+) = (array, index_args)
 
-struct DevicePointView{T, Nf, A <: AbstractArray{T}} <: AbstractVector{T}
-    parent::A
-    offset::UInt32 # 1-based
-    stride::UInt32
-end
-Base.parent(view::DevicePointView) = view.parent
-Base.size(::DevicePointView{<:Any, Nf}) where {Nf} = (Nf,)
-Base.IndexStyle(::Type{<:DevicePointView}) = IndexLinear()
-DataLayouts.DataScope(::Type{<:DevicePointView{<:Any, <:Any, A}}) where {A} =
-    DataLayouts.DataScope(A)
-@inline point_index(view::DevicePointView, i::Integer) =
-    view.offset + (i % UInt32 - UInt32(1)) * view.stride
-Base.@propagate_inbounds function Base.getindex(view::DevicePointView, i::Integer)
-    @boundscheck checkbounds(view, i)
-    return @inbounds parent(view)[point_index(view, i)]
-end
-# Unchecked like Base's pointer: CUDA.@atomic (DSS kernels) calls it outside of @inbounds.
-@inline Base.pointer(view::DevicePointView, i::Integer = 1) =
-    pointer(parent(view), Int(point_index(view, i)))
-Base.@propagate_inbounds function Base.setindex!(view::DevicePointView, value, i::Integer)
-    @boundscheck checkbounds(view, i)
-    @inbounds parent(view)[point_index(view, i)] = value
-    return view
-end
-@inline function device_point_view(array, ::Type{T}, index_args...) where {T}
-    Nf = DataLayouts.num_basetypes(eltype(array), T)
-    (device_array, (offset, stride)) = device_offset_and_stride(array, index_args...)
-    return DevicePointView{eltype(array), Nf, typeof(device_array)}(
-        device_array, offset, stride,
-    )
-end
-@inline DataLayouts.view_struct(
+@inline function DataLayouts.view_struct(
     array::DeviceArray,
     ::Type{T},
     index::Integer,
     stride::Integer,
-) where {T} = device_point_view(array, T, index, stride)
+) where {T}
+    Nf = DataLayouts.num_basetypes(eltype(array), T)
+    (device_array, (offset, stride)) = device_offset_and_stride(array, index, stride)
+    return DataLayouts.PointView{eltype(array), Nf, typeof(device_array), UInt32}(
+        device_array, offset, stride,
+    )
+end
 
 @inline DataLayouts.field_offset(
     array::CompactDeviceView,

@@ -294,7 +294,7 @@ need it (see `Geometry._dual_axes_for_projection`), reading only the needed metr
 also covers values that a `SetBoundaryOperator` in `arg` imposes, whose types can differ
 from its eltype (see `Operators.imposed_values_metric`).
 """
-function projected_operand(matrix1, arg)
+@inline function projected_operand(matrix1, arg)
     et_mat1 = eltype(matrix1)
     (et_mat1 == Union{} || !(et_mat1 <: BandMatrixRow)) && return arg
     axes = Geometry._dual_axes_for_projection(eltype(et_mat1))

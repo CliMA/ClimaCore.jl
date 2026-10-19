@@ -17,10 +17,14 @@ end
 
 quadrature_style(levelgrid::LevelGrid) = quadrature_style(levelgrid.full_grid)
 
-level(
+# Throw for an out-of-range level here, so that local geometry reads need not check it.
+Base.@propagate_inbounds function level(
     grid::AbstractExtrudedFiniteDifferenceGrid,
-    level::Union{Int, PlusHalf{Int}},
-) = LevelGrid(grid, level)
+    v::Union{Int, PlusHalf{Int}},
+)
+    @boundscheck level(level_geometry_args(grid, v)...)
+    return LevelGrid(grid, v)
+end
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
@@ -40,15 +44,13 @@ dss_weights(levelgrid::LevelGrid, _) = dss_weights(levelgrid.full_grid, nothing)
 local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
     local_geometry_type(G)
 
-local_geometry_data(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) = level(
-    local_geometry_data(levelgrid.full_grid, CellCenter()),
-    levelgrid.level,
+level_geometry_args(grid, v::Int) = (local_geometry_data(grid, CellCenter()), v)
+level_geometry_args(grid, v::PlusHalf{Int}) =
+    (local_geometry_data(grid, CellFace()), v + half)
+local_geometry_data(levelgrid::LevelGrid, ::Nothing) = DataLayouts.slice_arg(
+    level,
+    level_geometry_args(levelgrid.full_grid, levelgrid.level)...,
 )
-local_geometry_data(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
-    level(
-        local_geometry_data(levelgrid.full_grid, CellFace()),
-        levelgrid.level + half,
-    )
 global_geometry(levelgrid::LevelGrid) = global_geometry(levelgrid.full_grid)
 hypsography(levelgrid::LevelGrid) = hypsography(levelgrid.full_grid)
 

@@ -208,7 +208,7 @@ no separate `F` axis.
 Assign a new [`DataScope`](@ref) to a [`DataLayout`](@ref), or determine the
 result type of performing such an assignment for a layout of type `D`.
 """
-@inline reassign(data, scope) = reassign(typeof(data), scope)(parent(data))
+@inline reassign(data, scope) = reassign(typeof(data), scope)(assume_parent_extents(data))
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
 
@@ -242,16 +242,18 @@ Base.@propagate_inbounds function rebuild(
     data, array, ::Type{T} = eltype(data); params...,
 ) where {T}
     scope = DataScope(array)
-    scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
-    return layout_constructor(scoped_data, T; params...)(array)
+    D = data isa Type ? data : typeof(data)
+    D = is_subscope(DataScope(D), scope) ? D : reassign(D, scope)
+    return layout_constructor(D, T; params...)(array)
 end
 
 # rebuild for a valid array and element type (e.g., a slice of data's parent, see slice_arg)
 # without the constructor's checks, which slow compilation even when @inbounds elides them.
 @inline function unchecked_rebuild(data, array, ::Type{T} = eltype(data); kw...) where {T}
     scope = DataScope(array)
-    scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
-    return layout_constructor(scoped_data, T; kw...){typeof(array)}(array)
+    D = data isa Type ? data : typeof(data)
+    D = is_subscope(DataScope(D), scope) ? D : reassign(D, scope)
+    return layout_constructor(D, T; kw...){typeof(array)}(array)
 end
 @inline unchecked_rebuild(data, ::Type{A}, ::Type{T} = eltype(data)) where {A, T} =
     unchecked_rebuild(data, A(parent(data)), T)
@@ -276,6 +278,35 @@ ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 
 @inline add_f_dim(dims, dim, ::Val{F}) where {F} =
     isnothing(F) ? dims : unrolled_insert(dims, dim, Val(F))
+# Parent array extents that a layout's type fixes, with 0 for extents known at run time
+@inline inferred_parent_extents(data, array) = add_f_dim(
+    map(extent -> something(extent, 0), inferred_size(data)),
+    num_basetypes(eltype(array), eltype(data)),
+    Val(f_dim(data)),
+)
+# Checked constructors ensure that parent arrays have their layouts' canonical sizes, so
+# the extents that a layout's type fixes can be assumed, and LLVM folds them into constant
+# strides shared by all layouts of the same type. Slice loops assume them once, when they
+# reassign their arguments, since assumptions at point accesses add to inlining costs.
+@inline function assume_parent_extents(data)
+    array = getfield(data, :array)
+    assume_extents(array, inferred_parent_extents(data, array))
+    return array
+end
+# Assume the nonzero extents of the dense array that holds an array's entries. Slices span
+# their parents' dimensions, while unit ranges of views say nothing about their parents.
+# An Array's sizes are all loaded for an assumption, since LLVM (in Julia 1.10) cannot hoist
+# loads of its third and later sizes out of branches (e.g., stencils near boundaries).
+@inline function assume_extents(array::DenseArray, extents)
+    array isa Array && LLVM.Interop.assume(prod(size(array)) == length(array))
+    unrolled_foreach(assume_extent, extents, size(array))
+end
+@inline assume_extents(array::UnitRangeSubArray, extents) =
+    assume_extents(parent(array), map(slice_extent, extents, array.indices))
+@inline slice_extent(extent, index) = index isa Base.Slice ? extent : 0
+@inline assume_extents(_, _) = nothing
+@inline assume_extent(extent, array_extent) =
+    iszero(extent) || LLVM.Interop.assume(array_extent == extent)
 @inline drop_f_dim(dims, ::Val{F}) where {F} =
     isnothing(F) ? dims : ntuple(d -> d < F ? dims[d] : dims[d + 1], Val(length(dims) - 1))
 
@@ -293,8 +324,9 @@ function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
         has_inferred_size(data) ?
         scoped_static_array(DataScope(data), B, array_size) :
         scoped_array(DataScope(data), B, array_size)
-    # The new array has the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, array, T)
+    # Without dims, the new array has the layout's canonical size; skip the parent check.
+    return isempty(maybe_dims) ? @inbounds(rebuild(data, array, T)) :
+           rebuild(data, array, T)
 end
 
 Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
@@ -358,8 +390,7 @@ end
 # Check that a parent array has the canonical size for its layout. Arrays with
 # other shapes must be explicitly reshaped before they are wrapped in layouts.
 # The check is a bounds check, skipped under @inbounds where the array has the
-# canonical size by construction (which keeps it out of GPU kernels); it is inlined,
-# so that CPU point loops know the layout's static extents and vectorize.
+# canonical size by construction (which keeps it out of GPU kernels).
 Base.@propagate_inbounds function check_parent(array, array_size...)
     @boundscheck size(array) == array_size || throw_parent_size_mismatch()
     return array

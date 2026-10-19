@@ -85,9 +85,7 @@ end
 Return an iterator over the indices of the slices that the slice operator `op`
 produces from `arg`, generalizing `eachindex` to [`level`](@ref), [`slab`](@ref),
 [`column`](@ref), and `view` (for single-point slices). The result is always an
-iterator of Cartesian indices, whose scalar offsets permit SIMD optimization (a
-`view` at a linear index wraps its parent in a 1-dimensional `ReshapedArray`, which
-blocks SIMD in pointwise loops).
+iterator of Cartesian indices.
 """
 @inline each_slice_index(::typeof(view), arg) = CartesianIndices(size(arg))
 @inline each_slice_index(::typeof(level), arg) = CartesianIndices((nlevels(arg),))
@@ -163,30 +161,36 @@ end
 
 # Propagate all Cartesian indices that are specified by the user, without any
 # Cartesian-to-linear conversion. Avoid linear-to-Cartesian conversion unless it
-# is necessary, using a single integer division to access any constant-stride
-# parent array. Avoid the need to reshape single-point views, converting empty
-# Cartesian indices into full-rank indices for multidimensional parent arrays.
+# is necessary, using a single integer division to access the components of a
+# linear parent array or of the parent of a constant-stride view. Avoid the need
+# to reshape single-point views, converting empty Cartesian indices into
+# full-rank indices for multidimensional parent arrays.
 @propagate_inbounds function array_and_index_args(data, index)
     array = parent(data)
     F = f_dim(data)
     (index == CartesianIndex() && isone(length(data))) &&
         return (array, (first(CartesianIndices(data)), Val(F)))
     (index isa CartesianIndex || isnothing(F)) && return (array, (index, Val(F)))
+    linear_array = IndexStyle(array) == IndexLinear() && !has_cartesian_components(array)
     (
-        IndexStyle(data) == IndexCartesian() ||
+        IndexStyle(data) == IndexCartesian() && !linear_array ||
         has_cartesian_components(array) && has_one_inferred_axis(data)
     ) && return (array, (cartesian_point_index(data, index), Val(F)))
     stride = prod(size(data)[1:(F - 1)])
-    IndexStyle(array) == IndexLinear() && return (array, (index, stride))
+    IndexStyle(data) == IndexStyle(array) == IndexLinear() &&
+        return (array, (index, stride))
     # Column and level slices skip the divrem below, so that CPU column loops vectorize.
     has_one_inferred_axis(data) &&
         return (array, (cartesian_point_index(data, index), Val(F)))
-    index_for_dims_after_F, offset_for_dims_before_F = divrem(index - 1, stride)
-    parent_Nf = size(parent(array), F)
-    parent_f = field_offset(array, Val(F))
-    num_strides_in_parent = index_for_dims_after_F * parent_Nf + parent_f
-    parent_index = num_strides_in_parent * stride + offset_for_dims_before_F + 1
-    return (parent(array), (parent_index, stride))
+    # The arithmetic is in the integer type I of the index (UInt32 in GPU kernels).
+    I = typeof(index)
+    index_for_dims_after_F, offset_for_dims_before_F = divrem(index - one(I), stride % I)
+    strided_array = linear_array ? array : parent(array)
+    parent_f = linear_array ? 0 : field_offset(array, Val(F))
+    num_strides_in_parent =
+        index_for_dims_after_F * (size(strided_array, F) % I) + parent_f % I
+    parent_index = num_strides_in_parent * (stride % I) + offset_for_dims_before_F + one(I)
+    return (strided_array, (parent_index, stride % I))
 end
 
 # A DataF is the only layout with a one-dimensional parent array, which holds
@@ -225,6 +229,34 @@ end
     (1 <= first(index) <= length(first(ranges))) &
     in_view(Base.tail(index), Base.tail(ranges), Val(F - 1))
 
+# A view of the Nf entries of a value in an Array or a GPU kernel's array, at a 1-based
+# linear index and a stride in the integer type I of the index (UInt32 in GPU kernels).
+struct PointView{T, Nf, A <: AbstractArray{T}, I} <: AbstractVector{T}
+    parent::A
+    offset::I
+    stride::I
+end
+Base.parent(view::PointView) = view.parent
+Base.size(::PointView{<:Any, Nf}) where {Nf} = (Nf,)
+Base.IndexStyle(::Type{<:PointView}) = IndexLinear()
+DataScope(::Type{<:PointView{<:Any, <:Any, A}}) where {A} = DataScope(A)
+@inline point_index(view::PointView{<:Any, <:Any, <:Any, I}, i::Integer) where {I} =
+    view.offset + (i % I - one(I)) * view.stride
+Base.@propagate_inbounds function Base.getindex(view::PointView, i::Integer)
+    @boundscheck checkbounds(view, i)
+    return @inbounds parent(view)[point_index(view, i)]
+end
+# Unchecked like Base's pointer: CUDA.@atomic (DSS kernels) calls it outside of @inbounds.
+@inline Base.pointer(view::PointView, i::Integer = 1) =
+    pointer(parent(view), Int(point_index(view, i)))
+Base.@propagate_inbounds function Base.setindex!(view::PointView, value, i::Integer)
+    @boundscheck checkbounds(view, i)
+    @inbounds parent(view)[point_index(view, i)] = value
+    return view
+end
+@inline unchecked_view_struct(array::Array, ::Val{Nf}, i::Integer, s::Integer) where {Nf} =
+    PointView{eltype(array), Nf, typeof(array), typeof(i)}(array, i, s)
+
 # Always convert to the element type of a DataLayout when modifying its values.
 @propagate_inbounds function Base.setindex!(data::DataLayout, value, index::PointIndex)
     (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
@@ -238,7 +270,7 @@ end
 
 # Represent every single-point DataLayout view using a zero-dimensional DataF.
 @propagate_inbounds function Base.view(data::DataLayout, index::PointIndex)
-    (array, index_args) = array_and_index_args(data, index)
+    (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     return DataF{eltype(data), typeof(DataScope(data))}(
         view_struct(array, eltype(data), index_args...),
     )

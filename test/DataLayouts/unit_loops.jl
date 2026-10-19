@@ -83,16 +83,14 @@ end
     device = ClimaComms.device()
 
     # Layouts with several components use Cartesian indexing, whose indices are
-    # stored in a CartesianIndices object. Every single-threaded reduction
-    # should be identical to a strict pairwise reduction over positions (Base's
-    # mapreduce falls back to a sequential fold for CartesianIndices, whose
-    # roundoff error grows linearly with the number of points, while the
-    # roundoff error of a pairwise reduction only grows logarithmically). The
-    # reference is written out by hand because the @simd blocks in Base's
-    # mapreduce and in safe_mapreduce reassociate values at contiguous
-    # positions whenever bounds checking is disabled. Multithreaded and GPU
-    # reductions partition the points across threads, so they are only
-    # approximately pairwise.
+    # stored in a CartesianIndices object. Single-threaded reductions split the
+    # points like a strict pairwise reduction over positions (Base's mapreduce
+    # falls back to a sequential fold for CartesianIndices, whose roundoff error
+    # grows linearly with the number of points, while the roundoff error of a
+    # pairwise reduction only grows logarithmically), but the @simd loops in
+    # safe_mapreduce reassociate the values in each block, so they only match the
+    # reference to a few ulps. Multithreaded and GPU reductions partition the
+    # points across threads, so they are only approximately pairwise.
     (Ni, Nj, Nh) = (4, 4, 5)
     array = Float32.(rand(64, Ni, Nj, 2, Nh)) ./ 3
     T = Tuple{Float32, Float32}
@@ -100,7 +98,7 @@ end
     first_values = vec(Array(parent(data))[:, :, :, 1, :])
     pairwise_sum = strict_pairwise_sum(first_values, 1, length(first_values))
     if device isa ClimaComms.CPUSingleThreaded
-        @test sum(value -> value[1], data) == pairwise_sum
+        @test sum(value -> value[1], data) ≈ pairwise_sum rtol = 4 * eps(Float32)
     else
         @test sum(value -> value[1], data) ≈ pairwise_sum
     end
@@ -136,8 +134,10 @@ end
     @test parent(data)[:, 1, 1, 1, 1] == zeros(3)
     @test parent(data)[:, 2, 1, 1, 1] == [1.0, 2.0, 3.0]
     @test parent(data)[:, 4, 4, 1, 5] == [1.0, 2.0, 3.0]
-    copyto!(data, bc)
-    @test parent(data)[:, 1, 1, 1, 1] == [1.0, 2.0, 3.0]
+    for data in (data, DataLayouts.VIJHF{Float64, 3, 2, 2, 1}(Array{Float64}))
+        data .= (1.0, 2.0, 3.0)
+        @test all(v -> all(==(v), selectdim(parent(data), 1, v)), 1:3)
+    end
 end
 
 parent_broadcasted(data::DataLayouts.DataLayout) = parent(data)

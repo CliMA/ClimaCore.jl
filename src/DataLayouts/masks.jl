@@ -126,7 +126,7 @@ ActivePointIndices{Nv}(mask) where {Nv} =
     ActivePointIndices{Nv}(mask, Base.OneTo(Nv * Int(@inbounds mask.N[1])))
 @inline function active_index(inds::ActivePointIndices{Nv}, real_n) where {Nv}
     (; i_map, j_map, h_map) = inds.mask
-    (n_zero, v_zero) = divrem(real_n - 1, Nv)
+    (n_zero, v_zero) = divrem(real_n - one(real_n), Nv % typeof(real_n))
     (v, col) = (v_zero + 1, n_zero + 1)
     @inbounds CartesianIndex(v, i_map[col], j_map[col], h_map[col])
 end

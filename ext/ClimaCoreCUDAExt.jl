@@ -10,7 +10,7 @@ using CUDA
 using CUDA: threadIdx, blockIdx, blockDim
 import StaticArrays: SMatrix
 import ClimaCore.DebugOnly: call_post_op_callback, post_op_callback
-import ClimaCore.DataLayouts: NoMask, IJHMask
+import ClimaCore.DataLayouts: NoMask, IJHMask, assume_extent, inferred_parent_extents
 import ClimaCore.DataLayouts: slab, column
 import ClimaCore.Utilities: half, new, return_type
 import ClimaCore.Utilities: @drop_recursion_limits

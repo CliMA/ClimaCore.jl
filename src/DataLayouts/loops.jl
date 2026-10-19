@@ -4,14 +4,12 @@ end
 
 # Whether a point loop over these indices should run under @simd. This requires
 # an indexable iterator, and it only helps when LLVM can vectorize across
-# many contiguous points, like in the flattened CartesianIndices iterations of
-# CPU loops. GPU scopes override this for their strided index subsets: each GPU
-# thread only iterates a few points, and @simd's loop restructuring adds
-# branches and index arithmetic to every kernel.
+# many contiguous points, like in CPU point loops. GPU scopes override this for
+# their strided index subsets: each GPU thread only iterates a few points, and
+# @simd's loop restructuring adds branches and index arithmetic to every kernel.
 # The dispatch is on the index type rather than on the loop's scope, which would
-# read as the more direct question. Taking a scope here regressed GPU kernels
-# when it was tried, and the scope is a weaker discriminator than it looks:
-# ThisThread is the scope of point loops on both hosts and devices.
+# read as the more direct question, but the scope is a weaker discriminator than
+# it looks: ThisThread is the scope of point loops on both hosts and devices.
 @inline simd_over_indices(indices) = indices isa AbstractArray
 
 @inline is_valid_slice_mask(::NoMask, _) = true
@@ -19,19 +17,21 @@ end
 @inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, _) = false
 
-# The scope is passed so that GPU scopes can override the indices of unmasked
-# point loops with eachindex, whose linear indices avoid the integer divisions
-# required for linear-to-Cartesian conversion. CPU scopes keep the Cartesian
-# each_slice_index for point loops: a view at a linear index wraps its parent in
-# a 1-dimensional ReshapedArray that blocks SIMD (see each_slice_index), which
-# would make single-component CPU broadcasts slow, while GPU threads iterate too
-# few points per thread for SIMD to matter. Although CPU scopes only need one
-# argument, GPU scopes must check every argument for linear indexing support.
-@inline each_maskable_slice_index(_, _, op::O, args...) where {O} =
+# Unmasked point loops use linear indices when every argument supports them,
+# avoiding the integer divisions of linear-to-Cartesian conversion. Static sizes
+# need no divisions when only one axis is longer than 1, and only shifts when
+# every axis is a power of two; loops over other static sizes (e.g., the slabs of
+# spectral operators with 3 quadrature points) are faster with Cartesian indices
+# on CPUs, and they compile to smaller GPU kernels.
+@inline each_maskable_slice_index(_, op::O, args...) where {O} =
     each_slice_index(op, first(args))
-@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(column), args...) =
+@inline each_maskable_slice_index(::NoMask, ::typeof(view), args...) =
+    has_inferred_size(first(args)) && !has_one_inferred_axis(first(args)) &&
+    !unrolled_all(ispow2, inferred_size(first(args))) ?
+    each_slice_index(view, first(args)) : eachindex(args...)
+@inline each_maskable_slice_index(mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
-@inline each_maskable_slice_index(_, mask::IJHMask, ::typeof(view), args...) =
+@inline each_maskable_slice_index(mask::IJHMask, ::typeof(view), args...) =
     ActivePointIndices{nlevels(first(args))}(mask)
 
 # Every valid mask and slice operator combination has indexable slice indices:
@@ -45,16 +45,16 @@ end
     ::O,
 ) where {M, O} = "$M cannot be applied to $(O.instance) slices"
 
-@inline function maskable_slice_indices(scope, mask, op::O, args...) where {O}
+@inline function maskable_slice_indices(mask, op::O, args...) where {O}
     is_valid_slice_mask(mask, op) || throw_invalid_slice_mask(mask, op)
-    return each_maskable_slice_index(scope, mask, op, args...)
+    return each_maskable_slice_index(mask, op, args...)
 end
 
 @inline subscope_slice_indices(subscope, scope, mask, op::O, args...) where {O} =
     @inbounds subscope_indices(
         subscope,
         scope,
-        maskable_slice_indices(scope, mask, op, args...),
+        maskable_slice_indices(mask, op, args...),
     )
 
 # Number of points in each slice that op generates from arg, measured from the
@@ -252,8 +252,7 @@ end
 # would add a Core.kwcall method and a hidden body method per loop, each
 # re-optimized with the whole loop inlined.
 #
-# Point loops need @simd and an inlined call to f for vectorization (LLVM
-# cannot split a flattened CartesianIndices iterator on its own, and the
+# Point loops need @simd and an inlined call to f for vectorization (the
 # inliner gives up on point closures over large broadcasts); without them they
 # are several times slower than ordinary Array broadcasts. Non-point slices do
 # too much work per slice for vectorization to matter.
@@ -266,7 +265,7 @@ end
     subscope, scope, op::O, f::F, mask, enumerate, args...,
 ) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    scoped_args = unrolled_map(Base.Fix2(reassign, subscope), args)
+    scoped_args = unrolled_map(@inline(arg -> reassign(arg, subscope)), args)
     @simd_if (op == view && simd_over_indices(indices)) for i in index_positions(indices)
         index = @inbounds slice_index(indices, i)
         slices = @inbounds slice_every_arg(op, index, scoped_args...)
@@ -427,11 +426,11 @@ end
 end
 
 # All indices a reduction over arg combines, before division among a
-# DataScope's threads. Unmasked reductions use eachindex: CPU reductions
-# vectorize an order of magnitude better over linear than Cartesian indices.
+# DataScope's threads. Unmasked reductions use eachindex for every size: CPU
+# reductions vectorize an order of magnitude better over linear than Cartesian
+# indices, and GPU reductions over linear indices need no divisions.
 @inline reduced_point_indices(arg, mask) =
-    mask == NoMask() ? eachindex(arg) :
-    maskable_slice_indices(DataScope(arg), mask, view, arg)
+    mask == NoMask() ? eachindex(arg) : maskable_slice_indices(mask, view, arg)
 
 # Reduce all points assigned to this thread with safe_mapreduce (pairwise
 # splitting for logarithmic roundoff, @simd for vectorization); Base's pairwise
@@ -450,7 +449,7 @@ end
 @inline function reduce_points(::ThisThread, op::O, arg; mask, init...) where {O}
     all_indices = reduced_point_indices(arg, mask)
     indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), all_indices)
-    value(index) = @inbounds arg[index]
+    @inline value(index) = @inbounds arg[index]
     isempty(init) &&
         isempty(indices) &&
         !isempty(all_indices) &&
@@ -570,7 +569,8 @@ end
     )
     _foreach_slice(
         view,
-        (index, dest_point) -> (@inbounds dest_point[] = bc_with_axes[index]),
+        (index, dest_point) ->
+            (@inbounds dest_point[] = bc_with_axes[CartesianIndices(dest)[index]]),
         mask,
         Val(true),
         dest,

@@ -626,7 +626,7 @@ Return the `CartesianIndex` corresponding to the linear thread index `tidx` in d
 size `n`, a tuple of lengths along each dimension.
 """
 Base.@propagate_inbounds kernel_indexes(tidx, n::Tuple) =
-    CartesianIndices(map(x -> Base.OneTo(x), n))[tidx]
+    DataLayouts.cartesian_index_from_linear(n, tidx)
 
 """
     valid_range(tidx, n::Int)

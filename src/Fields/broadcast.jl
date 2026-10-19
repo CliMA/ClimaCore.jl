@@ -113,7 +113,10 @@ end
 @inline check_broadcast_space(space, bc::LazyField, only_check_size) =
     only_check_size == Val(false) && !isnothing(bc.axes) ?
     check_subspace(space, bc.axes) :
-    unrolled_foreach(arg -> check_broadcast_space(space, arg, only_check_size), bc.args)
+    unrolled_foreach(
+        @inline(a -> check_broadcast_space(space, a, only_check_size)),
+        bc.args,
+    )
 @inline check_subspace(space, subspace) =
     !isnothing(space) && Spaces.issubspace(subspace, space) ? nothing :
     throw(DimensionMismatch("Fields could not be broadcast to a shared space"))
@@ -129,7 +132,10 @@ end
 end
 
 @inline Base.Broadcast.check_broadcast_axes(space::AbstractSpace, arg, args...) =
-    unrolled_foreach(arg -> check_broadcast_space(space, arg, Val(true)), (arg, args...))
+    unrolled_foreach(
+        @inline(a -> check_broadcast_space(space, a, Val(true))),
+        (arg, args...),
+    )
 
 @inline function Base.Broadcast.instantiate(bc::LazyField)
     isnothing(bc.axes) || Base.Broadcast.check_broadcast_axes(bc.axes, bc.args...)
@@ -206,7 +212,7 @@ end
     bc.style,
     bc.f,
     unrolled_map(
-        arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
+        @inline(a -> a isa MaybeLazyField ? @inline(DataLayouts.reassign(a, scope)) : a),
         bc.args,
     ),
     bc.axes,
@@ -276,10 +282,13 @@ end
 Base.@propagate_inbounds Base.getindex(bc::PointwiseBroadcasted, index::PointIndex) =
     getindex(field_values(bc), index)
 
-# Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
+# Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts, and
+# eachindex to combinations of Fields and DataLayouts (e.g., in foreach_point).
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
-Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
-    eachindex(field_values(arg), unrolled_map(field_values, args)...)
+const FieldOrData = Union{MaybeLazyField, DataLayouts.IndexableData}
+Base.eachindex(arg::FieldOrData, args::FieldOrData...) = eachindex(
+    unrolled_map(a -> a isa MaybeLazyField ? field_values(a) : a, (arg, args...))...,
+)
 
 # Reassign materialized results to the broadcast's scope, since the space is
 # shared by all available threads, but the arguments can have narrower scopes.

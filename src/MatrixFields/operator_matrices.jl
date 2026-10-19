@@ -210,7 +210,7 @@ op_with_matrix_bcs(op) =
 
 # Constructs the `op_matrix .* arg` broadcast expression that applies an operator
 # matrix to `arg`.
-multiply_matrix_broadcasted(style, op_matrix, arg) = Base.Broadcast.Broadcasted(
+@inline multiply_matrix_broadcasted(style, op_matrix, arg) = Base.Broadcast.Broadcasted(
     style,
     MultiplyColumnwiseBandMatrixField(),
     (op_matrix, projected_operand(op_matrix, arg)),
@@ -244,7 +244,7 @@ Operators.operator_broadcasted(style, op::Operators.SetBoundaryOperator, args) =
 # Divergence operators require an additional adjoint on the input and output,
 # respectively. An operator with a SetValue stencil stays a stencil (see
 # `Operators.SetValueC2FOperator`).
-function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
+@inline function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
     Operators.has_setvalue_stencil(op) && return Base.Broadcast.Broadcasted(style, op, args)
     input_space = operator_input_space(op, Operators.return_space(op, args...))
     op_matrix = Base.Broadcast.broadcasted(

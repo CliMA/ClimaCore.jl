@@ -107,28 +107,6 @@ include("cache.jl")
 include("safe_mapreduce.jl")
 
 """
-    cart_ind(n::NTuple, i::Integer)
-
-Return the `CartesianIndex` `CartesianIndices(map(Base.OneTo, n))[i]` for an array
-of size `n` and linear index `i`.
-"""
-Base.@propagate_inbounds cart_ind(n::NTuple, i::Integer) =
-    @inbounds CartesianIndices(map(x -> Base.OneTo(x), n))[i]
-
-"""
-    linear_ind(n::NTuple, ci::CartesianIndex)
-    linear_ind(n::NTuple, t::NTuple)
-
-Return the linear index `LinearIndices(map(Base.OneTo, n))[ci]` for an array of
-size `n` and Cartesian index `ci`. The method for a tuple `t` wraps it in a
-`CartesianIndex` first.
-"""
-Base.@propagate_inbounds linear_ind(n::NTuple, ci::CartesianIndex) =
-    @inbounds LinearIndices(map(x -> Base.OneTo(x), n))[ci]
-Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
-    linear_ind(n, CartesianIndex(loc))
-
-"""
     stable_view(array, indices...)
 
 Return a view of `array` like `view(array, indices...)`, with two modifications
