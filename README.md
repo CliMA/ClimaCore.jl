@@ -22,8 +22,8 @@ The dynamical core (_dycore_) of the CliMA Earth System Model: composable, perfo
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCore.jl/dev/
 
-[version-img]: https://juliahub.com/docs/General/ClimaCore/stable/version.svg
-[version-url]: https://juliahub.com/ui/Packages/General/ClimaCore
+[version-img]: https://img.shields.io/github/v/release/CliMA/ClimaCore.jl
+[version-url]: https://github.com/CliMA/ClimaCore.jl/releases
 
 [license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
 [license-url]: https://github.com/CliMA/ClimaCore.jl/blob/main/LICENSE
