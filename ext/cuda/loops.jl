@@ -1,4 +1,3 @@
-# Only run a fused foreach_slice kernel when every slice has an inferrable size.
 has_inferred_slice_size(op::O, arg) where {O} =
     Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
         slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
@@ -6,6 +5,9 @@ has_inferred_slice_size(op::O, arg) where {O} =
     end
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
+
+# Only run a fused foreach_slice kernel when every slice has an inferrable size.
+# Also, avoid launching fused loops on MPI ranks that do not own any elements.
 @inline DataLayouts._foreach_slice(
     scope::ThisHost,
     op::O,
@@ -16,12 +18,13 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 ) where {O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
-    else
+    elseif !isempty(DataLayouts.each_slice_index(op, first(args)))
         check_device_assumptions()
+        subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
         function kernel_function(compact_kernel_args...)
             kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
             DataLayouts.scoped_slice_loop(
-                DataLayouts.slice_subscope(ThisKernel(), op, kernel_args...),
+                subscope,
                 ThisKernel(),
                 op,
                 f,
@@ -31,14 +34,8 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
             )
         end
 
-        # A rank can own no elements; there are then no slices to launch
-        # over, and num_slice_points cannot slice an empty layout.
-        isempty(DataLayouts.each_slice_index(op, first(args))) && return
-
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
-        subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
-        compact_args = Grids.toggle_compact_args(args...)
         if subscope isa ThisSubBlock
             # Each sub-block gets one slice. The block size is capped at the
             # value that sizes the sub-blocks' shared memory (see
@@ -46,7 +43,7 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
             # partially populated sub-block skips its missing threads' points
             # (see the whole subscopes invariant in subscope_launch_threads).
             max_slices = length(DataLayouts.each_slice_index(op, first(args)))
-            check_slice_count(max_slices)
+            check_index_count(max_slices)
             subblock_threads = Int(DataLayouts.num_threads(subscope))
             max_block_threads = DataLayouts.subscope_launch_threads(
                 subscope,
@@ -61,17 +58,11 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
         else
             # Extra threads run empty loops, so max_points isn't a strict limit.
             max_points = maximum(length, args)
-            check_slice_count(max_points)
+            check_index_count(max_points)
             config = kernel -> launch_configuration(kernel, max_points; strict = false)
         end
-        auto_launch!(kernel_function, compact_args; config)
+        auto_launch!(kernel_function, Grids.toggle_compact_args(args...); config)
     end
-
-# Each thread steps through its indices in UInt32 by adding the thread count, which can be
-# as large as the index count, so half of the UInt32 range is left for the step.
-check_slice_count(n) =
-    2 * n <= typemax(UInt32) ||
-    throw(ArgumentError("GPU loops support at most 2^31 - 1 slice views"))
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))

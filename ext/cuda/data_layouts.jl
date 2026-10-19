@@ -5,6 +5,15 @@ import ClimaComms
 import ClimaCore: DataLayouts
 using UnrolledUtilities
 
+# Kernels use UInt32 indices, but leave half the available index range unused.
+# Threads of a loop step through their indices by adding the thread count, which
+# can be as large as the index count, so each must fit in half the UInt32 range.
+# Also, 32-bit array offsets can be sign-extended (see LLVM.jl's pointerref), so
+# they must fit in half the UInt32 range to remain unchanged.
+check_index_count(n) =
+    2 * n <= typemax(UInt32) ||
+    throw(ArgumentError("GPU kernels support at most 2^31 - 1 array elements or slices"))
+
 include("scopes.jl")
 include("loops.jl")
 include("data_layouts_threadblock.jl")
@@ -41,66 +50,22 @@ DataLayouts.DataScope(
         return Int(array.dynamic_extents[count(r -> r <= d && iszero(E[r]), R)])
     end
 
-# The search for d runs over type-parameter constants, so it constant-folds to
-# either 0 or a single tuple field access (Base.findfirst's recursion may not fold).
-@inline function parent_offset(
-    array::CompactDeviceView{<:Any, <:Any, <:Any, R},
-    ::Val{d},
-) where {R, d}
-    position = unrolled_findfirst(==(d), R)
-    return isnothing(position) ? 0 : Int(array.offsets[position])
+# Index into the parent array that corresponds to an index into the view, shifted by the
+# stored offset along each restricted dimension (generated, so that the position of each
+# dimension in R is found when the method is generated, rather than by constant folding).
+@generated function parent_index(
+    array::CompactDeviceView{<:Any, N, <:Any, R},
+    index::Tuple,
+) where {N, R}
+    shifted(d) =
+        d in R ? :(index[$d] % UInt32 + array.offsets[$(findfirst(==(d), R))]) :
+        :(index[$d] % UInt32)
+    return :(Base.@_propagate_inbounds_meta; ($(map(shifted, 1:N)...),))
 end
-
-@inline parent_index_dim(array::CompactDeviceView, idx::Integer, ::Val{d}) where {d} =
-    idx % UInt32 + parent_offset(array, Val(d)) % UInt32
-
-@inline parent_index_dim(
-    array::CompactDeviceView,
-    r::AbstractUnitRange,
-    ::Val{d},
-) where {d} =
-    (first(r) + parent_offset(array, Val(d))):(last(r) + parent_offset(array, Val(d)))
-
-@inline parent_index_dim(
-    array::CompactDeviceView{<:Any, <:Any, <:Any, R},
-    s::Base.Slice,
-    ::Val{d},
-) where {R, d} =
-    d in R ?
-    ((first(s) + parent_offset(array, Val(d))):(last(s) + parent_offset(array, Val(d)))) : s
-
-@inline parent_index_dim(
-    array::CompactDeviceView{<:Any, <:Any, <:Any, R},
-    ::Colon,
-    ::Val{d},
-) where {R, d} =
-    d in R ?
-    ((1 + parent_offset(array, Val(d))):(size(array, d) + parent_offset(array, Val(d)))) :
-    (:)
-
-# Index into the parent array that corresponds to an index into the view,
-# shifted by the stored offset along each restricted dimension
-# (generated, since a Val of ntuple's index only folds under constant propagation).
-@generated parent_index(array::CompactDeviceView{<:Any, N}, index::Tuple) where {N} =
-    :(Base.@_propagate_inbounds_meta;
-    Base.Cartesian.@ntuple $N d -> parent_index_dim(array, index[d], Val(d)))
 
 # Linear parent index of a Cartesian index into the view, in 32 bits (see DeviceArray).
-@inline function parent_linear_index(
-    array::CompactDeviceView{<:Any, N},
-    index::Tuple,
-) where {N}
-    parent_dims = size(parent(array))
-    parent_idx = parent_index(array, index)
-    return Int(
-        unrolled_reduce(
-            (linear, d) ->
-                linear * (parent_dims[d] % UInt32) + (parent_idx[d] % UInt32 - UInt32(1)),
-            ntuple(d -> N + 1 - d, Val(N));
-            init = UInt32(0),
-        ),
-    ) + 1
-end
+@inline parent_linear_index(array::CompactDeviceView, index::Tuple) =
+    first(last(Utilities.linear_index_and_stride(UInt32, array, index, Val(nothing))))
 
 Base.@propagate_inbounds function Base.getindex(
     array::CompactDeviceView{<:Any, N},
@@ -110,32 +75,19 @@ Base.@propagate_inbounds function Base.getindex(
     return @inbounds parent(array)[parent_linear_index(array, index)]
 end
 
-Base.@propagate_inbounds function Base.getindex(
-    array::CompactDeviceView{<:Any, N},
-    index::CartesianIndex{N},
-) where {N}
-    @boundscheck checkbounds(array, index)
-    return @inbounds parent(array)[parent_linear_index(array, Tuple(index))]
-end
-
-@inline linear_parent_stride(
-    array::CompactDeviceView{<:Any, <:Any, <:Any, R, K},
-) where {R, K} =
-    isone(K) ? prod(ntuple(Base.Fix1(size, array), Val(first(R) - 1))) : 1
-
 @inline linear_parent_index(
     array::CompactDeviceView{<:Any, <:Any, <:Any, R, K},
     index::Integer,
 ) where {R, K} =
     if iszero(K)
         index
-    elseif isone(K)
+    elseif IndexStyle(array) == IndexLinear()
         # In 32 bits: a 64-bit division by the stride takes many emulated GPU instructions.
-        stride = linear_parent_stride(array) % UInt32
+        stride = prod(ntuple(Base.Fix1(size, array), Val(first(R) - 1))) % UInt32
         Nf = size(parent(array), first(R)) % UInt32
         f0 = first(array.offsets) % UInt32
         offset = (index - 1) % UInt32
-        Int(offset + (f0 + (offset ÷ stride) * (Nf - UInt32(1))) * stride) + 1
+        offset + (f0 + (offset ÷ stride) * (Nf - UInt32(1))) * stride + UInt32(1)
     else
         cart_idx =
             DataLayouts.single_axis_cartesian_index(CartesianIndices(size(array)), index)
@@ -160,16 +112,6 @@ Base.@propagate_inbounds function Base.setindex!(
 end
 
 Base.@propagate_inbounds function Base.setindex!(
-    array::CompactDeviceView{<:Any, N},
-    value,
-    index::CartesianIndex{N},
-) where {N}
-    @boundscheck checkbounds(array, index)
-    @inbounds parent(array)[parent_linear_index(array, Tuple(index))] = value
-    return array
-end
-
-Base.@propagate_inbounds function Base.setindex!(
     array::CompactDeviceView,
     value,
     index::Integer,
@@ -186,13 +128,6 @@ Base.IndexStyle(::Type{<:CompactDeviceView{<:Any, <:Any, E, R, 1}}) where {E, R}
     isone(E[first(R)]) ? IndexLinear() : IndexCartesian()
 Base.IndexStyle(::Type{<:CompactDeviceView}) = IndexCartesian()
 
-Base.@propagate_inbounds function Base.view(
-    array::CompactDeviceView{<:Any, N},
-    indices::Vararg{Any, N},
-) where {N}
-    return @inbounds view(parent(array), parent_index(array, indices)...)
-end
-
 # Index types generated by stable_view for unrestricted and restricted
 # dimensions of the parent array in a DataLayout
 const ViewDimIndex = Union{
@@ -201,27 +136,14 @@ const ViewDimIndex = Union{
     UnitRange{<:Integer},
 }
 
-# Extent of every parent array dimension that is available from a DataLayout's
-# type, with 0 for dimensions whose extents are only available at runtime
-@inline inferred_parent_extents(data, array) = DataLayouts.add_f_dim(
-    map(extent -> something(extent, 0), DataLayouts.inferred_size(data)),
-    DataLayouts.num_basetypes(eltype(array), eltype(data)),
-    Val(DataLayouts.f_dim(data)),
-)
-
-@inline assume_extent(extent, array_extent) =
-    iszero(extent) || LLVM.Interop.assume(array_extent == extent)
-
-# A kernel reads the extents of a layout's device array at run time, because the
-# layout's parent size check ran on the host (when Adapt rebuilt the layout for
-# the launch). Assuming the extents that the layout's type fixes lets the
-# compiler fold every offset into constant strides, as on CPUs, where the check
-# is inlined.
+# Kernels inline every call, so every parent access in a kernel assumes the extents
+# fixed by a layout's type (like DataLayouts.reassign, but for all parent accesses).
 @inline function Base.parent(
     data::DataLayouts.VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, <:CUDA.CuDeviceArray},
 ) where {T, Nv, Ni, Nj, Nh, F, S}
     array = getfield(data, :array)
-    unrolled_foreach(assume_extent, inferred_parent_extents(data, array), size(array))
+    extents = DataLayouts.inferred_parent_extents(data, array)
+    unrolled_foreach(DataLayouts.assume_extent, extents, size(array))
     return array
 end
 
@@ -231,7 +153,7 @@ compact_device_view(array, data) = array
     array::SubArray{<:Any, N, <:CUDA.CuDeviceArray, <:NTuple{N, ViewDimIndex}},
     data::DataLayouts.DataLayout,
 ) where {N}
-    extents = inferred_parent_extents(data, array)
+    extents = DataLayouts.inferred_parent_extents(data, array)
     length(extents) == N ||
         throw(DimensionMismatch("DataLayout extents do not match its array"))
     indices = parentindices(array)
@@ -260,54 +182,27 @@ end
 
 function Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLayout)
     array = Adapt.adapt(to, parent(data))
-    length(array isa SubArray ? parent(array) : array) <= typemax(UInt32) ||
-        throw(ArgumentError("GPU arrays support at most 2^32 - 1 elements"))
+    check_index_count(length(array isa SubArray ? parent(array) : array))
     return DataLayouts.rebuild(data, compact_device_view(array, data))
 end
 
 # GPU point index arithmetic is in 32 bits (see adapt_structure above): 64-bit integer ops
-# take several instructions at every point. Points of views are UInt32 DevicePointViews.
+# take several instructions at every point. Point views have UInt32 indices.
 const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
-const DeviceSubArray{N} = SubArray{
-    <:Any,
-    N,
-    <:DeviceArray,
-    <:NTuple{N, Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}},
-}
+const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
-@inline device_index(array::CUDA.CuDeviceArray, index::Tuple) =
-    (array, map(i -> i % UInt32, index))
-@inline function device_index(array::CompactDeviceView, index::Tuple)
+@inline function Utilities.dense_array_and_index(
+    array::CompactDeviceView{<:Any, N, E, R},
+    index,
+) where {N, E, R}
     full_array = parent(array)
-    unrolled_foreach(assume_extent, unrestricted_extents(array), size(full_array))
-    return (full_array, parent_index(array, index))
+    full_extents = ntuple(d -> d in R ? 0 : E[d], Val(N))
+    unrolled_foreach(DataLayouts.assume_extent, full_extents, size(full_array))
+    return Utilities.dense_array_and_index(full_array, parent_index(array, index))
 end
-# The extents of a compact view's parent along the dimensions that the view does
-# not restrict, which are those of the view (see CompactDeviceView).
-@inline unrestricted_extents(::CompactDeviceView{<:Any, N, E, R}) where {N, E, R} =
-    ntuple(d -> d in R ? 0 : E[d], Val(N))
-@inline device_index(array::DeviceSubArray, index::Tuple) = device_index(
-    parent(array),
-    unrolled_map(
-        (i, range) -> i % UInt32 + (first(range) - 1) % UInt32,
-        index,
-        array.indices,
-    ),
-)
 
-@inline function device_offset_and_stride(
-    array::AbstractArray{<:Any, N},
-    index::CartesianIndex,
-    ::Val{F},
-) where {N, F}
-    full_index = isnothing(F) ? Tuple(index) : unrolled_insert(Tuple(index), 1, Val(F))
-    (device_array, device_idx) = device_index(array, full_index)
-    sizes = size(device_array)
-    all_slices = ntuple(Returns(Base.Slice(Base.OneTo(1))), Val(N))
-    offset = DataLayouts.parent_offset(UInt32, device_idx, all_slices, sizes, Val(0))
-    stride = isnothing(F) ? UInt32(1) : DataLayouts.axis_stride(UInt32, sizes, Val(F))
-    return (device_array, (offset + UInt32(1), stride))
-end
+@inline device_offset_and_stride(array, index::CartesianIndex, val_F::Val) =
+    Utilities.linear_index_and_stride(UInt32, array, Tuple(index), val_F)
 @inline function device_offset_and_stride(
     array::CompactDeviceView,
     index::Integer,
@@ -331,62 +226,27 @@ for A in (:(CUDA.CuDeviceArray), :CompactDeviceView, :DeviceSubArray)
         array::$A,
         (index, val_F)::Tuple{CartesianIndex, Val},
     ) = device_offset_and_stride(array, index, val_F)
-    @eval @inline DataLayouts.view_struct(
-        array::$A,
-        ::Type{T},
-        index::CartesianIndex,
-        val_F::Val,
-    ) where {T} = device_point_view(array, T, index, val_F)
 end
+# Points of CuArrays outside of kernels stay Cartesian, so that their views are SubArrays
+# at Cartesian indices (which GPUArrays can broadcast over and copy), rather than SubArrays
+# of ReshapedArrays at StridedRanges.
+DataLayouts.parent_array_and_index_args(
+    array::Union{CUDA.CuArray, Utilities.UnitRangeSubArray{<:CUDA.CuArray}},
+    index_args::Tuple{CartesianIndex, Val},
+) = (array, index_args)
 
-struct DevicePointView{T, Nf, A <: AbstractArray{T}} <: AbstractVector{T}
-    parent::A
-    offset::UInt32 # 1-based
-    stride::UInt32
-end
-Base.parent(view::DevicePointView) = view.parent
-Base.size(::DevicePointView{<:Any, Nf}) where {Nf} = (Nf,)
-Base.IndexStyle(::Type{<:DevicePointView}) = IndexLinear()
-DataLayouts.DataScope(::Type{<:DevicePointView{<:Any, <:Any, A}}) where {A} =
-    DataLayouts.DataScope(A)
-@inline point_index(view::DevicePointView, i::Integer) =
-    view.offset + (i % UInt32 - UInt32(1)) * view.stride
-Base.@propagate_inbounds function Base.getindex(view::DevicePointView, i::Integer)
-    @boundscheck checkbounds(view, i)
-    return @inbounds parent(view)[point_index(view, i)]
-end
-# Unchecked like Base's pointer: CUDA.@atomic (DSS kernels) calls it outside of @inbounds.
-@inline Base.pointer(view::DevicePointView, i::Integer = 1) =
-    pointer(parent(view), Int(point_index(view, i)))
-Base.@propagate_inbounds function Base.setindex!(view::DevicePointView, value, i::Integer)
-    @boundscheck checkbounds(view, i)
-    @inbounds parent(view)[point_index(view, i)] = value
-    return view
-end
-@inline function device_point_view(array, ::Type{T}, index_args...) where {T}
-    Nf = DataLayouts.num_basetypes(eltype(array), T)
-    (device_array, (offset, stride)) = device_offset_and_stride(array, index_args...)
-    return DevicePointView{eltype(array), Nf, typeof(device_array)}(
-        device_array, offset, stride,
-    )
-end
-@inline DataLayouts.view_struct(
+@inline function DataLayouts.view_struct(
     array::DeviceArray,
     ::Type{T},
     index::Integer,
     stride::Integer,
-) where {T} = device_point_view(array, T, index, stride)
-
-@inline DataLayouts.field_offset(
-    array::CompactDeviceView,
-    ::Val{F},
-) where {F} = Int(first(array.offsets))
-
-@inline DataLayouts.is_constant_stride_view_type(
-    ::Type{<:CompactDeviceView{<:Any, <:Any, E, R, <:Any, <:Any, A}},
-    ::Val{F},
-) where {E, R, A, F} =
-    Base.IndexStyle(A) == Base.IndexLinear() && R == (F,) && isone(E[F])
+) where {T}
+    Nf = DataLayouts.num_basetypes(eltype(array), T)
+    (device_array, (offset, stride)) = device_offset_and_stride(array, index, stride)
+    return DataLayouts.PointView{eltype(array), Nf, typeof(device_array), UInt32}(
+        device_array, offset, stride,
+    )
+end
 
 # CUDA 6 splits CUDA.jl into subpackages: GPUArrays is reached through
 # CUDACore, and the RNG whose scalar `rand(rng, T::Type)` needs disambiguating

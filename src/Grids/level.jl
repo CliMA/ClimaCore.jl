@@ -13,7 +13,16 @@ struct LevelGrid{
 } <: AbstractGrid
     full_grid::G
     level::L
+    # Check bounds in constructor, so local geometry reads are always inbounds.
+    function LevelGrid(grid::G, v::L) where {G, L}
+        grid isa ExtrudedFiniteDifferenceGrid && level(level_geometry_args(grid, v)...)
+        return new{G, L}(grid, v)
+    end
 end
+
+level_geometry_args(grid, v::Int) = (local_geometry_data(grid, CellCenter()), v)
+level_geometry_args(grid, v::PlusHalf{Int}) =
+    (local_geometry_data(grid, CellFace()), v + half)
 
 quadrature_style(levelgrid::LevelGrid) = quadrature_style(levelgrid.full_grid)
 
@@ -40,15 +49,10 @@ dss_weights(levelgrid::LevelGrid, _) = dss_weights(levelgrid.full_grid, nothing)
 local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
     local_geometry_type(G)
 
-local_geometry_data(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) = level(
-    local_geometry_data(levelgrid.full_grid, CellCenter()),
-    levelgrid.level,
+local_geometry_data(levelgrid::LevelGrid, ::Nothing) = DataLayouts.slice_arg(
+    level,
+    level_geometry_args(levelgrid.full_grid, levelgrid.level)...,
 )
-local_geometry_data(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
-    level(
-        local_geometry_data(levelgrid.full_grid, CellFace()),
-        levelgrid.level + half,
-    )
 global_geometry(levelgrid::LevelGrid) = global_geometry(levelgrid.full_grid)
 hypsography(levelgrid::LevelGrid) = hypsography(levelgrid.full_grid)
 

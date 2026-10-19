@@ -102,6 +102,8 @@ end
 
 # A similar recursive method takes the place of Base's check_broadcast_shape,
 # with an only_check_size flag used when checking broadcast destination spaces.
+# Its closure is only inlined into the recursion of axes (only_check_size is
+# false), which keeps operator broadcasts over columns fast.
 @inline check_broadcast_space(_, _, _) = nothing
 @inline check_broadcast_space(space, field::Field, ::Val{true}) =
     Base.Broadcast.check_broadcast_axes(
@@ -113,7 +115,12 @@ end
 @inline check_broadcast_space(space, bc::LazyField, only_check_size) =
     only_check_size == Val(false) && !isnothing(bc.axes) ?
     check_subspace(space, bc.axes) :
-    unrolled_foreach(arg -> check_broadcast_space(space, arg, only_check_size), bc.args)
+    unrolled_foreach(
+        only_check_size == Val(false) ?
+        @inline(arg -> check_broadcast_space(space, arg, only_check_size)) :
+        (arg -> check_broadcast_space(space, arg, only_check_size)),
+        bc.args,
+    )
 @inline check_subspace(space, subspace) =
     !isnothing(space) && Spaces.issubspace(subspace, space) ? nothing :
     throw(DimensionMismatch("Fields could not be broadcast to a shared space"))
@@ -129,7 +136,10 @@ end
 end
 
 @inline Base.Broadcast.check_broadcast_axes(space::AbstractSpace, arg, args...) =
-    unrolled_foreach(arg -> check_broadcast_space(space, arg, Val(true)), (arg, args...))
+    unrolled_foreach(
+        @inline(arg -> check_broadcast_space(space, arg, Val(true))),
+        (arg, args...),
+    )
 
 @inline function Base.Broadcast.instantiate(bc::LazyField)
     isnothing(bc.axes) || Base.Broadcast.check_broadcast_axes(bc.axes, bc.args...)
@@ -202,15 +212,13 @@ end
 @inline combine_field_arg_scopes(scope1, scope2) =
     isnothing(scope1) ? scope2 :
     isnothing(scope2) ? scope1 : DataLayouts.DataScope(scope1, scope2)
-@inline DataLayouts.reassign(bc::LazyField, scope) = Broadcast.Broadcasted(
-    bc.style,
-    bc.f,
-    unrolled_map(
-        arg -> arg isa MaybeLazyField ? DataLayouts.reassign(arg, scope) : arg,
-        bc.args,
-    ),
-    bc.axes,
-)
+@inline function DataLayouts.reassign(bc::LazyField, scope)
+    args = unrolled_map(bc.args) do arg
+        @inline
+        arg isa MaybeLazyField ? @inline(DataLayouts.reassign(arg, scope)) : arg
+    end
+    return Broadcast.Broadcasted(bc.style, bc.f, args, bc.axes)
+end
 
 # Duplicate grid pointers in Fields and LazyFields are toggled off before
 # launching a kernel, then toggled back on when the kernel starts executing.
@@ -277,9 +285,14 @@ Base.@propagate_inbounds Base.getindex(bc::PointwiseBroadcasted, index::PointInd
     getindex(field_values(bc), index)
 
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
+const LazyFieldOrData = Union{MaybeLazyField, DataLayouts.IndexableData}
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
-Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
-    eachindex(field_values(arg), unrolled_map(field_values, args)...)
+Base.eachindex(arg::LazyFieldOrData, args::LazyFieldOrData...) = eachindex(
+    unrolled_map(
+        arg -> arg isa MaybeLazyField ? field_values(arg) : arg,
+        (arg, args...),
+    )...,
+)
 
 # Reassign materialized results to the broadcast's scope, since the space is
 # shared by all available threads, but the arguments can have narrower scopes.

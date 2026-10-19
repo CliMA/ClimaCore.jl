@@ -43,6 +43,7 @@ DataScope(::A) where {A <: AbstractArray} = DataScope(A)
 DataScope(::Type{<:Array}) = ThisThreadPool()
 DataScope(::Type{<:StaticArrays.StaticArray}) = ThisThread()
 DataScope(::Type{<:SubArray{<:Any, <:Any, A}}) where {A} = DataScope(A)
+DataScope(::Type{<:PointView{<:Any, <:Any, A}}) where {A} = DataScope(A)
 DataScope(::Type{<:Base.ReshapedArray{<:Any, <:Any, A}}) where {A} = DataScope(A)
 
 # Infer parent types of other AbstractArrays (constant-folding not guaranteed). An array

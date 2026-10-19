@@ -14,7 +14,7 @@ import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities:
     stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
-import ..Utilities: safe_mapreduce
+import ..Utilities: safe_mapreduce, linear_index_and_stride, UnitRangeSubArray
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -208,7 +208,11 @@ no separate `F` axis.
 Assign a new [`DataScope`](@ref) to a [`DataLayout`](@ref), or determine the
 result type of performing such an assignment for a layout of type `D`.
 """
-@inline reassign(data, scope) = reassign(typeof(data), scope)(parent(data))
+@inline function reassign(data, scope)
+    array = parent(data)
+    assume_extents(array, inferred_parent_extents(data, array)) # avoid extra size checks
+    return reassign(typeof(data), scope)(array)
+end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
 
@@ -242,19 +246,22 @@ Base.@propagate_inbounds function rebuild(
     data, array, ::Type{T} = eltype(data); params...,
 ) where {T}
     scope = DataScope(array)
-    scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
-    return layout_constructor(scoped_data, T; params...)(array)
+    D = data isa Type ? data : typeof(data)
+    scoped_D = is_subscope(DataScope(D), scope) ? D : reassign(D, scope)
+    return layout_constructor(scoped_D, T; params...)(array)
 end
 
-# rebuild for a valid slice of data's parent, bypassing the constructor (see slice_arg).
-# Unlike @inbounds rebuild, this leaves no dead check_parent in the typed IR of the slice
-# (Julia 1.10 keeps checks that @inbounds makes dead), which slows the compilation of
-# column broadcasts on CPUs.
-@inline function unchecked_rebuild(data, array; params...)
-    scope = DataScope(array)
-    scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
-    return layout_constructor(scoped_data; params...){typeof(array)}(array)
-end
+# rebuild in data's scope for a valid array and element type (e.g., a slice of its parent,
+# see slice_arg), without the checks that slow compilation even when @inbounds elides them.
+@inline unchecked_rebuild(data, ::Type{A}, ::Type{T} = eltype(data)) where {A, T} =
+    unchecked_rebuild(data, A(parent(data)), T)
+@inline unchecked_rebuild(data, array, ::Type{T} = eltype(data); kw...) where {T} =
+    layout_constructor(data, T; kw...){typeof(array)}(array)
+
+# Dispatch calls that can match multiple methods (e.g., in grid construction, where
+# layout sizes cannot be inferred) at run time, rather than inferring every method.
+Base.Experimental.@max_methods 1 function rebuild end
+Base.Experimental.@max_methods 1 function unchecked_rebuild end
 
 Adapt.adapt_structure(to, data::DataLayout) = rebuild(data, Adapt.adapt(to, parent(data)))
 
@@ -279,6 +286,39 @@ ClimaComms.gather(::ClimaComms.SingletonCommsContext, data::DataLayout) = data
 @inline drop_f_dim(dims, ::Val{F}) where {F} =
     isnothing(F) ? dims : ntuple(d -> d < F ? dims[d] : dims[d + 1], Val(length(dims) - 1))
 
+# Checked constructors ensure that parent arrays have their layouts' canonical sizes, so
+# the extents fixed by a layout's type can be assumed, and LLVM folds them into constant
+# strides shared by all layouts of the same type. Slice loops assume them once, when they
+# reassign their arguments, since assumptions at point accesses add to inlining costs.
+@inline assume_extent(extent, array_extent) =
+    iszero(extent) || LLVM.Interop.assume(array_extent == extent)
+
+# Assume the nonzero extents of the dense array that holds an array's entries. Slices span
+# their parents' dimensions, while unit ranges of views say nothing about their parents.
+# An Array's sizes are all loaded for an assumption, since LLVM (in Julia 1.10) cannot hoist
+# loads of its third and later sizes out of branches (e.g., stencils near boundaries). The
+# extents are assumed first, so that LLVM also folds them into the product, whose partial
+# products index computations can reuse (unfolded, they keep repeated reads from merging).
+@inline function assume_extents(array::DenseArray, extents)
+    unrolled_foreach(assume_extent, extents, size(array))
+    array isa Array && LLVM.Interop.assume(prod(size(array)) == length(array))
+end
+@inline function assume_extents(array::UnitRangeSubArray, extents)
+    parent_extents = unrolled_map(extents, array.indices) do extent, index
+        @inline
+        index isa Base.Slice ? extent : 0
+    end
+    assume_extents(parent(array), parent_extents)
+end
+@inline assume_extents(_, _) = nothing
+
+# Parent array extents fixed by a layout's type, with 0 for extents that can't be inferred
+@inline inferred_parent_extents(data, array) = add_f_dim(
+    unrolled_map(extent -> something(extent, 0), inferred_size(data)),
+    num_basetypes(eltype(array), eltype(data)),
+    Val(f_dim(data)),
+)
+
 function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
     return similar_layout(data, T, B, maybe_dims...)
@@ -293,8 +333,9 @@ function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
         has_inferred_size(data) ?
         scoped_static_array(DataScope(data), B, array_size) :
         scoped_array(DataScope(data), B, array_size)
-    # The new array has the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, array, T)
+    # Without dims, the new array has the layout's canonical size.
+    return isempty(maybe_dims) ? unchecked_rebuild(data, array, T) :
+           rebuild(data, array, T)
 end
 
 Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
@@ -339,8 +380,8 @@ end
     is_valid_basetype(eltype(parent(data)), fieldtype(T, i)) ||
         return Broadcast.broadcasted(Base.Fix2(getfield, i), data)
     array = @inbounds struct_field_view(parent(data), T, Val(i), Val(f_dim(data)))
-    # A field view keeps the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, array, fieldtype(T, i))
+    # A field view keeps the layout's canonical size, and its base type is valid.
+    return unchecked_rebuild(data, array, fieldtype(T, i))
 end
 
 @inline Base.getproperty(data::DataLayout, i::Integer) = property_view(data, Val(i))
@@ -358,8 +399,7 @@ end
 # Check that a parent array has the canonical size for its layout. Arrays with
 # other shapes must be explicitly reshaped before they are wrapped in layouts.
 # The check is a bounds check, skipped under @inbounds where the array has the
-# canonical size by construction (which keeps it out of GPU kernels); it is inlined,
-# so that CPU point loops know the layout's static extents and vectorize.
+# canonical size by construction (which keeps it out of GPU kernels).
 Base.@propagate_inbounds function check_parent(array, array_size...)
     @boundscheck size(array) == array_size || throw_parent_size_mismatch()
     return array
@@ -542,15 +582,15 @@ nelems(data::VIH1{<:Any, <:Any, Ni}) where {Ni} = size(data, 2) ÷ Ni
 
 @propagate_inbounds function level_view(data::VIH1, v)
     array = stable_view(parent(data), v:v, :)
-    return @inbounds rebuild(data, array; Nv = 1)
+    return unchecked_rebuild(data, array; Nv = 1)
 end
 @propagate_inbounds function slab_view(data::VIH1{<:Any, <:Any, Ni}, v, h) where {Ni}
     array = stable_view(parent(data), v:v, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (1:Ni))
-    return @inbounds rebuild(data, array; Nv = 1, Nh = 1)
+    return unchecked_rebuild(data, array; Nv = 1, Nh = 1)
 end
 @propagate_inbounds function column_view(data::VIH1{<:Any, <:Any, Ni}, i, _, h) where {Ni}
     array = stable_view(parent(data), :, Ni * mod(h - 1, size(data, 2) ÷ Ni) .+ (i:i))
-    return @inbounds rebuild(data, array; Ni = 1, Nh = 1)
+    return unchecked_rebuild(data, array; Ni = 1, Nh = 1)
 end
 
 """
@@ -595,7 +635,7 @@ nelems(data::IH1JH2{<:Any, Ni, Nj}) where {Ni, Nj} = length(data) ÷ (Ni * Nj)
 @propagate_inbounds function slab_view(data::IH1JH2{<:Any, Ni, Nj}, _, h) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (1:Ni), Nj * (h2 - 1) .+ (1:Nj))
-    return @inbounds rebuild(data, array; Nh = 1)
+    return unchecked_rebuild(data, array; Nh = 1)
 end
 @propagate_inbounds function column_view(
     data::IH1JH2{<:Any, Ni, Nj},
@@ -605,7 +645,7 @@ end
 ) where {Ni, Nj}
     (h2, h1) = fldmod(h - 1, size(data, 1) ÷ Ni) .+ 1
     array = stable_view(parent(data), Ni * (h1 - 1) .+ (i:i), Nj * (h2 - 1) .+ (j:j))
-    return @inbounds rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
+    return unchecked_rebuild(data, array; Ni = 1, Nj = 1, Nh = 1)
 end
 
 include("broadcast.jl")

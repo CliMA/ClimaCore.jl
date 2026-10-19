@@ -4,6 +4,33 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
+  whenever every argument supports them, except over layouts whose sizes are
+  all static, with several axes longer than 1 and an axis whose length is not a
+  power of two. With `enumerate = Val(true)`, CPU loops then pass `Int` indices
+  instead of `CartesianIndex`es. On CPUs, fills of layouts with dynamic sizes
+  are up to 8x faster, and simple pointwise broadcasts up to about 4x faster.
+- ![][badge-🚀performance] Masked GPU point loops, limiter kernels and DG
+  kernels use 32-bit index arithmetic, with no 64-bit divisions.
+- ![][badge-🚀performance] Points of CPU `Array`s are read and written at one
+  linear index and stride through `DataLayouts.PointView`, like points of GPU
+  kernel arrays, instead of through `SubArray`s.
+- ![][badge-🚀performance] LLVM assumes that parent arrays have the extents
+  fixed by their layout's type (`DataLayouts.assume_extents`), so CPU
+  broadcasts keep constant strides even when `materialize!` is compiled
+  separately from their construction, and fills of layouts whose sizes are all
+  static are up to 34x faster on CPUs.
+- ![][badge-🚀performance] Operator broadcasts compile with less work: internal
+  rebuilds that are valid by construction do not compile array checks, finite
+  difference applications skip two forwarding layers, stencil point updates are
+  inferred without constant propagation, and MatrixFields band products
+  evaluate their rows directly.
+- ![][badge-🚀performance] `inv` of 2-tensors is inlined, speeding up CPU
+  stencils that convert orthonormal vectors (e.g., `WVector`s).
+- ![][badge-🐛bugfix] GPU kernels support at most 2^31 - 1 elements per array
+  (not 2^32 - 1), the same limit as for slices per `DataLayouts.foreach_slice`:
+  `LLVM.jl` can sign-extend 32-bit indices, so they should not use the sign bit.
+
 v1.0.5
 -------
 
