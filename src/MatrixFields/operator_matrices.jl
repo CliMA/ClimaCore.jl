@@ -796,7 +796,8 @@ end
 
 # The interior stencils of the operators that stay stencils with a SetValue (see
 # `Operators.SetValueC2FOperator`): their matrix rows times their arguments, computed as in
-# a matrix product (see `multiply_matrix_row`, `projected_operand` and `adjoint_matrix_arg`).
+# a matrix product (see `MultiplyColumnwiseBandMatrixField`, `projected_operand` and
+# `adjoint_matrix_arg`).
 Base.@propagate_inbounds Operators.stencil_interior(
     op::Union{Operators.GradientC2F, Operators.DivergenceC2F, Operators.CurlC2F},
     space,

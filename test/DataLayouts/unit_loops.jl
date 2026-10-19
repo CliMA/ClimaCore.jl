@@ -538,6 +538,13 @@ end
         @test DataLayouts.DataScope(frozen_point) == FakeGroup{16}()
         @test frozen_point[] == (v, 4v)
     end
+
+    # Registers are rebuilt with the same checks as other arrays.
+    @test DataLayouts.DataScope(reinterpret(NTuple{2, Float64}, registers)) ==
+          FakeGroup{16}()
+    @test_throws DimensionMismatch reinterpret(Float64, registers)
+    @test_throws DimensionMismatch reinterpret(Float64, view(registers, 1))
+    @test_throws ArgumentError reinterpret(Tuple{Int8, Int8}, registers)
 end
 
 # A launch unit holding only part of a subscope silently skips some points; see

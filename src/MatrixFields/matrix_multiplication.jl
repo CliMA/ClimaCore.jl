@@ -344,69 +344,55 @@ Operators.reads_without_branching(::MultiplyColumnwiseBandMatrixField) = true
     Operators.is_valid_column_index(column_space, Operators.right_idx(space) + ud)
 
 # Every row of a product spans the full bands of its factors, with zeros outside of the
-# matrices, so rows need no boundary stencils; the second argument is read at every offset
-# (clamped to the column) and zeroed afterwards, keeping reads branch-free.
-Base.@propagate_inbounds Operators.stencil_value(
+# matrices, so rows need no boundary stencils; the second argument is read at every offset,
+# at an index clamped into the column (a branch would serialize GPU reads), and zeroed
+# afterwards, keeping reads branch-free.
+Base.@propagate_inbounds function Operators.stencil_value(
     ::MultiplyColumnwiseBandMatrixField,
     space,
     idx,
     matrix1,
     arg,
-) = multiply_matrix_row(space, idx, matrix1, arg, eltype(arg))
-
-# The value of arg at band entry d of the row at idx, read at an index clamped into the
-# column (a branch would serialize GPU reads), and whether the entry lies in the column.
-Base.@propagate_inbounds function clamped_band_entry(
-    arg,
-    space,
-    column_space,
-    idx,
-    d,
-    all_in_column,
 )
-    in_column = all_in_column || Operators.is_valid_column_index(column_space, idx + d)
-    read_idx =
-        all_in_column ? idx + d : Operators.clamped_column_index(column_space, idx + d)
-    return (Operators.column_value(arg, space, read_idx), in_column)
-end
-
-# Row idx of a matrix-matrix product, always inlined (a call per point recomputes offsets).
-Base.@propagate_inbounds function multiply_matrix_row(
-    space,
-    idx,
-    matrix1,
-    matrix2,
-    ::Type{<:BandMatrixRow},
-)
-    prod_type =
-        Operators.return_eltype(MultiplyColumnwiseBandMatrixField(), matrix1, matrix2)
+    is_matrix_product = eltype(arg) <: BandMatrixRow
+    (idx, matrix1) =
+        is_matrix_product ? (idx, matrix1) : replicated_product_row(space, idx, matrix1)
+    prod_type = Operators.return_eltype(MultiplyColumnwiseBandMatrixField(), matrix1, arg)
     column_space1 = column_axes(matrix1, space)
-    column_space2 = column_axes(matrix2, column_space1)
     (ld1, ud1) = outer_diagonals(eltype(matrix1))
-    (ld2, ud2) = outer_diagonals(eltype(matrix2))
-    (prod_ld, prod_ud) = outer_diagonals(prod_type)
     all_in_column1 = band_in_column(space, column_space1, ld1, ud1)
+    matrix1_row = Operators.column_value(matrix1, space, idx)
+    # Each entry's row of arg and whether it is in the column, or its product for vectors.
+    band_values = unrolled_map((ld1:ud1...,)) do d
+        Base.@_propagate_inbounds_meta
+        in_column1 =
+            all_in_column1 || Operators.is_valid_column_index(column_space1, idx + d)
+        read_idx =
+            all_in_column1 ? idx + d :
+            Operators.clamped_column_index(column_space1, idx + d)
+        value2 = Operators.column_value(arg, space, read_idx)
+        # Multiply before zeroing entries outside of the column (matrix1 can have NaNs).
+        value2 isa BandMatrixRow ? (value2, in_column1) :
+        ifelse(in_column1, matrix1_row[d] * value2, zero(prod_type))
+    end
+    is_matrix_product || return unrolled_reduce(+, band_values; init = zero(prod_type))
+    column_space2 = column_axes(arg, column_space1)
+    (ld2, ud2) = outer_diagonals(eltype(arg))
+    (prod_ld, prod_ud) = outer_diagonals(prod_type)
 
     # Read each row into registers, with zeros for entries outside the matrices (every entry
     # of the rows of matrix2 contributes to some entry of the product).
-    matrix1_row = Operators.column_value(matrix1, space, idx)
-    zero_entry1 = zero(eltype(eltype(matrix1)))
-    matrix1_values = unrolled_map((ld1:ud1...,)) do d
-        in_column1 =
-            all_in_column1 | Operators.is_valid_column_index(column_space1, idx + d)
-        ifelse(in_column1, matrix1_row[d], zero_entry1)
+    matrix1_values = unrolled_map(band_values, (ld1:ud1...,)) do (_, in_column1), d
+        ifelse(in_column1, matrix1_row[d], zero(eltype(eltype(matrix1))))
     end
-    matrix2_rows = unrolled_map((ld1:ud1...,)) do d
-        Base.@_propagate_inbounds_meta
-        (row, in_column1) =
-            clamped_band_entry(matrix2, space, column_space1, idx, d, all_in_column1)
-        ifelse(in_column1, row, zero(eltype(matrix2)))
+    matrix2_rows = unrolled_map(band_values) do (row, in_column1)
+        ifelse(in_column1, row, zero(eltype(arg)))
     end
 
     # Set out-of-bounds values to zero after computing them, keeping the product branch-free.
     zero_value = zero(eltype(prod_type))
     all_in_column2 = band_in_column(space, column_space2, prod_ld, prod_ud)
-    prod_entries = map((prod_ld:prod_ud...,)) do prod_d
+    prod_entries = unrolled_map((prod_ld:prod_ud...,)) do prod_d
         Base.@_propagate_inbounds_meta
         prod_entry = zero_value
         for d in max(ld1, prod_d - ud2):min(ud1, prod_d - ld2)
@@ -419,24 +405,4 @@ Base.@propagate_inbounds function multiply_matrix_row(
         ifelse(in_column2, prod_entry, zero_value)
     end
     return BandMatrixRow{prod_ld}(prod_entries...)
-end
-
-# Row with index idx of a matrix-vector product.
-Base.@propagate_inbounds function multiply_matrix_row(space, idx, matrix1, vector, ::Type)
-    (idx, matrix1) = replicated_product_row(space, idx, matrix1)
-    prod_type =
-        Operators.return_eltype(MultiplyColumnwiseBandMatrixField(), matrix1, vector)
-    column_space1 = column_axes(matrix1, space)
-    (ld1, ud1) = outer_diagonals(eltype(matrix1))
-    all_in_column = band_in_column(space, column_space1, ld1, ud1)
-    matrix1_row = Operators.column_value(matrix1, space, idx)
-    zero_value = zero(prod_type)
-    prod_terms = unrolled_map((ld1:ud1...,)) do d
-        Base.@_propagate_inbounds_meta
-        (value2, in_column) =
-            clamped_band_entry(vector, space, column_space1, idx, d, all_in_column)
-        # Multiply before zeroing entries outside of the column (matrix1 can have NaNs).
-        ifelse(in_column, matrix1_row[d] * value2, zero_value)
-    end
-    return unrolled_reduce(+, prod_terms; init = zero_value)
 end

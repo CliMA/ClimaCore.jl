@@ -156,8 +156,8 @@ _named_state_function(g, ::NamedTuple{K}) where {K} = _NamedStateFunction{K}(g)
 # WJ-weighted element mean of one slab field: a scalar, or elementwise for a
 # flat NamedTuple of scalars (`_tmap` has no methods for vectors or nesting).
 @inline function _slab_mean(s, sWJ, Wtot, Ni, Nj)
-    acc = _tmap(zero, s[1, 1, 1, 1])
-    for j in 1:Nj, i in 1:Ni
+    acc = _tmap(zero, @inbounds s[1, 1, 1, 1])
+    @inbounds for j in 1:Nj, i in 1:Ni
         w = sWJ[1, i, j, 1]
         acc = _tmap((a, x) -> muladd(x, w, a), acc, s[1, i, j, 1])
     end
@@ -169,8 +169,8 @@ end
 # field has no floor.
 @inline _θ_linear(::Type{FT}, s, m, ::Nothing, Ni, Nj) where {FT} = nothing
 @inline function _θ_linear(::Type{FT}, s, m, floor, Ni, Nj) where {FT}
-    xmin = s[1, 1, 1, 1]
-    for j in 1:Nj, i in 1:Ni
+    xmin = @inbounds s[1, 1, 1, 1]
+    @inbounds for j in 1:Nj, i in 1:Ni
         xmin = _tmap(min, xmin, s[1, i, j, 1])
     end
     fmin = FT(floor)
@@ -182,7 +182,7 @@ end
 @inline _scale_slab!(s, m, ::Nothing, Ni, Nj) = nothing
 @inline function _scale_slab!(s, m, θ, Ni, Nj)
     _tmin(θ) < 1 || return nothing
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         s[1, i, j, 1] = _θmix(θ, s[1, i, j, 1], m)
     end
     return nothing
@@ -208,7 +208,7 @@ end
 # Total WJ of one slab.
 @inline function _slab_total(::Type{FT}, sWJ, Ni, Nj) where {FT}
     Wtot = zero(FT)
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         Wtot += sWJ[1, i, j, 1]
     end
     return Wtot
@@ -241,8 +241,10 @@ end
 
 # State and aux values at node (i, j); a function, since a closure over the
 # loop's running indices would box them.
-@inline _node_values(slabs, saux, i, j) =
-    (map(s -> s[1, i, j, 1], slabs), saux === nothing ? nothing : saux[1, i, j, 1])
+@inline _node_values(slabs, saux, i, j) = (
+    map(s -> @inbounds(s[1, i, j, 1]), slabs),
+    saux === nothing ? nothing : @inbounds(saux[1, i, j, 1]),
+)
 
 # Min over the slab nodes of the bisected θ for `gfn ≥ g_min`, capped at θ_a;
 # for Dual states, the derivative comes from the node that sets the min.

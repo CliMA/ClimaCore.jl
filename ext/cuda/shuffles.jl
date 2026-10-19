@@ -52,6 +52,8 @@ end
 
 @inline DataLayouts.rebuild(data, array::ShuffledArray, ::Type{T}; params...) where {T} =
     DataLayouts.layout_constructor(data, T; params...)(array)
+@inline DataLayouts.unchecked_rebuild(data, a::ShuffledArray, ::Type{T}; kw...) where {T} =
+    DataLayouts.layout_constructor(data, T; kw...){typeof(a)}(a)
 
 Operators.allows_branching(
     ::Fields.Field{<:DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:Any, <:ShuffledArray}},
@@ -68,7 +70,7 @@ end
 # A thread reads its own points' values from its registers, without shuffles.
 @inline Operators.own_values(
     data::DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:Any, <:ShuffledArray},
-) = DataLayouts.rebuild(data, own_registers(parent(data)), eltype(data))
+) = DataLayouts.unchecked_rebuild(data, own_registers(parent(data)), eltype(data))
 @inline own_registers(
     array::ShuffledArray{<:Any, <:Any, Sz, F, Stride},
 ) where {Sz, F, Stride} =

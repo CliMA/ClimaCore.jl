@@ -46,9 +46,10 @@ end
 
 # A RegisterArray presents exactly the data of the layout it was allocated for,
 # so rebuilding a layout around one keeps the layout's own scope.
-Base.@propagate_inbounds rebuild(
-    data, array::RegisterArray, ::Type{T}; params...,
-) where {T} = layout_constructor(data, T; params...)(array)
+@propagate_inbounds rebuild(data, array::RegisterArray, ::Type{T}; params...) where {T} =
+    layout_constructor(data, T; params...)(array)
+@inline unchecked_rebuild(data, array::RegisterArray, ::Type{T}; params...) where {T} =
+    layout_constructor(data, T; params...){typeof(array)}(array)
 
 # A field's components are a contiguous block of the storage (see register_index), so its
 # view is a RegisterArray over that block (writable when the storage is an MArray), which
@@ -162,9 +163,10 @@ end
     array = StaticArrays.SArray(parent(view))
     return RegisterPointView{T, Nf, N, F, typeof(array)}(array, view.index)
 end
-Base.@propagate_inbounds rebuild(
-    data, view::RegisterPointView, ::Type{T}; params...,
-) where {T} = layout_constructor(data, T; params...)(view)
+@propagate_inbounds rebuild(data, view::RegisterPointView, ::Type{T}; params...) where {T} =
+    layout_constructor(data, T; params...)(view)
+@inline unchecked_rebuild(data, view::RegisterPointView, ::Type{T}; params...) where {T} =
+    layout_constructor(data, T; params...){typeof(view)}(view)
 
 """
     stored_in_scope_registers(data)
@@ -224,6 +226,6 @@ end
 ) where {T, B, F, Stride}
     (; Nf, Np) = register_array_params(array_size, Val(F))
     storage = StaticArrays.MArray{Tuple{cld(Np, Stride) * Nf}, B}(undef)
-    # The register array has the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
+    # The register array has the layout's canonical size and a valid base type.
+    return unchecked_rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
 end

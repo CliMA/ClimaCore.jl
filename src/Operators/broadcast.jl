@@ -325,7 +325,7 @@ without full inlining.
 @inline constant_field(arg) =
     has_private_buffers(arg) || DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
     Field(
-        DataLayouts.rebuild(Fields.field_values(arg), StaticArrays.SArray),
+        DataLayouts.unchecked_rebuild(Fields.field_values(arg), StaticArrays.SArray),
         Fields.shared_space(arg),
     ) :
     arg

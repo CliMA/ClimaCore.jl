@@ -411,7 +411,7 @@ end
 # require it to be wrapped in a Core.Box
 @inline function slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
     total_mass = zero(eltype(parent(slab_ρ)))
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         total_mass += slab_ρ[1, i, j, 1] * slab_WJ[1, i, j, 1]
     end
     return total_mass
@@ -479,8 +479,7 @@ function apply_limit_slab_field!(
     (_, Ni, Nj, _) = size(field_ρq)
     maxiter = Ni * Nj
 
-    q_min = field_q_bounds[1, 1, 1, 1]
-    q_max = field_q_bounds[1, 2, 1, 1]
+    (q_min, q_max) = @inbounds (field_q_bounds[1, 1, 1, 1], field_q_bounds[1, 2, 1, 1])
 
     converged = true
     max_rel_err = zero(rtol)
@@ -489,7 +488,7 @@ function apply_limit_slab_field!(
 
     # 2) compute ∫ρq
     tracer_mass = zero(FT)
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         tracer_mass += field_ρq[1, i, j, 1] * slab_WJ[1, i, j, 1]
     end
 
@@ -502,7 +501,7 @@ function apply_limit_slab_field!(
     q_max = max(q_max, q_avg)
 
     # 3) modify ρq
-    for iter in 1:maxiter
+    @inbounds for iter in 1:maxiter
         Δtracer_mass = zero(FT)
         for j in 1:Nj, i in 1:Ni
             ρ = slab_ρ[1, i, j, 1]

@@ -18,10 +18,19 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
     else
         check_device_assumptions()
+
+        # A rank can own no elements; there are then no slices to launch
+        # over, and num_slice_points cannot slice an empty layout.
+        isempty(DataLayouts.each_slice_index(op, first(args))) && return
+
+        # partition(::ThisKernel) descends directly to sub-blocks, so
+        # slice_subscope never returns ThisBlock itself. The kernel loops over
+        # this subscope rather than inferring slice_subscope for device arguments.
+        subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
         function kernel_function(compact_kernel_args...)
             kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
             DataLayouts.scoped_slice_loop(
-                DataLayouts.slice_subscope(ThisKernel(), op, kernel_args...),
+                subscope,
                 ThisKernel(),
                 op,
                 f,
@@ -30,14 +39,6 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
                 kernel_args...,
             )
         end
-
-        # A rank can own no elements; there are then no slices to launch
-        # over, and num_slice_points cannot slice an empty layout.
-        isempty(DataLayouts.each_slice_index(op, first(args))) && return
-
-        # partition(::ThisKernel) descends directly to sub-blocks, so
-        # slice_subscope never returns ThisBlock itself.
-        subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
         compact_args = Grids.toggle_compact_args(args...)
         if subscope isa ThisSubBlock
             # Each sub-block gets one slice. The block size is capped at the

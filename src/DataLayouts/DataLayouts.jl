@@ -14,7 +14,7 @@ import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities:
     stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
-import ..Utilities: safe_mapreduce
+import ..Utilities: safe_mapreduce, linear_index_and_stride, UnitRangeSubArray
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -246,15 +246,15 @@ Base.@propagate_inbounds function rebuild(
     return layout_constructor(scoped_data, T; params...)(array)
 end
 
-# rebuild for a valid slice of data's parent, bypassing the constructor (see slice_arg).
-# Unlike @inbounds rebuild, this leaves no dead check_parent in the typed IR of the slice
-# (Julia 1.10 keeps checks that @inbounds makes dead), which slows the compilation of
-# column broadcasts on CPUs.
-@inline function unchecked_rebuild(data, array; params...)
+# rebuild for a valid array and element type (e.g., a slice of data's parent, see slice_arg)
+# without the constructor's checks, which slow compilation even when @inbounds elides them.
+@inline function unchecked_rebuild(data, array, ::Type{T} = eltype(data); kw...) where {T}
     scope = DataScope(array)
     scoped_data = is_subscope(DataScope(data), scope) ? data : reassign(data, scope)
-    return layout_constructor(scoped_data; params...){typeof(array)}(array)
+    return layout_constructor(scoped_data, T; kw...){typeof(array)}(array)
 end
+@inline unchecked_rebuild(data, ::Type{A}, ::Type{T} = eltype(data)) where {A, T} =
+    unchecked_rebuild(data, A(parent(data)), T)
 
 Adapt.adapt_structure(to, data::DataLayout) = rebuild(data, Adapt.adapt(to, parent(data)))
 
@@ -339,8 +339,8 @@ end
     is_valid_basetype(eltype(parent(data)), fieldtype(T, i)) ||
         return Broadcast.broadcasted(Base.Fix2(getfield, i), data)
     array = @inbounds struct_field_view(parent(data), T, Val(i), Val(f_dim(data)))
-    # A field view keeps the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, array, fieldtype(T, i))
+    # A field view keeps the layout's canonical size, and its base type is valid.
+    return unchecked_rebuild(data, array, fieldtype(T, i))
 end
 
 @inline Base.getproperty(data::DataLayout, i::Integer) = property_view(data, Val(i))

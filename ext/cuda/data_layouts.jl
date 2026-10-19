@@ -86,20 +86,11 @@ end
     Base.Cartesian.@ntuple $N d -> parent_index_dim(array, index[d], Val(d)))
 
 # Linear parent index of a Cartesian index into the view, in 32 bits (see DeviceArray).
-@inline function parent_linear_index(
-    array::CompactDeviceView{<:Any, N},
-    index::Tuple,
-) where {N}
-    parent_dims = size(parent(array))
-    parent_idx = parent_index(array, index)
-    return Int(
-        unrolled_reduce(
-            (linear, d) ->
-                linear * (parent_dims[d] % UInt32) + (parent_idx[d] % UInt32 - UInt32(1)),
-            ntuple(d -> N + 1 - d, Val(N));
-            init = UInt32(0),
-        ),
-    ) + 1
+# Widening the offset rather than the index lets the parent cancel its subtraction of 1.
+@inline function parent_linear_index(array::CompactDeviceView, index::Tuple)
+    (_, (linear_index, _)) =
+        Utilities.linear_index_and_stride(UInt32, array, index, Val(nothing))
+    return Int(linear_index - one(linear_index)) + 1
 end
 
 Base.@propagate_inbounds function Base.getindex(
@@ -268,46 +259,20 @@ end
 # GPU point index arithmetic is in 32 bits (see adapt_structure above): 64-bit integer ops
 # take several instructions at every point. Points of views are UInt32 DevicePointViews.
 const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
-const DeviceSubArray{N} = SubArray{
-    <:Any,
-    N,
-    <:DeviceArray,
-    <:NTuple{N, Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}},
-}
+const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
-@inline device_index(array::CUDA.CuDeviceArray, index::Tuple) =
-    (array, map(i -> i % UInt32, index))
-@inline function device_index(array::CompactDeviceView, index::Tuple)
+@inline function Utilities.dense_array_and_index(array::CompactDeviceView, index)
     full_array = parent(array)
     unrolled_foreach(assume_extent, unrestricted_extents(array), size(full_array))
-    return (full_array, parent_index(array, index))
+    return Utilities.dense_array_and_index(full_array, parent_index(array, index))
 end
 # The extents of a compact view's parent along the dimensions that the view does
 # not restrict, which are those of the view (see CompactDeviceView).
 @inline unrestricted_extents(::CompactDeviceView{<:Any, N, E, R}) where {N, E, R} =
     ntuple(d -> d in R ? 0 : E[d], Val(N))
-@inline device_index(array::DeviceSubArray, index::Tuple) = device_index(
-    parent(array),
-    unrolled_map(
-        (i, range) -> i % UInt32 + (first(range) - 1) % UInt32,
-        index,
-        array.indices,
-    ),
-)
 
-@inline function device_offset_and_stride(
-    array::AbstractArray{<:Any, N},
-    index::CartesianIndex,
-    ::Val{F},
-) where {N, F}
-    full_index = isnothing(F) ? Tuple(index) : unrolled_insert(Tuple(index), 1, Val(F))
-    (device_array, device_idx) = device_index(array, full_index)
-    sizes = size(device_array)
-    all_slices = ntuple(Returns(Base.Slice(Base.OneTo(1))), Val(N))
-    offset = DataLayouts.parent_offset(UInt32, device_idx, all_slices, sizes, Val(0))
-    stride = isnothing(F) ? UInt32(1) : DataLayouts.axis_stride(UInt32, sizes, Val(F))
-    return (device_array, (offset + UInt32(1), stride))
-end
+@inline device_offset_and_stride(array, index::CartesianIndex, val_F::Val) =
+    Utilities.linear_index_and_stride(UInt32, array, Tuple(index), val_F)
 @inline function device_offset_and_stride(
     array::CompactDeviceView,
     index::Integer,

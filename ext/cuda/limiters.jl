@@ -206,7 +206,7 @@ function apply_positivity_limiter_kernel!(
         (v, h) = kernel_indexes(tidx, n).I
         apply_positivity_slab!(
             lim,
-            map(d -> slab(d, v, h), dstates),
+            map(d -> @inbounds(slab(d, v, h)), dstates),
             daux === nothing ? nothing : slab(daux, v, h),
             slab(dWJ, v, h),
         )
