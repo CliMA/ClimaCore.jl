@@ -364,8 +364,7 @@ end
 @testset "PositivityLimiter: ForwardDiff derivatives (Float64)" begin
     FT = Float64
     space = TU.CenterExtrudedFiniteDifferenceSpace(FT)
-    # (v, i, j, f, h): same slab v = 2, h = 1.
-    a, b = CartesianIndex(2, 2, 1, 1, 1), CartesianIndex(2, 3, 1, 1, 1)
+    a, b = CartesianIndex(2, 2, 1, 1), CartesianIndex(2, 3, 1, 1)
     lim = Limiters.PositivityLimiter(
         FT;
         floors = (; ρ = FT(1e-6)),

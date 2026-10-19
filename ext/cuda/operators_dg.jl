@@ -353,7 +353,7 @@ Base.@propagate_inbounds function dg_face_flux_kernel!(
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
     @inbounds if gidx ≤ Nv * Nq * nfaces
-        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
+        (v, q, f) = DataLayouts.cartesian_index_from_linear((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, elem⁺, i⁺, j⁺ =
             _dg_flux_minus(args_data, faces, sgeom, Val(Nq), v, q, f)
         CI = CartesianIndex
@@ -388,8 +388,8 @@ function dg_face_pack_kernel!(
     nstrips,
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
-    if gidx ≤ Nv * Nq * nstrips
-        (v, q, s) = Utilities.cart_ind((Nv, Nq, nstrips), gidx).I
+    @inbounds if gidx ≤ Nv * Nq * nstrips
+        (v, q, s) = DataLayouts.cartesian_index_from_linear((Nv, Nq, nstrips), gidx).I
         i, j = Topologies.face_node_index(Int(slot_face[s]), Nq, q, false)
         CI = CartesianIndex
         send_data[CI(v, q, 1, s)] = data[CI(v, i, j, Int(slot_lidx[s]))]
@@ -418,8 +418,8 @@ function dg_ghost_face_flux_kernel!(
     nfaces,
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
-    if gidx ≤ Nv * Nq * nfaces
-        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
+    @inbounds if gidx ≤ Nv * Nq * nfaces
+        (v, q, f) = DataLayouts.cartesian_index_from_linear((Nv, Nq, nfaces), gidx).I
         sg, argvals⁻, slot, _i⁺, _j⁺ =
             _dg_flux_minus(args_data, faces, sgeom, Val(Nq), v, q, f)
         reversed = faces[5, f] == UInt32(1)
@@ -451,8 +451,8 @@ function dg_face_gather_kernel!(
     mode,
 )
     gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
-    if gidx ≤ nbnodes * Nv
-        (v, n) = Utilities.cart_ind((Nv, nbnodes), gidx).I
+    @inbounds if gidx ≤ nbnodes * Nv
+        (v, n) = DataLayouts.cartesian_index_from_linear((Nv, nbnodes), gidx).I
         e = Int(node_elem[n])
         i = Int(node_i[n])
         j = Int(node_j[n])
@@ -559,8 +559,8 @@ function dg_boundary_face_flux_kernel!(
     nfaces,
 ) where {F, Nq}
     gidx = threadIdx().x + (blockIdx().x - UInt32(1)) * blockDim().x
-    if gidx ≤ Nv * Nq * nfaces
-        (v, q, f) = Utilities.cart_ind((Nv, Nq, nfaces), gidx).I
+    @inbounds if gidx ≤ Nv * Nq * nfaces
+        (v, q, f) = DataLayouts.cartesian_index_from_linear((Nv, Nq, nfaces), gidx).I
         elem⁻ = Int(faces[1, f])
         face⁻ = Int(faces[2, f])
         i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)

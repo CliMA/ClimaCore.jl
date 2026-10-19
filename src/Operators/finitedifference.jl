@@ -294,7 +294,7 @@ abstract type FiniteDifferenceOperator <: AbstractOperator end
 
 @inline function map_bcs(f::F, op) where {F}
     hasfield(typeof(op), :bcs) || return op
-    @assert fieldname(typeof(op), 1) === :bcs
+    @assert Base.fieldindex(typeof(op), :bcs) == 1
     return unionall_type(typeof(op))(
         f(op.bcs),
         ntuple(n -> getfield(op, n + 1), Val(fieldcount(typeof(op)) - 1))...,
@@ -585,10 +585,8 @@ operator_arg(bc::StencilOperatorBroadcasted) =
 # operator_arg) if it caches arguments when other operators do too, or if it needs
 # more than half of the buffer limit of its scope; when the operators that cache
 # arguments do not fit together, each of them is compiled separately.
-pointwise_stencil(bc) = pointwise_stencil(
-    bc,
-    fits_inlined_buffers(bc) ? Val(num_caching_operators(bc) <= 1) : Val(:separately),
-)
+caching_fusion(bc) =
+    fits_inlined_buffers(bc) ? Val(num_caching_operators(bc) <= 1) : Val(:separately)
 pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
@@ -687,14 +685,16 @@ Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
     Broadcast.Broadcasted(StencilStyle(), op, args, return_space(op, args...)),
 )
 
-apply_pointwise_operators(::StencilStyle, bc) = apply_stencil(pointwise_stencil(bc))
+apply_pointwise_operators(::StencilStyle, bc) =
+    apply_stencil(pointwise_stencil(bc, caching_fusion(bc)))
 # Unlike apply_operator, an application keeps its stored axes (see Fields.shared_space).
-@inline inline_apply_operators(bc::StencilOperatorBroadcasted) =
-    apply_stencil(fused_stencil(bc))
+apply_operators(bc::StencilOperatorBroadcasted) =
+    fits_inlined_buffers(bc) ? apply_stencil(fused_stencil(bc)) :
+    noinline_apply_operators(bc)
 @noinline noinline_apply_operators(bc::StencilOperatorBroadcasted) =
     apply_stencil(fused_stencil(bc))
 apply_operators!(dest, bc::StencilBroadcasted) =
-    apply_stencil!(dest, pointwise_stencil(bc), Val(true))
+    apply_stencil!(dest, pointwise_stencil(bc, caching_fusion(bc)), Val(true))
 
 @inline function vertical_index(space, index)
     v = isempty(Tuple(index)) ? 1 : index[1]
@@ -761,6 +761,7 @@ end
         )
     else
         DataLayouts.update_points!(nothing, dest_data, view) do index
+            Base.@constprop :none
             @inbounds column_value(stencil_bc, space, vertical_index(space, index))
         end
     end
@@ -768,12 +769,12 @@ end
     return dest
 end
 
-# Point update of apply_stencil!, a callable struct rather than a closure (see above).
+# Point update of apply_stencil! (see above); constant propagation would re-infer its body.
 struct StencilPointUpdate{B, S}
     stencil_bc::B
     space::S
 end
-@inline function (update::StencilPointUpdate)(index, point)
+@inline Base.@constprop :none function (update::StencilPointUpdate)(index, point)
     (; stencil_bc, space) = update
     @inbounds point[] = column_value(stencil_bc, space, vertical_index(space, index))
     return nothing
