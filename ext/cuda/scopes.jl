@@ -267,17 +267,6 @@ DataLayouts.simd_over_indices(::DataLayouts.StridedRange{UInt32}) = false
 DataLayouts.simd_over_indices(::SubArray{<:Any, 1, <:DataLayouts.ActiveIndices}) = false
 DataLayouts.simd_over_indices(::DataLayouts.ActiveIndices) = false
 
-Base.@propagate_inbounds @inline function DataLayouts.subscope_indices(
-    ::ThisBlock,
-    ::ThisKernel,
-    indices,
-)
-    rank = CUDA.blockIdx().x
-    n = CUDA.gridDim().x
-    view_range = DataLayouts.strided_range(rank, n, length(indices))
-    return DataLayouts.subscope_index_view(ThisKernel(), indices, view_range)
-end
-
 @inline function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
     indices::CartesianIndices{N},
@@ -286,7 +275,7 @@ end
     return DataLayouts.StridedCartesianIndices(indices, view_range)
 end
 
-@inline function DataLayouts.subscope_index_view(
+Base.@propagate_inbounds function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
     indices::DataLayouts.StridedCartesianIndices,
     view_range,
@@ -295,7 +284,7 @@ end
     return DataLayouts.StridedCartesianIndices(indices.indices, new_range)
 end
 
-@inline function DataLayouts.subscope_index_view(
+Base.@propagate_inbounds function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
     indices::DataLayouts.ActiveColumnIndices,
     view_range,
@@ -303,7 +292,7 @@ end
     return DataLayouts.ActiveColumnIndices(indices.mask, indices.indices[view_range])
 end
 
-@inline function DataLayouts.subscope_index_view(
+Base.@propagate_inbounds function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
     indices::DataLayouts.ActivePointIndices{Nv},
     view_range,
@@ -322,13 +311,3 @@ end
     @boundscheck checkbounds(indices, view_range)
     return @inbounds indices[view_range]
 end
-
-# Unmasked point loops on device scopes iterate over eachindex instead of the
-# Cartesian each_slice_index. When every argument supports linear indexing, this
-# avoids the integer divisions required for linear-to-Cartesian conversion.
-@inline DataLayouts.each_maskable_slice_index(
-    ::Union{ThisKernel, ThisCooperativeGroup},
-    ::NoMask,
-    ::typeof(view),
-    args...,
-) = eachindex(args...)
