@@ -624,7 +624,7 @@ include("registers.jl")
 # The loop entry points only: the loop bodies keep
 # constant propagation, since turning it off there shifts kernel codegen
 # enough to flip cases near the sm_60 register brink.
-@drop_constprop _foreach_slice, unfused_slice_loop,
+@drop_constprop _foreach_slice, unfused_slice_loop, pointwise_copyto!,
 foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
 Base.fill!, Base.copyto!
 
