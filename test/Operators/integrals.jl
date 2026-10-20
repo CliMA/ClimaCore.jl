@@ -4,7 +4,7 @@ import Random
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
-import ClimaCore: Spaces, Fields, Operators
+import ClimaCore: DataLayouts, Spaces, Fields, Operators
 import ClimaCore.Operators:
     column_integral_definite!,
     column_integral_indefinite!,
@@ -40,7 +40,7 @@ test_allocs(allocs) =
         # TODO: Some of these operations have a few unelided views from
         # getproperty (48 bytes each); whether the compiler elides them
         # depends on how much of its inference budget is used up.
-        @test allocs ≤ 128
+        TU.allocation_checks_meaningful() && @test allocs ≤ 128
     else
         @test allocs ≤ 39656 # GPU always has ~2 kB of non-deterministic allocs.
     end
@@ -60,6 +60,15 @@ function test_column_integral_definite!(center_space)
     max_relative_error = maximum(@. abs((ref_array - test_array) / ref_array))
     @test max_relative_error <= 0.006 # Less than 0.6% error.
 
+    # Each component of a NamedTuple or Tuple is integrated like a scalar on CPUs, up to
+    # the reassociation of @simd loops (GPU kernels of different structure can also fuse
+    # multiplications into additions differently).
+    if ClimaComms.device(center_space) isa ClimaComms.AbstractCPUDevice
+        ∫z = similar(z_top)
+        column_integral_definite!(∫z, ᶜz)
+        rtol = 8 * eps(Spaces.undertype(center_space)) # 3x the worst difference for 10 values
+        @test all(isapprox.(parent(∫z), parent(∫u_test.powers.:1); rtol))
+    end
 
     @test_opt ignored_modules = CUDA_FRAMES column_integral_definite!(∫u_test, ᶜu)
 
@@ -108,6 +117,37 @@ function test_column_integral_indefinite_fn!(center_space)
 
         test_allocs(@allocated column_integral_indefinite!(fn, ᶠ∫u_test))
     end
+end
+
+# Levels of temporaries inside foreach_column, which GPUs can store in the registers of the
+# threads that own their points, are read by every thread of a column.
+function test_levels_of_column_temporaries!(center_space)
+    ᶜz = Fields.coordinate_field(center_space).z
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜoutput = similar(ᶜz)
+    DataLayouts.foreach_column(ᶜz, ᶜoutput) do ᶜz_column, ᶜoutput_column
+        ᶜtemp = @. sin(ᶜz_column) + 1
+        ᶠtemp = @. ᶠinterp(ᶜtemp)
+        ᶜbottom = Fields.level(ᶜtemp, 1)
+        ᶠtop = Fields.level(ᶠtemp, Operators.right_idx(axes(ᶠtemp)))
+        # A point temporary derived from levels, which every thread reads.
+        ᶜz_bottom = Fields.level(ᶜz_column, 1)
+        ᶜscale = @. ᶜbottom + ᶜz_bottom
+        @. ᶜoutput_column = ᶜtemp * ᶜscale + ᶠtop
+    end
+    # The top face of an extrapolated interpolation has the value at the top center. The
+    # array is not named ᶜtemp, so the loop body does not capture a boxed variable, which
+    # GPU kernels cannot take as an argument.
+    temp_array = Array(parent(@. sin(ᶜz) + 1))
+    z_bottom_array = selectdim(Array(parent(ᶜz)), 1, 1:1)
+    Nv = size(temp_array, 1)
+    reference =
+        temp_array .* (selectdim(temp_array, 1, 1:1) .+ z_bottom_array) .+
+        selectdim(temp_array, 1, Nv:Nv)
+    @test Array(parent(ᶜoutput)) ≈ reference
 end
 
 function test_column_reduce_and_accumulate!(center_space)
@@ -245,6 +285,51 @@ function test_column_reduce_and_accumulate_lazy!(center_space)
     end
 end
 
+# Lazy inputs of NamedTuples (and Tuples, whose buffers have the same structure) are read
+# as AutoBroadcasters, which support math functions like -. GPUs copy such inputs into
+# buffers for operators that are not associative, and the buffers must also be read as
+# AutoBroadcasters.
+function test_column_reduce_and_accumulate_lazy_tuples!(center_space)
+    FT = Spaces.undertype(center_space)
+    face_space = Spaces.face_space(center_space)
+    ᶜinterp = Operators.InterpolateF2C()
+    lazy(args...) = Base.Broadcast.broadcasted(args...)
+    sub(x, y) = x - y
+    reference_sub(x, y) = map(-, x, y) # also defined without AutoBroadcasters
+    value(z) = (; a = z, b = sin(z))
+    init = (; a = one(FT), b = zero(FT))
+    ᶜvalues = value.(Fields.coordinate_field(center_space).z)
+    ᶠvalues = value.(Fields.coordinate_field(face_space).z)
+    level_output = similar(Fields.level(ᶠvalues, Fields.half))
+    for (f!, output, input) in (
+        (
+            (f, out, in) -> column_reduce!(f, out, in),
+            level_output,
+            lazy(+, ᶜvalues, ᶜvalues),
+        ),
+        (
+            (f, out, in) -> column_reduce!(f, out, in; init, reverse = true),
+            level_output,
+            lazy(+, ᶠvalues, ᶠvalues),
+        ),
+        (
+            (f, out, in) -> column_accumulate!(f, out, in; init),
+            similar(ᶠvalues),
+            lazy(+, ᶜvalues, ᶜvalues),
+        ),
+        (
+            (f, out, in) -> column_accumulate!(f, out, in; reverse = true),
+            similar(ᶜvalues),
+            lazy(ᶜinterp, ᶠvalues),
+        ),
+    )
+        reference = similar(output)
+        f!(reference_sub, reference, Base.Broadcast.materialize(input))
+        f!(sub, output, input)
+        @test parent(output) ≈ parent(reference)
+    end
+end
+
 # A column field (e.g., Spaces.column(field, i, j, h)) in an operator expression with fields
 # on the whole space is read in every column, like a copy of it on the whole space.
 function test_column_reduce_and_accumulate_column_fields!(center_space)
@@ -306,6 +391,65 @@ function test_fubinis_theorem(space)
     @test horizontal_sum_of_vertical_sum ≈ volume_sum rtol = 10 * eps(FT)
 end
 
+# On GPUs, columns with more levels than a warp are divided among several warps, and columns
+# with more levels than a block's threads give each thread several levels (in rounds).
+function test_column_reduce_and_accumulate_deep!(center_space)
+    face_space = center_to_face_space(center_space)
+    FT = Spaces.undertype(center_space)
+    ᶜinput = ones(center_space)
+    ᶠinput = ones(face_space)
+    parent(ᶜinput) .= rand.(FT)
+    parent(ᶠinput) .= rand.(FT)
+    ᶜoutput = similar(ᶜinput)
+    ᶠoutput = similar(ᶠinput)
+    surface_output = similar(Fields.level(ᶠinput, Fields.half))
+    ᶜarray = Array(parent(ᶜinput))
+    ᶠarray = Array(parent(ᶠinput))
+    reverse_cumsum(array) = reverse(cumsum(reverse(array; dims = 1); dims = 1); dims = 1)
+    init = FT(2)
+    # Staggered offsets and operators that cannot be reordered are tested on fewer levels.
+    for (input, output, reverse, reference) in (
+        (ᶜinput, ᶜoutput, false, init .+ cumsum(ᶜarray; dims = 1)),
+        (ᶜinput, ᶜoutput, true, init .+ reverse_cumsum(ᶜarray)),
+        (
+            ᶜinput,
+            ᶠoutput,
+            false,
+            init .+ cat(zero(ᶜarray[1:1, :, :, :, :]), cumsum(ᶜarray; dims = 1); dims = 1),
+        ),
+    )
+        column_accumulate!(+, output, input; init, reverse)
+        @test Array(parent(output)) ≈ reference
+    end
+    column_accumulate!(max, ᶠoutput, ᶠinput; reverse = true)
+    @test Array(parent(ᶠoutput)) ==
+          reverse(accumulate(max, reverse(ᶠarray; dims = 1); dims = 1); dims = 1)
+    # An in-place accumulation with an operator that one thread applies in order, reading
+    # every level before overwriting it (DataLayouts tests the same accumulation forward
+    # with init).
+    ᶠinplace = copy(ᶠinput)
+    column_accumulate!((a, b) -> a - b, ᶠinplace, ᶠinplace; reverse = true)
+    @test Array(parent(ᶠinplace)) ==
+          reverse(accumulate(-, reverse(ᶠarray; dims = 1); dims = 1); dims = 1)
+    column_reduce!(+, surface_output, ᶜinput; init)
+    @test Array(parent(surface_output)) ≈ init .+ sum(ᶜarray; dims = 1)
+end
+
+# Accumulations with operators that are applied in order only share their final value
+# between threads, so the values at all levels can exceed a GPU block's shared memory.
+function test_column_accumulate_large_values!(center_space)
+    FT = Spaces.undertype(center_space)
+    ᶜinput = ones(center_space)
+    parent(ᶜinput) .= rand.(FT)
+    ᶜoutput = similar(ᶜinput)
+    init = (zero(FT), ntuple(_ -> FT(NaN), Val(100)))
+    lazy_input = Base.Broadcast.broadcasted(+, ᶜinput, ᶜinput)
+    column_accumulate!(ᶜoutput, lazy_input; init, transform = first) do (sum, nans), value
+        (sum + value, nans)
+    end
+    @test Array(parent(ᶜoutput)) ≈ cumsum(2 .* Array(parent(ᶜinput)); dims = 1)
+end
+
 @testset "Integral operations unit tests" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
@@ -319,6 +463,23 @@ end
             test_column_integral_indefinite_fn!(space)
             test_column_reduce_and_accumulate!(space)
             test_column_reduce_and_accumulate_lazy!(space)
+        end
+        # 150 levels take two rounds of several warps on GPUs; one precision is enough.
+        # Lazy tuples are also tested on one space, since their buffers ignore its type.
+        if FT == Float64
+            deep_space =
+                TU.CenterExtrudedFiniteDifferenceSpace(FT; context, zelem = 150, helem = 2)
+            test_column_reduce_and_accumulate_deep!(deep_space)
+            test_column_accumulate_large_values!(deep_space)
+            # Columns within a warp and longer than a warp on GPUs.
+            for zelem in (10, 63)
+                test_levels_of_column_temporaries!(
+                    TU.CenterExtrudedFiniteDifferenceSpace(FT; context, zelem, helem = 2),
+                )
+            end
+            test_column_reduce_and_accumulate_lazy_tuples!(
+                TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            )
         end
         test_column_reduce_and_accumulate_column_fields!(
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context, topography = true),

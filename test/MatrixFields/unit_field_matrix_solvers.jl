@@ -112,6 +112,14 @@ end
     ᶠᶜmat4 = random_field(QuaddiagonalMatrixRow{FT}, face_space) ./ λ
     ᶜᶜmat5 = random_field(PentadiagonalMatrixRow{FT}, center_space) ./ λ .+ (I,)
     ᶠᶠmat5 = random_field(PentadiagonalMatrixRow{FT}, face_space) ./ λ .+ (I,)
+    # Other band matrices are solved by the generic form of Gaussian elimination.
+    ᶜᶜmat7 = random_field(MatrixFields.BandMatrixRow{-3, 7, FT}, center_space) ./ λ .+ (I,)
+    ᶠᶠmat4 = random_field(MatrixFields.BandMatrixRow{-1, 4, FT}, face_space) ./ λ .+ (I,)
+    # Asymmetric bands with as many entries as tri-diagonal rows also use the generic form.
+    ᶜᶜmat3_upper =
+        random_field(MatrixFields.BandMatrixRow{0, 3, FT}, center_space) ./ λ .+ (I,)
+    ᶠᶠmat3_lower =
+        random_field(MatrixFields.BandMatrixRow{-2, 3, FT}, face_space) ./ λ .+ (I,)
 
     for (vector, matrix, string1, string2) in (
         (sfc_vec, I, "UniformScaling", "a single level"),
@@ -123,6 +131,10 @@ end
         (ᶠvec, ᶠᶠmat3, "tri-diagonal matrix", "cell faces"),
         (ᶜvec, ᶜᶜmat5, "penta-diagonal matrix", "cell centers"),
         (ᶠvec, ᶠᶠmat5, "penta-diagonal matrix", "cell faces"),
+        (ᶜvec, ᶜᶜmat7, "hepta-diagonal matrix", "cell centers"),
+        (ᶠvec, ᶠᶠmat4, "matrix with 1 lower and 2 upper diagonals", "cell faces"),
+        (ᶜvec, ᶜᶜmat3_upper, "matrix with 2 upper diagonals", "cell centers"),
+        (ᶠvec, ᶠᶠmat3_lower, "matrix with 2 lower diagonals", "cell faces"),
     )
         test_field_matrix_solver(;
             test_name = "$string1 solve on $string2",
@@ -130,6 +142,23 @@ end
             A = MatrixFields.FieldMatrix((@name(_), @name(_)) => matrix),
             b = Fields.FieldVector(; _ = vector),
         )
+    end
+
+    # On GPUs, columns with more rows than a warp are divided among several warps, and
+    # columns with more rows than a block's threads give each thread several rows.
+    for velem in (40, 150)
+        deep_center_space, deep_face_space = test_spaces(FT; velem)
+        for (space, string) in
+            ((deep_center_space, "cell centers"), (deep_face_space, "cell faces"))
+            matrix = random_field(TridiagonalMatrixRow{FT}, space) ./ λ .+ (I,)
+            test_field_matrix_solver(;
+                test_name = "tri-diagonal solve on $velem $string",
+                alg = MatrixFields.BlockDiagonalSolve(),
+                A = MatrixFields.FieldMatrix((@name(_), @name(_)) => matrix),
+                b = Fields.FieldVector(; _ = random_field(FT, space)),
+                use_rel_error = true,
+            )
+        end
     end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
@@ -167,6 +196,19 @@ end
             (@name(f), @name(f)) => ᶠᶠmat5,
         ),
         b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec),
+    )
+
+    column_space = Spaces.column(center_space, 1, 1, 1)
+    test_field_matrix_solver(;
+        test_name = "BlockDiagonalSolve for a block diagonal matrix with \
+                     tri-diagonal blocks on extruded and column spaces",
+        alg = MatrixFields.BlockDiagonalSolve(),
+        A = MatrixFields.FieldMatrix(
+            (@name(c), @name(c)) => ᶜᶜmat3,
+            (@name(z), @name(z)) =>
+                random_field(TridiagonalMatrixRow{FT}, column_space) ./ λ .+ (I,),
+        ),
+        b = Fields.FieldVector(; c = ᶜvec, z = random_field(FT, column_space)),
     )
 
     test_field_matrix_solver(;

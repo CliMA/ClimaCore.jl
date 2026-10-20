@@ -4,6 +4,36 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `column_reduce!`, `column_accumulate!`, and
+  the `MatrixFields` single and block diagonal solvers loop over columns with
+  `DataLayouts.foreach_column`, so the threads of each column share its work on
+  GPUs: associative operators are reduced and accumulated with warp shuffles
+  (through the new `DataLayouts.fold_points` and `DataLayouts.scan_points`),
+  and tri-diagonal systems are solved by parallel cyclic reduction.
+- ![][badge-✨feature/enhancement] `DataLayouts.foreach_slice` and its variants
+  take a `serial` keyword, which gives every slice one thread (e.g., for scans
+  with operators that are not associative).
+- ![][badge-✨feature/enhancement] The block diagonal `MatrixFields` solver uses
+  the containers of `DataLayouts.foreach_slice` to solve all of its band
+  matrices in one loop when they fit in the parameter memory of a GPU kernel,
+  instead of at most 10 matrices per loop.
+- ![][badge-✨feature/enhancement] The `MatrixFields` solvers support band
+  matrices with any numbers of diagonals through a generic form of Gaussian
+  elimination, instead of only tri-diagonal and penta-diagonal matrices.
+- ![][badge-🚀performance] On CPUs, `column_reduce!` reduces each column with
+  `reduce_points`, whose unmasked reductions over a single column use linear
+  indices, which vectorize, and reductions read their values with inlined code,
+  which speeds up `max` and `min`.
+- ![][badge-🔥behavioralΔ] Column reductions and accumulations with associative
+  operators (including `column_integral_definite!` and
+  `column_integral_indefinite!`) are regrouped on GPUs, and CPU reductions
+  interleave accumulators or use `@simd` loops, so their results can change by
+  roundoff; `sum` of a `Field` is about twice as fast on CPUs.
+- ![][badge-🐛bugfix] Inside a GPU loop over columns, the output of
+  `column_reduce!` into a temporary with a single point is stored by every
+  thread of the column, so that every thread reads its value; only the thread
+  that owned the point used to write it.
+
 v1.0.7
 -------
 
