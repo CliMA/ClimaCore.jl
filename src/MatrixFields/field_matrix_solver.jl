@@ -220,8 +220,9 @@ If `Aₙₙ` is a diagonal matrix, the equation `Aₙₙ * xₙ = bₙ` is solve
 single pass over the data, setting each `xₙ[i]` to `inv(Aₙₙ[i, i]) * bₙ[i]`.
 
 Otherwise, on a CPU, the equation `Aₙₙ * xₙ = bₙ` is solved using Gaussian elimination
-(without pivoting), which makes two passes over the data. This is only
-implemented for tridiagonal and pentadiagonal matrices `Aₙₙ`. In Gaussian
+(without pivoting), which makes two passes over the data. This is implemented for
+band matrices `Aₙₙ` with any numbers of diagonals, and it has a specialized version for
+tridiagonal matrices that compiles faster. In Gaussian
 elimination, `Aₙₙ` is effectively factorized into the product `Lₙ * Dₙ * Uₙ`,
 where `Dₙ` is a diagonal matrix, and where `Lₙ` and `Uₙ` are unit lower and upper
 triangular matrices, respectively. The first pass multiplies both sides of the
@@ -233,26 +234,20 @@ unstable when `Aₙₙ` has entries with large disparities in magnitude, but avo
 this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
 
-On a GPU, tridiagonal systems are solved with the parallel cyclic reduction (PCR)
-method, which makes better use of GPU parallelism and shared memory. Since this
-solver launches one thread per row of the matrix, it is only used for systems with
-at most 512 rows, to stay within CUDA thread block limits. Above that size, the
-code falls back to the Gaussian elimination method used on the CPU, with degraded
-performance.
-
-PCR recursively decomposes a tridiagonal system into two systems of half the size,
-until the systems have size 1 and can be solved directly.
+On a GPU, where the points of each column are divided among multiple threads,
+tridiagonal systems are instead solved with the parallel cyclic reduction (PCR)
+method. PCR recursively decomposes each tridiagonal system into two systems of
+half the size, until it is left with only scalar equations. The rows of each
+column are exchanged through either shared memory or warp shuffles, depending on
+whether the column fits in a warp. Other band matrices would require a more
+complex implementation of PCR, so they are solved by performing Gaussian
+elimination in one thread per column.
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
 Base.zero(alg::BlockDiagonalSolve) = alg
 
-function field_matrix_solver_cache(::BlockDiagonalSolve, A, b)
-    caches = map(matrix_row_keys(keys(A))) do name
-        single_field_solver_cache(A[name, name], b[name])
-    end
-    return FieldNameDict(matrix_row_keys(keys(A)), caches)
-end
+field_matrix_solver_cache(::BlockDiagonalSolve, A, b) = nothing
 
 function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     check_block_diagonal_matrix(
@@ -265,50 +260,79 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-cheap_inv(_) = false
-cheap_inv(::ScalingFieldMatrixEntry) = true
-cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
+# Scalars and diagonal matrices can be inverted pointwise, so they do not
+# benefit from using a fused solver that loops over columns. On CPUs, every
+# matrix is solved in its own loop over columns, which is faster than one loop.
+avoid_fusing_solver(::ScalingFieldMatrixEntry) = true
+avoid_fusing_solver(A::ColumnwiseBandMatrixField) =
+    eltype(A) <: DiagonalMatrixRow ||
+    DataLayouts.DataScope(A) isa DataLayouts.ThisThreadPool
 
-function run_field_matrix_solver!(
-    ::BlockDiagonalSolve,
-    cache,
-    x,
-    A,
-    b,
+# Solve every column directly, since a nested loop over one column could split
+# the threads of the outer column, and only some of them would reach barriers.
+# Recursion over the arguments compiles in GPU kernels where unrolled_foreach
+# over partitions of them leaves dynamic calls.
+solve_columns!(_, ::Tuple{}) = nothing
+solve_columns!(shared, args) = (
+    single_column_solve!(shared, unrolled_take(args, Val(3)));
+    solve_columns!(shared, unrolled_drop(args, Val(3)))
 )
-    names = matrix_row_keys(keys(A))
-    # The following is a performance optimization.
-    # Using
-    # `foreach(name -> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
-    # is perfectly fine, but may launch many gpu kernels. So,
-    # We may want to call `multiple_field_solve!`, which fuses
-    # these kernels into one. However, `multiple_field_solve!`
-    # launches threads horizontally, and loops vertically (which
-    # is slow) to perform the solve. In some circumstances,
-    # when a vertical loop is not needed (e.g., ScalingFieldMatrixEntry)
-    # launching several kernels may be cheaper than launching one
-    # slower kernel, so we first check for types that may lead to fast
-    # kernels.
 
-    case1 = length(names) == 1
-    case2 = all(name -> cheap_inv(A[name, name]), names.values)
-    case3 = any(name -> cheap_inv(A[name, name]), names.values)
+band_matrices(::Tuple{}) = ()
+band_matrices(args) = (args[2], band_matrices(unrolled_drop(args, Val(3)))...)
 
-    # Direct all TridiagonalMatrixRow cases to `single_field_solve` path so
-    # they can be redirected to a specialised solver
-    # TODO: Group multiple Tridiagonals to the special 'multiple_field' solver
-    case4 = any(name -> eltype(A[name, name]) <: TridiagonalMatrixRow, names.values)
+# The column shape of a Field's layout type, with Nh = nothing when the number of
+# elements is only known at run time (the loop checks it), so comparing shapes
+# needs no run-time branch.
+@inline function column_shape(field)
+    (; Ni, Nj, Nh) = DataLayouts.vijh_params(Fields.field_values(field))
+    return (Ni, Nj, Nh)
+end
 
-    # TODO: remove case3 and implement _single_field_solve_diag_matrix_row!
-    #       in multiple_field_solve!
-    if case1 || case2 || case3 || case4
-        foreach(names) do name
-            single_field_solve!(cache[name], x[name], A[name, name], b[name])
-        end
-    else
-        multiple_field_solve!(cache, x, A, b)
+function run_field_matrix_solver!(::BlockDiagonalSolve, _, x, A, b)
+    foreach(matrix_row_keys(keys(A))) do name
+        avoid_fusing_solver(A[name, name]) &&
+            single_field_solve!(x[name], A[name, name], b[name])
     end
+    args = unrolled_flatmap(matrix_row_keys(keys(A)).values) do name
+        avoid_fusing_solver(A[name, name]) ? () : (x[name], A[name, name], b[name])
+    end
+    isempty(args) && return nothing
+    # Fields with different column shapes (e.g., on column and extruded spaces)
+    # cannot share a loop, so every matrix is then solved in its own loop.
+    unrolled_allequal(column_shape, args) ||
+        return unrolled_foreach(
+            splat(single_field_solve!),
+            unrolled_partition(args, Val(3)),
+        )
+    # The mask comes from a solution that is fused, and the loop slices the data
+    # of every argument, since the solves need no spaces.
+    mask = Spaces.get_mask(axes(args[1]))
+    solve_columns_in_loops!(mask, unrolled_map(Fields.field_values, args))
     return nothing
+end
+
+# Every solve is in one loop, unless the loop does not fit its arguments (e.g., in the
+# parameter memory of a GPU kernel), in which case the solves are split in half.
+function solve_columns_in_loops!(mask, data_args)
+    slice_op = DataLayouts.column
+    (solve_function, serial) = column_solve_function(solve_columns!, data_args)
+    scope = DataLayouts.DataScope(data_args[1])
+    fits = DataLayouts.fits_slice_loop(scope, slice_op, solve_function, mask, data_args)
+    if fits || length(data_args) == 3
+        DataLayouts._foreach_slice(
+            slice_op,
+            solve_function,
+            mask,
+            Val(false),
+            serial,
+            data_args,
+        )
+    else
+        n = 3 * (length(data_args) ÷ 6)
+        solve_columns_in_loops!(mask, unrolled_take(data_args, Val(n)))
+        solve_columns_in_loops!(mask, unrolled_drop(data_args, Val(n)))
+    end
 end
 
 """
