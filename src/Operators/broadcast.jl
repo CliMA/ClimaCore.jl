@@ -223,6 +223,20 @@ apply_operators!(dest, bc) = copyto_slice!(dest, apply_operators(bc))
 # Slice loops inline the function of every slice, so the barrier has to be at this call.
 noinline_apply_operators!(dest, bc) = @noinline apply_operators!(dest, bc)
 
+# Number of statements of a slice loop body whose inlined buffers fit in their scope together.
+# A statement that is not inlined copies its arguments onto the stack of every GPU thread,
+# which costs far more than its buffers when they are small, so a statement is only compiled
+# separately when its buffers take more than 1/INLINED_STATEMENTS of the half of the scope's
+# buffer limit that fits_inlined_buffers leaves for inlined buffers (2 KB of the 48 KB of a
+# GPU block). Smaller buffers can then only crowd out the buffers of separately compiled
+# statements in bodies with more than INLINED_STATEMENTS statements, and they can exceed
+# the limit in bodies with more than 2 * INLINED_STATEMENTS statements. A smaller threshold
+# would compile the statements of fused bodies in columns of more than 64 faces separately
+# (e.g., with 1 KB, the bodies of perf/fused_column_fd.jl are up to 18x slower).
+const INLINED_STATEMENTS = 12
+inlines_statement(bc) =
+    fits_inlined_buffers(bc, bc -> INLINED_STATEMENTS * inlined_buffer_bytes(bc))
+
 # The inliner leaves large statements out of line, so a statement of a slice loop body
 # freezes the register temporaries that it reads, and it is inlined if it writes to one.
 # Only bodies whose threads share buffers have registers, so others skip the check.
@@ -253,9 +267,10 @@ function copyto_by_slices!(dest, bc)
     else
         # Every statement of a slice loop body is compiled into the same function, so
         # their inlined buffers would add up; a statement in a separately compiled function
-        # shares memory with the equally sized buffers of other statements.
+        # shares memory with the equally sized buffers of other statements. Statements with
+        # small buffers are still inlined (see inlines_statement).
         shares_buffers =
-            !has_private_buffers(bc) && !iszero(inlined_buffer_bytes(bc)) &&
+            !has_private_buffers(bc) && !inlines_statement(bc) &&
             can_compile_separately(dest, bc)
         DataLayouts.scoped_slice_loop(
             DataLayouts.slice_subscope(scope, op, dest, bc),
