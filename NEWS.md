@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🚀performance] Compiling a pointwise `Field` broadcast is about
+  twice as fast. The pointwise `copyto!` indexes its arguments directly at
+  every point (`DataLayouts.IndexOnly`) instead of building a single-point
+  view of every argument, which was the costliest part of compiling it. It
+  evaluates the expression with `_broadcast_getindex` rather than `getindex`,
+  whose bounds check was inferred for every expression although it is elided
+  from the compiled loop.
+
 v1.0.5
 -------
 
