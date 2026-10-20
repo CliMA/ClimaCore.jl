@@ -221,7 +221,33 @@ operator_arg(arg) = apply_operators(arg)
 # Like apply_operators, but copies the result into dest (styles can write it directly).
 apply_operators!(dest, bc) = copyto_slice!(dest, apply_operators(bc))
 # Slice loops inline the function of every slice, so the barrier has to be at this call.
-noinline_apply_operators!(dest, bc) = @noinline apply_operators!(dest, bc)
+# Arguments of a call that is not inlined are copied onto the stack of every GPU thread,
+# and most of their bytes are copies of the grid (one per field and operator node), so
+# the grid crosses the barrier once and every copy of it is replaced by a placeholder.
+@inline function noinline_apply_operators!(dest, bc)
+    grid = barrier_grid(axes(dest))
+    isnothing(grid) && return @noinline apply_operators!(dest, bc)
+    compact_dest = Grids.toggle_placeholder_grid(dest, grid)
+    compact_bc = Grids.toggle_placeholder_grid(bc, grid)
+    apply_compact_operators!(grid, compact_dest, compact_bc)
+    return dest
+end
+# Returns nothing, since a returned destination would be copied back through the stack.
+@noinline function apply_compact_operators!(grid, compact_dest, compact_bc)
+    apply_operators!(
+        Grids.toggle_placeholder_grid(compact_dest, grid),
+        Grids.toggle_placeholder_grid(compact_bc, grid),
+    )
+    return nothing
+end
+# Grid of a destination space whose copies can be replaced by placeholders, if any.
+barrier_grid(_) = nothing
+barrier_grid(
+    space::Union{
+        Spaces.AbstractFiniteDifferenceSpace,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
+) = Spaces.grid(space)
 
 # Number of statements of a slice loop body whose inlined buffers fit in their scope together.
 # A statement that is not inlined copies its arguments onto the stack of every GPU thread,
