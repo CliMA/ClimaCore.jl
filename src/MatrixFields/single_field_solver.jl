@@ -32,55 +32,41 @@ end
 
 single_field_solve!(_, x, A::ScalingFieldMatrixEntry, b) =
     x .= (inv(scaling_value(A)),) .* b
-single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
+function single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b)
     if eltype(A) <: DiagonalMatrixRow
         A₀ = A.entries.:1
         @. x = inv(A₀) * b
     else
-        x_bc = Base.broadcastable(x)
-        b_bc = Base.broadcastable(b)
-        single_field_solve!(ClimaComms.device(axes(A)), cache, x_bc, A, b_bc)
+        # Solves need no spaces, so the loop slices the data of each argument.
+        DataLayouts._foreach_slice(
+            DataLayouts.column,
+            single_field_solve_column!,
+            Spaces.get_mask(axes(x)),
+            Val(false),
+            Fields.field_values(cache),
+            Base.broadcastable(Fields.field_values(x)),
+            Fields.field_values(A),
+            Base.broadcastable(Fields.field_values(b)),
+        )
+        call_post_op_callback() && post_op_callback(x, cache, x, A, b)
     end
-
-single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
-    _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
-
-# CPU (GPU has already called Spaces.column on arg)
-function _single_field_solve!(
-    device::ClimaComms.AbstractCPUDevice,
-    cache,
-    x,
-    A,
-    b,
-)
-    space = axes(x)
-    mask = Spaces.get_mask(space)
-    if space isa Spaces.FiniteDifferenceSpace
-        @assert mask isa DataLayouts.NoMask
-        single_field_solve_col!(cache, x, A, b)
-    else
-        Fields.bycolumn(space) do colidx
-            I = Fields.universal_index(colidx)
-            if DataLayouts.should_compute(mask, I)
-                single_field_solve_col!(
-                    cache[colidx],
-                    x[colidx],
-                    A[colidx],
-                    b[colidx],
-                )
-            end
-        end
-    end
+    return nothing
 end
 
-@inline single_field_solve_col!(cache, x, A, b) =
-    band_matrix_solve!(
-        eltype(A),
-        unzip_tuple_field_values(Fields.field_values(cache)),
-        Fields.field_values(x),
-        unzip_tuple_field_values(Fields.field_values(A.entries)),
-        Fields.field_values(b),
-    )
+# A tri-diagonal system in a column divided among multiple threads is solved by parallel
+# cyclic reduction. Other systems are solved by Gaussian elimination in one thread.
+@inline function single_field_solve_column!(cache, x, A, b)
+    Aⱼs = unzip_tuple_field_values(A.entries)
+    scope = DataLayouts.DataScope(x)
+    if eltype(A) <: TridiagonalMatrixRow && scope != DataLayouts.ThisThread()
+        pcr_solve!(scope, x, Aⱼs, b)
+    else
+        DataLayouts.owns_point(scope, 1) &&
+            band_matrix_solve!(eltype(A), unzip_tuple_field_values(cache), x, Aⱼs, b)
+        DataLayouts.synchronize(scope)
+    end
+    return nothing
+end
 
 # Generate the tuple directly instead of calling ntuple, since the views made
 # by getproperty are only free of allocations when they do not escape through
@@ -89,14 +75,6 @@ end
     property_exprs =
         (:(getproperty(data, $i)) for i in 1:fieldcount(eltype(data)))
     return Expr(:block, Expr(:meta, :inline), Expr(:tuple, property_exprs...))
-end
-
-@inline function band_matrix_solve!(::Type{<:DiagonalMatrixRow}, _, x, Aⱼs, b)
-    (A₀,) = Aⱼs
-    n = length(x)
-    @inbounds for i in 1:n
-        x[i] = inv(A₀[i]) * b[i]
-    end
 end
 
 #=
@@ -197,6 +175,80 @@ multiplications has been modified in order to handle block vectors/matrices.
             x[i] = Ux[i] - U₊₁[i] * x[i + 1] - U₊₂[i] * x[i + 2]
             i -= 1
         end
+    end
+end
+
+#=
+The parallel cyclic reduction (PCR) algorithm, as presented in
+    https://doi.org/10.1145/1693453.1693472,
+but with the following variable name changes:
+    - a → A₋₁
+    - b → A₀
+    - c → A₊₁
+    - d → b
+Each step eliminates the couplings of every row to the rows at a distance of stride, using
+the equations of those rows to couple it to the rows at a distance of 2 * stride instead, so
+that every row is decoupled from all others after log2(n) steps. A thread updates the rows
+at its own points (see DataLayouts.owns_point), reading the other rows it needs through
+pcr_neighbors. Entries outside of the matrix are replaced with zeros, so that they cannot
+make any coefficient non-finite. As in the Thomas algorithm, the order of multiplications
+handles block vectors/matrices.
+=#
+@inline function pcr_solve!(scope, x, (A₋₁, A₀, A₊₁), b)
+    n = prod(DataLayouts.inferred_size(x))
+    num_threads = DataLayouts.static_num_threads(scope)
+    positions = ntuple(Val(cld(n, num_threads))) do k
+        (k - 1) * num_threads + Int(DataLayouts.thread_rank(scope))
+    end
+    coefficients = map(positions) do position
+        i = min(position, n)
+        @inbounds (
+            i > 1 ? A₋₁[i] : zero(eltype(A₋₁)),
+            A₀[i],
+            i < n ? A₊₁[i] : zero(eltype(A₊₁)),
+            b[i],
+        )
+    end
+    stride = 1
+    while stride < n
+        neighbors = pcr_neighbors(scope, coefficients, positions, stride, n)
+        coefficients = let stride = stride
+            map(positions, coefficients, neighbors) do position, row, (row₋, row₊)
+                pcr_row(min(position, n), row, row₋, row₊, stride, n)
+            end
+        end
+        stride *= 2
+    end
+    unrolled_foreach(positions, coefficients) do position, (_, bᵢ, _, dᵢ)
+        position <= n && (@inbounds x[position] = inv(bᵢ) * dᵢ)
+    end
+end
+
+# Eliminate the couplings of row i to the rows at a distance of stride, whose coefficients
+# are row₋ and row₊ (or those of a boundary row, for rows outside of the matrix).
+@inline function pcr_row(i, row, row₋, row₊, stride, n)
+    ((aᵢ, bᵢ, cᵢ, dᵢ), (a₋, b₋, c₋, d₋), (a₊, b₊, c₊, d₊)) = (row, row₋, row₊)
+    k₋ = -aᵢ * inv(b₋)
+    k₊ = -cᵢ * inv(b₊)
+    k₋ = i > stride ? k₋ : zero(k₋)
+    k₊ = i + stride <= n ? k₊ : zero(k₊)
+    new_row = (k₋ * a₋, bᵢ + k₋ * c₋ + k₊ * a₊, k₊ * c₊, dᵢ + k₋ * d₋ + k₊ * d₊)
+    return map(oftype, row, new_row)
+end
+
+# Coefficients of the rows at a distance of stride below and above each of the calling
+# thread's rows, published in a buffer that every thread of the scope can read; a row that
+# is not in the matrix is replaced by the boundary row closest to it.
+@inline function pcr_neighbors(scope, coefficients, positions, stride, n)
+    buffer = DataLayouts.scoped_static_array(scope, eltype(coefficients), n)
+    DataLayouts.synchronize(scope)
+    unrolled_foreach(positions, coefficients) do position, row
+        position <= n && (@inbounds buffer[position] = row)
+    end
+    DataLayouts.synchronize(scope)
+    return map(positions) do position
+        i = min(position, n)
+        @inbounds (buffer[max(i - stride, 1)], buffer[min(i + stride, n)])
     end
 end
 

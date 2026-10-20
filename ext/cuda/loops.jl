@@ -132,7 +132,7 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
                     i += num_lanes
                 end
                 num_active = min(Int(num_blocks), num_lanes)
-                final_val = shuffle_reduce(ThisWarp(), op, local_val, num_active)
+                final_val = scan_threads(ThisWarp(), op, local_val, num_active, false)[2]
                 if is_first_thread_in(ThisWarp())
                     @inbounds results[1] = final_val
                 end
@@ -165,7 +165,7 @@ end
 # all active threads when slice_subscope rounded the slice up, or a mask left
 # fewer active points than threads). Threads take strided subsets
 # rank:n:num_points, so the threads with points are a prefix of the scope,
-# which the num_values guard in shuffle_reduce requires.
+# which the num_values guard in scan_threads requires.
 @inline function num_reduced_threads(scope, arg, mask)
     num_points = length(DataLayouts.reduced_point_indices(arg, mask))
     first_rank =
@@ -174,73 +174,109 @@ end
     return clamp(num_points - first_rank, 0, Int(num_active_threads(scope)))
 end
 
-# Reduce a warp or sub-warp with warp shuffles, limited to the threads that
-# were assigned points (other threads' results are undefined or duplicates).
-# For multi-warp scopes, reduce each warp, then the results in the first warp.
+# Reduce each thread's points, then combine the results of the threads that were assigned
+# points (other threads' results are undefined or duplicates) like a scan over them.
 DataLayouts.reduce_points(
     scope::ThisCooperativeGroup, op::O, arg; mask, init...,
-) where {O} =
-    if scope != ThisBlock() && DataLayouts.num_threads(scope) <= THREADS_PER_WARP
-        thread_result =
-            DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; mask, init...)
-        shuffle_reduce(scope, op, thread_result, num_reduced_threads(scope, arg, mask))
-    else
-        num_warps = DataLayouts.num_subscopes(ThisWarp(), scope)
-        max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : Int(num_warps)
-        warp_index = DataLayouts.subscope_rank(ThisWarp(), scope)
-        warp_result = DataLayouts.reduce_points(ThisWarp(), op, arg; mask, init...)
-        results = DataLayouts.scoped_static_array(scope, typeof(warp_result), max_results)
-        if is_first_thread_in(ThisWarp())
-            @inbounds results[warp_index] = warp_result
-        end
-        DataLayouts.synchronize(scope)
-        # Empty warps hold duplicates rather than partial results, so only
-        # warps that reduced points take part in the fold; at least one entry
-        # is always folded so a scope with no points still returns its first
-        # warp's init-seeded value.
-        num_results = max(cld(num_reduced_threads(scope, arg, mask), THREADS_PER_WARP), 1)
-        if !isone(num_results)
-            if isone(warp_index)
-                # Every lane of the first warp must reach the shuffles in
-                # shuffle_reduce, so surplus lanes load a duplicate of the last
-                # result instead of an entry that no warp ever wrote.
-                lane_index = min(Int(DataLayouts.thread_rank(ThisWarp())), num_results)
-                @inbounds warp_result = results[lane_index]
-                final_result = shuffle_reduce(ThisWarp(), op, warp_result, num_results)
-                if is_first_thread_in(ThisWarp())
-                    @inbounds results[1] = final_result
-                end
-            end
-            DataLayouts.synchronize(scope)
-        end
-        @inbounds results[1]
-    end
+) where {O} = scan_threads(
+    scope,
+    op,
+    DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; mask, init...),
+    num_reduced_threads(scope, arg, mask),
+    false,
+)[2]
 
 # Use the scope type to generate the number of pairwise reductions, log2(N), in
 # the compiler, without needing to rely on constant propagation in GPU kernels.
 @generated num_reductions(::ThisSubBlock{N}) where {N} =
     8 * sizeof(N) - leading_zeros(N) - 1
 
-# Binary-tree reduction over first num_values threads: all active lanes (nonzero
-# lower bits in the mask) exchange data, but ranks above num_values are ignored.
-function shuffle_reduce(scope, op::O, value, num_values) where {O}
-    num_offsets = num_reductions(scope)
-    num_inactive = THREADS_PER_WARP - num_active_threads(ThisWarp())
-    thread_index = DataLayouts.thread_rank(scope)
-    for offset in
-        ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)), Val(num_offsets))
-        shuffled_value =
-            CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
-        if thread_index <= num_values && xor(thread_index - 1, offset) + 1 <= num_values
-            value = op(value, shuffled_value)
+# Scan a cooperative group's points in rounds of one point per thread, carrying the
+# combination of each round's values into the next. Threads without a point in the last
+# round read a duplicate of the last point, which the scans below exclude.
+@inline function DataLayouts.scan_points(
+    store!::S,
+    scope::ThisCooperativeGroup,
+    op::DataLayouts.AssociativeOperator,
+    arg,
+    init,
+    flip,
+) where {S}
+    n = length(arg)
+    num_rounds = cld(n, Int(DataLayouts.num_threads(scope)))
+    carry = scan_round(store!, scope, op, arg, init, flip ? num_rounds : 1, flip)
+    for round in 2:num_rounds
+        carry = scan_round(
+            store!, scope, op, arg, carry, flip ? num_rounds + 1 - round : round, flip,
+        )
+    end
+    return carry
+end
+
+@inline function scan_round(store!::S, scope, op::O, arg, carry, round, flip) where {S, O}
+    (n, num_threads) = (length(arg), Int(DataLayouts.num_threads(scope)))
+    index = (round - 1) * num_threads + Int(DataLayouts.thread_rank(scope))
+    num_values = min(num_threads, n - (round - 1) * num_threads)
+    (scan, total) = scan_threads(scope, op, @inbounds(arg[min(index, n)]), num_values, flip)
+    index <= n && store!(index, carry isa NoInit ? scan : op(carry, scan))
+    return carry isa NoInit ? total : op(carry, total)
+end
+
+# Inclusive scan of the first num_values threads' values in order of rank (reverse order when
+# flip), along with the combination of all of their values (the first value if there are
+# none). Multi-warp scopes scan each warp, and then the warp totals, which every warp reads
+# from shared memory into the lanes of a sub-warp with one lane per warp of the scope.
+@inline function scan_threads(
+    scope::ThisCooperativeGroup,
+    op::O,
+    value,
+    num_values,
+    flip,
+) where {O}
+    if scope != ThisBlock() && shuffles_in_warp(scope)
+        scan = shuffle_scan(scope, op, value, num_values, flip)
+        return (scan, shuffle_point_value(scope, scan, flip ? 1 : max(num_values, 1)))
+    end
+    warp_index = Int(DataLayouts.subscope_rank(ThisWarp(), scope))
+    num_warp_values =
+        clamp(num_values - (warp_index - 1) * THREADS_PER_WARP, 0, THREADS_PER_WARP)
+    warp_scan = shuffle_scan(ThisWarp(), op, value, num_warp_values, flip)
+    warp_total =
+        shuffle_point_value(ThisWarp(), warp_scan, flip ? 1 : max(num_warp_values, 1))
+    totals_scope = warp_totals_scope(scope)
+    totals = DataLayouts.scoped_static_array(
+        scope,
+        typeof(warp_total),
+        DataLayouts.static_num_threads(totals_scope),
+    )
+    if is_first_thread_in(ThisWarp())
+        @inbounds totals[warp_index] = warp_total
+    end
+    DataLayouts.synchronize(scope)
+    num_warps = max(cld(num_values, THREADS_PER_WARP), 1)
+    lane_index = min(Int(DataLayouts.thread_rank(totals_scope)), num_warps)
+    total = @inbounds totals[flip ? num_warps + 1 - lane_index : lane_index]
+    DataLayouts.synchronize(scope)
+    totals_scan = shuffle_scan(totals_scope, op, total, num_warps, false)
+    warp_position = flip ? num_warps + 1 - warp_index : warp_index
+    prefix = shuffle_point_value(totals_scope, totals_scan, max(warp_position - 1, 1))
+    total = shuffle_point_value(totals_scope, totals_scan, num_warps)
+    return (warp_position > 1 ? op(prefix, warp_scan) : warp_scan, total)
+end
+@inline warp_totals_scope(::ThisBlock) = ThisWarp()
+@inline warp_totals_scope(::ThisSubBlock{N}) where {N} =
+    ThisSubBlock{N ÷ THREADS_PER_WARP}()
+
+# Kogge-Stone scan of a sub-warp, in which each thread combines its value with the one
+# shuffled from the thread at every power-of-two offset below (above, when flip) its rank;
+# a thread past num_values never sends a value to a thread at or before num_values.
+@inline function shuffle_scan(scope, op::O, value, num_values, flip) where {O}
+    rank = DataLayouts.thread_rank(scope)
+    for offset in ntuple(n -> one(UInt32) << (n - 1), Val(num_reductions(scope)))
+        shuffled_value = shuffle_shift(scope, value, offset, flip)
+        if flip ? rank + offset <= num_values : rank > offset
+            value = op(shuffled_value, value)
         end
     end
     return value
 end
-
-# Extend CUDA's warp shuffle intrinsics to support AutoBroadcasters and Tensors, recursively
-# shuffling each value that appears in a multi-component reduction.
-CUDA.shfl_recurse(
-    op::O,
-    x::T,
-) where {O, T <: Union{ClimaCore.Geometry.Tensor, Utilities.AutoBroadcaster}} = map(op, x)

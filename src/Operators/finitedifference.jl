@@ -485,7 +485,8 @@ reads_neighbors(op, args...) = unrolled_map(Returns(Val(!fuses_into_stencils(op)
 
 Whether the stencil of `op` reads its arguments at neighboring points without branching on
 the point (e.g., at clamped indices, replacing out-of-range values afterwards), so its cached
-arguments can stay in registers where supported (see [`cached_arg`](@ref)).
+arguments can stay in registers where supported (see [`cached_arg`](@ref)). Such an operator
+evaluates its interior stencil at every point, including the boundaries.
 """
 reads_without_branching(_) = false
 
@@ -669,9 +670,12 @@ end
 num_values(val) = iszero(ndims(val)) ? 1 : size(val)[1]
 
 # Value of an operator application at idx; at an index in both boundary windows of a short
-# column, the left (bottom) condition takes precedence.
+# column, the left (bottom) condition takes precedence. An operator that reads without
+# branching uses its interior stencil at every point.
 Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
-    if should_call_left_boundary(idx, space, op, args...)
+    if reads_without_branching(op)
+        stencil_interior(op, space, idx, args...)
+    elseif should_call_left_boundary(idx, space, op, args...)
         bc = get_boundary(op, left_boundary_window(space))
         stencil_left_boundary(op, bc, space, idx, args...)
     elseif should_call_right_boundary(idx, space, op, args...)
@@ -1290,8 +1294,6 @@ velocity_stencil_width(::Val{:current}) = (0, 0)
 velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
 
 # Every face uses the interior stencil, which applies the ghost-point extrapolations itself.
-Base.@propagate_inbounds stencil_value(op::AdvectionOperator, space, idx, args...) =
-    stencil_interior(op, space, idx, args...)
 reads_without_branching(::AdvectionOperator) = true
 
 stencil_interior_width(
@@ -2525,8 +2527,6 @@ Base.@propagate_inbounds setvalue_row(
 # Unlike other advection operators, UpwindBiasedProductC2F is only a stencil with a SetValue,
 # so its boundary faces branch to the stencils above (and it reads its argument with
 # branching), where any Extrapolate order only changes the boundary face.
-Base.@propagate_inbounds stencil_value(op::UpwindBiasedProductC2F, space, idx, args...) =
-    invoke(stencil_value, Tuple{Any, Any, Any, Vararg{Any}}, op, space, idx, args...)
 reads_without_branching(::UpwindBiasedProductC2F) = false
 boundary_width(::UpwindBiasedProductC2F, ::Extrapolate, args...) = 1
 

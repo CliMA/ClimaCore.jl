@@ -426,11 +426,14 @@ end
 end
 
 # All indices a reduction over arg combines, before division among a
-# DataScope's threads. Unmasked reductions use eachindex for every size: CPU
-# reductions vectorize an order of magnitude better over linear than Cartesian
-# indices, and GPU reductions over linear indices need no divisions.
+# DataScope's threads. Unmasked reductions use linear indices whenever they need
+# no divisions (eachindex, or positions along the only axis of a slice like a
+# column): CPU reductions vectorize an order of magnitude better over linear than
+# Cartesian indices, and GPU reductions over linear indices need no divisions.
 @inline reduced_point_indices(arg, mask) =
-    mask == NoMask() ? eachindex(arg) : maskable_slice_indices(mask, view, arg)
+    mask != NoMask() ? maskable_slice_indices(mask, view, arg) :
+    has_inferred_size(arg) && has_one_inferred_axis(arg) ? Base.OneTo(length(arg)) :
+    eachindex(arg)
 
 # Reduce all points assigned to this thread with safe_mapreduce (pairwise
 # splitting for logarithmic roundoff, @simd for vectorization); Base's pairwise
@@ -454,8 +457,8 @@ end
     all_indices = reduced_point_indices(arg, mask)
     indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), all_indices)
     value =
-        op isa Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)} ?
-        @inline(index -> @inbounds arg[index]) : (index -> @inbounds arg[index])
+        is_vectorizable(op) ? @inline(index -> @inbounds arg[index]) :
+        (index -> @inbounds arg[index])
     isempty(init) &&
         isempty(indices) &&
         !isempty(all_indices) &&
@@ -463,28 +466,160 @@ end
     return safe_mapreduce(value, op, indices; init...)
 end
 
+# Associative operators (up to roundoff), whose scans the threads of a scope can share by
+# combining their values in any grouping, but in order (see scan_points).
+const AssociativeOperator = Union{
+    typeof(+),
+    typeof(*),
+    typeof(Base.add_sum),
+    typeof(Base.mul_prod),
+    typeof(max),
+    typeof(min),
+    typeof(&),
+    typeof(|),
+}
+
+# Operators whose sequential reductions LLVM vectorizes, given the point values inline.
+@inline is_vectorizable(op) =
+    op isa Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)}
+
+# Whether a reduction may combine values of type T with op in any order, as reduce_points
+# does; products of matrices or tensors do not commute.
+@inline commutes(op, ::Type{T}) where {T} =
+    !(op isa Union{typeof(*), typeof(Base.mul_prod)}) || T <: Number
+
+# Whether the point at a linear index is in the calling thread's strided subset of points.
+@inline owns_point(scope, index) =
+    rem(index - 1, Int(num_threads(scope))) == Int(thread_rank(scope)) - 1
+
+"""
+    accumulate_points!(op, dest, arg; [init], flip = Val(false))
+
+Store the running combinations of the values of a [`DataLayout`](@ref) or similarly
+indexable argument with `op` in `dest`, as a generalization of `accumulate!`, using the
+threads of the largest [`DataScope`](@ref) that can access both arguments. When `init` is
+given, it is combined with the first value, and setting `flip` to `Val(true)` accumulates
+from the last point to the first. Every thread of the scope folds its share of the points in
+parallel when `op` is an associative operator like `+`, `*`, or `max`; any other `op` is
+applied in order by each thread, as in `accumulate!`. On GPUs, this can only be called inside of a slice
+loop, like the one in [`column_accumulate!`](@ref).
+"""
+@inline function accumulate_points!(
+    op::O,
+    dest,
+    arg;
+    init = NoInit(),
+    flip = Val(false),
+) where {O}
+    scan_points(PointStore(dest), DataScope(dest, arg), op, arg, init, flip isa Val{true})
+    return dest
+end
+
+# Store each value of a scan at its own point.
+struct PointStore{D}
+    dest::D
+end
+@inline (store::PointStore)(index, value) = (@inbounds store.dest[index] = value; nothing)
+
+# Call store!(index, value) with the running combination of arg's values at every point the
+# calling thread owns, combining them in order of index (reverse order when flip), and return
+# the combination of all values. A thread scans its points in order. Scopes that can share a
+# scan between their threads do so when op is associative; otherwise every thread applies op
+# to all values in order, from a buffer that every thread can read.
+@inline function scan_points(store!::S, ::ThisThread, op::O, arg, init, flip) where {S, O}
+    n = length(arg)
+    point_index(position) = flip ? n + 1 - position : position
+    @inbounds first_value = arg[point_index(1)]
+    value = init isa NoInit ? first_value : op(init, first_value)
+    store!(point_index(1), value)
+    for position in 2:n
+        value = op(value, @inbounds arg[point_index(position)])
+        store!(point_index(position), value)
+    end
+    return value
+end
+@inline scan_points(store!::S, ::ThisThreadPool, op::O, arg, init, flip) where {S, O} =
+    scan_points(store!, ThisThread(), op, arg, init, flip)
+@inline function scan_points(store!::S, scope, op::O, arg, init, flip) where {S, O}
+    values = shared_values(arg)
+    @inline owned_store!(index, value) =
+        owns_point(scope, index) ? store!(index, value) : nothing
+    result = scan_points(owned_store!, ThisThread(), op, values, init, flip)
+    values === arg || synchronize(scope)
+    return result
+end
+
+# Values that every thread of arg's scope can read: register and lazy layouts are copied
+# into a buffer, which is synchronized once written.
+@inline function shared_values(arg)
+    arg isa LazyDataLayout || stored_in_registers(arg) || return arg
+    buffer = buffer_similar(arg, drop_auto_broadcasters(safe_eltype(arg)))
+    copyto!(buffer, arg)
+    synchronize(DataScope(arg))
+    return buffer
+end
+
+@inline unseeded_fold(op::O, init, value) where {O} =
+    init isa NoInit ? value : op(init, value)
+
+# Combine all values of arg in order of index (reverse order when flip), seeded by init, as
+# the total of a scan. A single thread calls reduce_points when its sequential loop
+# vectorizes and the order of values does not matter.
+@inline fold_points(op::O, arg, init, flip) where {O} =
+    DataScope(arg) == ThisThread() && is_vectorizable(op) && commutes(op, eltype(arg)) ?
+    unseeded_fold(op, init, reduce_points(ThisThread(), op, arg; mask = NoMask())) :
+    scan_points(Returns(nothing), DataScope(arg), op, arg, init, flip)
+
 """
     column_reduce!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
 
 Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
-`op`, storing the results in the corresponding columns of `dest`. Setting `flip`
-to `Val(true)` changes the order of reduction from left-associative (default) to
-right-associative, and `init` seeds the fold when it is given.
+`op`, storing the results in the corresponding columns of `dest`. The levels are
+combined from first to last, or from last to first when `flip` is `Val(true)`, and
+`init` seeds the fold when it is given. Like [`accumulate_points!`](@ref), each
+column is folded by all of its threads when `op` is associative.
 """
-@inline column_reduce!(
+@inline function column_reduce!(
     op::O,
     dest,
     arg;
     mask = NoMask(),
     flip = Val(false),
-    init...,
-) where {O} =
+    init = NoInit(),
+) where {O}
     foreach_column(dest, arg; mask) do dest_column, arg_column
-        maybe_reverse = flip isa Val{true} ? reverse : identity
-        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
+        fill!(dest_column, fold_points(op, arg_column, init, flip isa Val{true}))
     end
+    return nothing
+end
 
-# TODO: Extend this to column_accumulate!
+"""
+    column_accumulate!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
+
+Use [`foreach_column`](@ref) to run [`accumulate_points!`](@ref) on each column of
+`arg`, storing the results in the corresponding columns of `dest`.
+"""
+@inline function column_accumulate!(
+    op::O,
+    dest,
+    arg;
+    mask = NoMask(),
+    flip = Val(false),
+    init = NoInit(),
+) where {O}
+    foreach_column(dest, arg; mask) do dest_column, arg_column
+        scope = DataScope(dest_column, arg_column)
+        scan_points(
+            PointStore(dest_column),
+            scope,
+            op,
+            arg_column,
+            init,
+            flip isa Val{true},
+        )
+    end
+    return nothing
+end
 
 # Convert the value before the fill! loop. Even though setindex! converts at
 # every point, the compiler does not hoist the conversion, and filling a Float64

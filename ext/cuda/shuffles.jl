@@ -1,20 +1,35 @@
-import ClimaCore: Operators
+import ClimaCore: Operators, MatrixFields
 import StaticArrays
 
 # Warp shuffles work on power-of-two segments of a warp, which other sizes would straddle.
-@inline shuffles_in_warp(::ThisSubBlock{N}) where {N} = N <= THREADS_PER_WARP && ispow2(N)
+const ThisSubWarp =
+    Union{map(n -> ThisSubBlock{2^n}, 0:trailing_zeros(THREADS_PER_WARP))...}
+@inline shuffles_in_warp(scope) = scope isa ThisSubWarp
 
 # Every active thread of the sub-warp has to call this at once; shfl_sync's checked lane
 # conversions fold away for UInt32s and a source lane reduced to its sub-warp offset.
 @inline function shuffle_point_value(scope::ThisSubBlock{N}, value, rank) where {N}
+    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
+    shfl(x) = CUDA.shfl_sync(subwarp_lanes(scope), x, source_lane, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# The value of the thread at a distance of offset below (above, when flip) the calling thread
+# in its sub-warp, or the calling thread's own value when there is no such thread.
+@inline function shuffle_shift(scope::ThisSubBlock{N}, value, offset, flip) where {N}
+    shfl(x) =
+        flip ? CUDA.shfl_down_sync(subwarp_lanes(scope), x, offset % UInt32, N % UInt32) :
+        CUDA.shfl_up_sync(subwarp_lanes(scope), x, offset % UInt32, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# Mask of the active lanes in the calling thread's sub-warp.
+@inline function subwarp_lanes(::ThisSubBlock{N}) where {N}
     lane_index = DataLayouts.thread_rank(ThisWarp()) - one(UInt32)
     lanes =
         N == THREADS_PER_WARP ? CUDA.FULL_MASK :
         ((one(UInt32) << N) - one(UInt32)) << (lane_index & ~UInt32(N - 1))
-    active = CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp()))
-    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
-    shfl(x) = CUDA.shfl_sync(lanes & active, x, source_lane, N % UInt32)
-    return shuffle_components(shfl, value)
+    return lanes & (CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp())))
 end
 
 @inline shuffle_components(shfl::F, x::Union{Tuple, NamedTuple}) where {F} =
@@ -91,12 +106,10 @@ Base.@propagate_inbounds round_point_index(indices, position) = indices[position
 @inline function DataLayouts.update_points!(
     f::F,
     op::O,
-    data::DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:ThisSubBlock},
+    data::DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:ThisSubWarp},
     slice_op::S,
 ) where {F, O, S}
     scope = DataLayouts.DataScope(data)
-    shuffles_in_warp(scope) ||
-        return Base.@invoke DataLayouts.update_points!(f::F, op::O, data::Any, slice_op::S)
     indices = DataLayouts.maskable_slice_indices(NoMask(), slice_op, data)
     rank = Int(DataLayouts.thread_rank(scope))
     for offset in 0:Int(DataLayouts.num_threads(scope)):(length(indices) - 1)
@@ -125,3 +138,12 @@ end
     array = ShuffledArray(parent(data), DataLayouts.DataScope(data))
     return Fields.Field(DataLayouts.unchecked_rebuild(data, array), axes(field))
 end
+
+# A sub-warp reads the coefficients of neighboring rows from their threads' registers.
+@inline MatrixFields.pcr_neighbors(
+    scope::ThisSubWarp,
+    (row,)::Tuple{Any},
+    positions,
+    stride,
+    n,
+) = ((shuffle_shift(scope, row, stride, false), shuffle_shift(scope, row, stride, true)),)

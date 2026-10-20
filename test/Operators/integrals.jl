@@ -306,6 +306,55 @@ function test_fubinis_theorem(space)
     @test horizontal_sum_of_vertical_sum ≈ volume_sum rtol = 10 * eps(FT)
 end
 
+# On GPUs, columns with more levels than a warp are divided among several warps, and columns
+# with more levels than a block's threads give each thread several levels (in rounds).
+function test_column_reduce_and_accumulate_deep!(center_space)
+    face_space = center_to_face_space(center_space)
+    FT = Spaces.undertype(center_space)
+    ᶜinput = ones(center_space)
+    ᶠinput = ones(face_space)
+    parent(ᶜinput) .= rand.(FT)
+    parent(ᶠinput) .= rand.(FT)
+    ᶜoutput = similar(ᶜinput)
+    ᶠoutput = similar(ᶠinput)
+    surface_output = similar(Fields.level(ᶠinput, Fields.half))
+    ᶜarray = Array(parent(ᶜinput))
+    ᶠarray = Array(parent(ᶠinput))
+    reverse_cumsum(array) = reverse(cumsum(reverse(array; dims = 1); dims = 1); dims = 1)
+    init = FT(2)
+    for (input, output, reverse, reference) in (
+        (ᶜinput, ᶜoutput, false, init .+ cumsum(ᶜarray; dims = 1)),
+        (ᶜinput, ᶜoutput, true, init .+ reverse_cumsum(ᶜarray)),
+        (
+            ᶜinput,
+            ᶠoutput,
+            false,
+            init .+ cat(zero(ᶜarray[1:1, :, :, :, :]), cumsum(ᶜarray; dims = 1); dims = 1),
+        ),
+        (
+            ᶜinput,
+            ᶠoutput,
+            true,
+            init .+ cat(reverse_cumsum(ᶜarray), zero(ᶜarray[1:1, :, :, :, :]); dims = 1),
+        ),
+        (ᶠinput, ᶜoutput, false, init .+ cumsum(ᶠarray; dims = 1)[2:end, :, :, :, :]),
+        (ᶠinput, ᶜoutput, true, init .+ reverse_cumsum(ᶠarray)[1:(end - 1), :, :, :, :]),
+    )
+        column_accumulate!(+, output, input; init, reverse)
+        @test Array(parent(output)) ≈ reference
+        # Operators that cannot be reordered are applied in order, by every thread.
+        column_accumulate!((a, b) -> a + b, output, input; init, reverse)
+        @test Array(parent(output)) ≈ reference
+    end
+    column_accumulate!(max, ᶠoutput, ᶠinput; reverse = true)
+    @test Array(parent(ᶠoutput)) ==
+          reverse(accumulate(max, reverse(ᶠarray; dims = 1); dims = 1); dims = 1)
+    column_reduce!(+, surface_output, ᶜinput; init)
+    @test Array(parent(surface_output)) ≈ init .+ sum(ᶜarray; dims = 1)
+    column_reduce!(max, surface_output, ᶠinput)
+    @test Array(parent(surface_output)) == maximum(ᶠarray; dims = 1)
+end
+
 @testset "Integral operations unit tests" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
@@ -320,6 +369,10 @@ end
             test_column_reduce_and_accumulate!(space)
             test_column_reduce_and_accumulate_lazy!(space)
         end
+        # 150 levels take two rounds of several warps on GPUs; one precision is enough.
+        FT == Float64 && test_column_reduce_and_accumulate_deep!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context, zelem = 150, helem = 2),
+        )
         test_column_reduce_and_accumulate_column_fields!(
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context, topography = true),
         )

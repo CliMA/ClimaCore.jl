@@ -27,6 +27,19 @@ main
   evaluate their rows directly.
 - ![][badge-🚀performance] `inv` of 2-tensors is inlined, speeding up CPU
   stencils that convert orthonormal vectors (e.g., `WVector`s).
+- ![][badge-✨feature/enhancement] `column_reduce!`, `column_accumulate!`, and
+  the `MatrixFields` single and block diagonal solvers are evaluated through
+  `DataLayouts.foreach_column`, like finite difference operators, so the
+  threads that process a column share its work on GPUs. Associative operators
+  like `+`, `*`, and `max` are reduced and accumulated with warp shuffles and
+  shared memory (through the new
+  `DataLayouts.accumulate_points!` and `DataLayouts.column_accumulate!`), and
+  any other operator is applied in order; operator inputs are evaluated by all
+  threads of each column. Tri-diagonal systems are solved by parallel cyclic
+  reduction on GPUs with any number of levels, through warp shuffles when a
+  column fits in a warp, and other band matrices by Gaussian elimination.
+- ![][badge-🚀performance] Unmasked reductions over a single column, such as
+  `column_reduce!` on CPUs, use linear indices, which vectorize.
 - ![][badge-🐛bugfix] GPU kernels support at most 2^31 - 1 elements per array
   (not 2^32 - 1), the same limit as for slices per `DataLayouts.foreach_slice`:
   `LLVM.jl` can sign-extend 32-bit indices, so they should not use the sign bit.

@@ -57,6 +57,7 @@ import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype, return_type
 import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
+import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
 import ..DataLayouts: DataLayout
 import ..Geometry

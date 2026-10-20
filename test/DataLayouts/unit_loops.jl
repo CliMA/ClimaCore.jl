@@ -277,6 +277,50 @@ end
 end
 
 
+# Column accumulations over a warp (Nv <= 32), several warps (Nv <= 128), and several points
+# per thread (Nv > 128) on GPUs, with operators that the threads of a column can reorder and
+# operators that every thread must apply in order.
+@testset "column accumulations and reductions in order [$FT]" for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    for Nv in (20, 63, 200)
+        arg = test_data(device, FT, 1, Nv)
+        dest = test_data(device, FT, 1, Nv)
+        dest_level = test_data(device, FT, 1, 1)
+        column_array = Array(parent(arg))
+        reversed_array = reverse(column_array; dims = 1)
+        DataLayouts.column_accumulate!(+, dest, arg)
+        @test Array(parent(dest)) == cumsum(column_array; dims = 1)
+        DataLayouts.column_accumulate!(max, dest, arg; flip = Val(true), init = FT(500))
+        @test Array(parent(dest)) ==
+              reverse(accumulate(max, reversed_array; dims = 1, init = FT(500)); dims = 1)
+        DataLayouts.column_accumulate!((a, b) -> a - b, dest, arg; init = FT(1))
+        @test Array(parent(dest)) == accumulate(-, column_array; dims = 1, init = FT(1))
+        DataLayouts.column_reduce!((a, b) -> a - b, dest_level, arg; flip = Val(true))
+        @test Array(parent(dest_level)) ==
+              mapslices(c -> foldl(-, c), reversed_array; dims = 1)
+
+        # Products of matrices are associative but do not commute, so the threads of a
+        # column must combine them in order.
+        M = StaticArrays.SMatrix{2, 2, FT, 4}
+        matrices = DataLayouts.VIJFH{M, Nv, 4, 4, nothing}(
+            device_array(device, 1 .+ (rand(FT, Nv, 4, 4, 4, 5) .- FT(0.5)) ./ 10),
+        )
+        products = DataLayouts.VIJFH{M, 1, 4, 4, nothing}(
+            device_array(device, zeros(FT, 1, 4, 4, 4, 5)),
+        )
+        matrix_array = Array(parent(matrices))
+        column_matrices(i, j, h) = map(v -> M(matrix_array[v, i, j, :, h]), 1:Nv)
+        for flip in (Val(false), Val(true))
+            DataLayouts.column_reduce!(*, products, matrices; flip)
+            maybe_reverse = flip isa Val{true} ? reverse : identity
+            @test all(Iterators.product(1:4, 1:4, 1:5)) do (i, j, h)
+                product = M(Array(parent(products))[1, i, j, :, h])
+                product ≈ foldl(*, maybe_reverse(column_matrices(i, j, h)))
+            end
+        end
+    end
+end
+
 @testset "thread pool resolution and sharing" begin
     device = ClimaComms.device()
     if device isa ClimaComms.AbstractCPUDevice

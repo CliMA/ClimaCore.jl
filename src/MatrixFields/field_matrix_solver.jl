@@ -233,15 +233,13 @@ unstable when `Aₙₙ` has entries with large disparities in magnitude, but avo
 this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
 
-On a GPU, tridiagonal systems are solved with the parallel cyclic reduction (PCR)
-method, which makes better use of GPU parallelism and shared memory. Since this
-solver launches one thread per row of the matrix, it is only used for systems with
-at most 512 rows, to stay within CUDA thread block limits. Above that size, the
-code falls back to the Gaussian elimination method used on the CPU, with degraded
-performance.
-
-PCR recursively decomposes a tridiagonal system into two systems of half the size,
-until the systems have size 1 and can be solved directly.
+On a GPU, where the rows of each column are divided among multiple threads,
+tridiagonal systems are instead solved with the parallel cyclic reduction (PCR)
+method, which recursively decomposes a tridiagonal system into two systems of half
+the size, until the systems have size 1 and can be solved directly. The rows of
+each column are exchanged through warp shuffles when a column fits in a warp, and
+through shared memory otherwise. Other band matrices are solved by Gaussian
+elimination on one thread per column.
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
@@ -265,51 +263,8 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-cheap_inv(_) = false
-cheap_inv(::ScalingFieldMatrixEntry) = true
-cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
-
-function run_field_matrix_solver!(
-    ::BlockDiagonalSolve,
-    cache,
-    x,
-    A,
-    b,
-)
-    names = matrix_row_keys(keys(A))
-    # The following is a performance optimization.
-    # Using
-    # `foreach(name -> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
-    # is perfectly fine, but may launch many gpu kernels. So,
-    # We may want to call `multiple_field_solve!`, which fuses
-    # these kernels into one. However, `multiple_field_solve!`
-    # launches threads horizontally, and loops vertically (which
-    # is slow) to perform the solve. In some circumstances,
-    # when a vertical loop is not needed (e.g., ScalingFieldMatrixEntry)
-    # launching several kernels may be cheaper than launching one
-    # slower kernel, so we first check for types that may lead to fast
-    # kernels.
-
-    case1 = length(names) == 1
-    case2 = all(name -> cheap_inv(A[name, name]), names.values)
-    case3 = any(name -> cheap_inv(A[name, name]), names.values)
-
-    # Direct all TridiagonalMatrixRow cases to `single_field_solve` path so
-    # they can be redirected to a specialised solver
-    # TODO: Group multiple Tridiagonals to the special 'multiple_field' solver
-    case4 = any(name -> eltype(A[name, name]) <: TridiagonalMatrixRow, names.values)
-
-    # TODO: remove case3 and implement _single_field_solve_diag_matrix_row!
-    #       in multiple_field_solve!
-    if case1 || case2 || case3 || case4
-        foreach(names) do name
-            single_field_solve!(cache[name], x[name], A[name, name], b[name])
-        end
-    else
-        multiple_field_solve!(cache, x, A, b)
-    end
-    return nothing
-end
+run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+    multiple_field_solve!(cache, x, A, b)
 
 """
     BlockLowerTriangularSolve(names₁...; alg₁ = BlockDiagonalSolve(), alg₂ = BlockDiagonalSolve())
