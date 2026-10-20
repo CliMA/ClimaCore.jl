@@ -10,11 +10,11 @@ import ClimaComms
 import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
-import ..Utilities: @drop_recursion_limits, @drop_constprop
+import ..Utilities: @drop_recursion_limits, @drop_constprop, @inline_types_only
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities:
     stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
-import ..Utilities: safe_mapreduce, linear_index_and_stride, UnitRangeSubArray
+import ..Utilities: safe_mapreduce, NoInit, linear_index_and_stride, UnitRangeSubArray
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -213,7 +213,9 @@ in a `Tuple` or `NamedTuple` (e.g., a container of arguments of
 @inline function reassign(data, scope)
     array = parent(data)
     assume_extents(array, inferred_parent_extents(data, array)) # avoid extra size checks
-    return reassign(typeof(data), scope)(array)
+    # The array is stored in a kernel argument as a CompactDeviceArray (see the CUDA
+    # extension), so the layout is rebuilt with the type of the array that it returns.
+    return unchecked_rebuild(reassign(typeof(data), scope), array)
 end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
@@ -320,10 +322,12 @@ end
 @inline assume_extents(_, _) = nothing
 
 # Parent array extents fixed by a layout's type, with 0 for extents that can't be inferred
-@inline inferred_parent_extents(data, array) = add_f_dim(
-    unrolled_map(extent -> something(extent, 0), inferred_size(data)),
-    num_basetypes(eltype(array), eltype(data)),
-    Val(f_dim(data)),
+@inline inferred_parent_extents(data, array) =
+    inferred_parent_extents(typeof(data), typeof(array))
+@inline inferred_parent_extents(::Type{D}, ::Type{A}) where {D, A} = add_f_dim(
+    unrolled_map(extent -> something(extent, 0), inferred_size(D)),
+    num_basetypes(eltype(A), eltype(D)),
+    Val(f_dim(D)),
 )
 
 function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
@@ -693,7 +697,6 @@ include("registers.jl")
 # constant propagation, since turning it off there shifts kernel codegen
 # enough to flip cases near the sm_60 register brink.
 @drop_constprop _foreach_slice, foreach_slice_with_options, unfused_slice_loop,
-foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
-Base.fill!, Base.copyto!
+foreach_point, foreach_level, foreach_slab, foreach_column, Base.fill!, Base.copyto!
 
 end # module

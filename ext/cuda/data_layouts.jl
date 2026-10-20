@@ -16,20 +16,25 @@ check_index_count(n) =
 
 include("scopes.jl")
 include("loops.jl")
-include("data_layouts_threadblock.jl")
 
-# Kernel parameters are limited to 4 KiB of memory before compute capability
-# 7.0, and a SubArray of a 5-D CuDeviceArray uses 128-160 of those bytes per
-# broadcast argument (64 for the parent array, 48-80 for the index ranges, and
-# 16 for precomputed linear-indexing fields), so broadcasts over a few dozen
-# field views cannot be launched as kernels. Since every extent of the array in
-# a DataLayout is either available from the layout's type or identical to the
-# corresponding extent of the parent array, the index ranges can be replaced
-# with a UInt32 offset for every restricted dimension, plus a UInt32 extent for
-# every restricted dimension whose extent is not available from the type. The
-# type parameters are the extent of each dimension `E` (with 0 for extents that
-# are only available at runtime), the restricted dimensions `R`, and the tuple
-# lengths `K = length(R)` and `D = count(d -> iszero(E[d]), R)`.
+# Kernel parameters are limited to 4 KiB of memory before compute capability 7.0, and a
+# 5-D CuDeviceArray uses 64 of those bytes (a pointer, 5 extents, and 2 lengths), a SubArray
+# of one 128-160, so broadcasts over a few dozen fields cannot be launched as kernels. Since
+# every extent of the array in a DataLayout is either fixed by the layout's type or
+# identical to the corresponding extent of the parent array, an array is passed as its
+# pointer with an extent for every dimension whose extent is not fixed by the type (a
+# CompactDeviceArray), and a view as such an array with a UInt32 offset for every
+# restricted dimension, plus a UInt32 extent for every restricted dimension whose extent is
+# not fixed (a CompactDeviceView). They are read as CuDeviceArrays whose fixed extents are
+# constants (see parent), so kernels load no other extents. The type parameters are the
+# extent of each dimension `E` (with 0 for extents that are only available at runtime), the
+# restricted dimensions `R` of a view, and the tuple lengths `K = length(R)` and `D`, the
+# count of the stored extents (`count(iszero, E)`, or `count(d -> iszero(E[d]), R)` for a
+# view).
+struct CompactDeviceArray{T, N, E, D} <: DenseArray{T, N}
+    ptr::LLVM.Interop.LLVMPtr{T, CUDA.AS.Global}
+    dynamic_extents::NTuple{D, Int}
+end
 struct CompactDeviceView{T, N, E, R, K, D, A <: AbstractArray{T, N}} <:
        AbstractArray{T, N}
     parent::A
@@ -37,12 +42,30 @@ struct CompactDeviceView{T, N, E, R, K, D, A <: AbstractArray{T, N}} <:
     dynamic_extents::NTuple{D, UInt32}
 end
 
-Base.parent(array::CompactDeviceView) = array.parent
+@inline device_array(array) = array
+@inline device_array(array::CompactDeviceArray{T, N}) where {T, N} =
+    CUDA.CuDeviceArray{T, N, CUDA.AS.Global}(array.ptr, size(array))
 
+@inline Base.parent(
+    data::DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:Any, <:CompactDeviceArray},
+) = device_array(getfield(data, :array))
+Base.parent(array::CompactDeviceView) = device_array(array.parent)
+
+DataLayouts.DataScope(::Type{<:CompactDeviceArray}) = ThisKernel()
 DataLayouts.DataScope(
     ::Type{<:CompactDeviceView{<:Any, <:Any, <:Any, <:Any, <:Any, <:Any, A}},
 ) where {A} = DataLayouts.DataScope(A)
 
+Base.IndexStyle(::Type{<:CompactDeviceArray}) = IndexLinear()
+
+@inline Base.size(array::CompactDeviceArray{<:Any, N, E}) where {N, E} =
+    ntuple(Val(N)) do d
+        iszero(E[d]) || return Int(E[d])
+        return array.dynamic_extents[count(
+            e -> e <= d && iszero(E[e]),
+            ntuple(identity, Val(N)),
+        )]
+    end
 @inline Base.size(array::CompactDeviceView{<:Any, N, E, R}) where {N, E, R} =
     ntuple(Val(N)) do d
         iszero(E[d]) || return Int(E[d])
@@ -136,47 +159,70 @@ const ViewDimIndex = Union{
     UnitRange{<:Integer},
 }
 
-# Kernels inline every call, so every parent access in a kernel assumes the extents
-# fixed by a layout's type (like DataLayouts.reassign, but for all parent accesses).
-@inline function Base.parent(
-    data::DataLayouts.VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, <:CUDA.CuDeviceArray},
-) where {T, Nv, Ni, Nj, Nh, F, S}
-    array = getfield(data, :array)
-    extents = DataLayouts.inferred_parent_extents(data, array)
-    unrolled_foreach(DataLayouts.assume_extent, extents, size(array))
-    return array
+extent_mismatch() = DimensionMismatch("DataLayout extents do not match its array")
+
+# The extents of a layout's parent array that are fixed by the layout's type (see
+# DataLayouts.inferred_parent_extents), as a type parameter: unlike a value, inference
+# does not have to propagate it as a constant to find the type of the compact array.
+@inline fixed_extents(array, data) =
+    Val(DataLayouts.inferred_parent_extents(typeof(data), typeof(array)))
+
+# A global array as a kernel parameter (see CompactDeviceArray), with the extents E fixed.
+@inline function compact_device_array(
+    array::CUDA.CuDeviceArray{T, N, CUDA.AS.Global},
+    ::Val{E},
+) where {T, N, E}
+    length(E) == N || throw(extent_mismatch())
+    dynamic = filter(d -> iszero(E[d]), ntuple(identity, Val(N)))
+    compact = CompactDeviceArray{T, N, E, length(dynamic)}(
+        pointer(array),
+        map(d -> size(array, d), dynamic),
+    )
+    # Validates every extent assumption at launch time
+    size(compact) == size(array) || throw(extent_mismatch())
+    return compact
 end
 
 compact_device_view(array, data) = array
 
-@inline function compact_device_view(
-    array::SubArray{<:Any, N, <:CUDA.CuDeviceArray, <:NTuple{N, ViewDimIndex}},
+@inline compact_device_view(array::CUDA.CuDeviceArray{<:Any, <:Any, CUDA.AS.Global}, data) =
+    compact_device_array(array, fixed_extents(array, data))
+
+@inline compact_device_view(
+    array::SubArray{
+        <:Any,
+        N,
+        <:CUDA.CuDeviceArray{<:Any, <:Any, CUDA.AS.Global},
+        <:NTuple{N, ViewDimIndex},
+    },
     data::DataLayouts.DataLayout,
-) where {N}
-    extents = DataLayouts.inferred_parent_extents(data, array)
-    length(extents) == N ||
-        throw(DimensionMismatch("DataLayout extents do not match its array"))
+) where {N} = compact_device_view(array, fixed_extents(array, data))
+@inline function compact_device_view(
+    array::SubArray{<:Any, N, <:Any, I},
+    ::Val{E},
+) where {N, I, E}
     indices = parentindices(array)
-    restricted =
-        filter(d -> indices[d] isa UnitRange, ntuple(identity, Val(N)))
-    dynamic = filter(d -> iszero(extents[d]), restricted)
+    restricted = filter(d -> fieldtype(I, d) <: UnitRange, ntuple(identity, Val(N)))
+    dynamic = filter(d -> iszero(E[d]), restricted)
+    # A view's restricted dimensions say nothing about the extents of its parent.
+    parent_extents = Val(ntuple(d -> fieldtype(I, d) <: UnitRange ? 0 : E[d], Val(N)))
+    compact_parent = compact_device_array(parent(array), parent_extents)
     compact = CompactDeviceView{
         eltype(array),
         N,
-        extents,
+        E,
         restricted,
         length(restricted),
         length(dynamic),
-        typeof(parent(array)),
+        typeof(compact_parent),
     }(
-        parent(array),
+        compact_parent,
         map(d -> UInt32(first(indices[d]) - 1), restricted),
         map(d -> UInt32(length(indices[d])), dynamic),
     )
     # Validates every extent assumption at launch time, including that any
     # Base.OneTo indices span their full parent dimensions
-    size(compact) == size(array) ||
-        throw(DimensionMismatch("DataLayout extents do not match its array"))
+    size(compact) == size(array) || throw(extent_mismatch())
     return compact
 end
 
@@ -193,15 +239,8 @@ end
 const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
 const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
-@inline function Utilities.dense_array_and_index(
-    array::CompactDeviceView{<:Any, N, E, R},
-    index,
-) where {N, E, R}
-    full_array = parent(array)
-    full_extents = ntuple(d -> d in R ? 0 : E[d], Val(N))
-    unrolled_foreach(DataLayouts.assume_extent, full_extents, size(full_array))
-    return Utilities.dense_array_and_index(full_array, parent_index(array, index))
-end
+@inline Utilities.dense_array_and_index(array::CompactDeviceView, index) =
+    Utilities.dense_array_and_index(parent(array), parent_index(array, index))
 
 @inline device_offset_and_stride(array, index::CartesianIndex, val_F::Val) =
     Utilities.linear_index_and_stride(UInt32, array, Tuple(index), val_F)
