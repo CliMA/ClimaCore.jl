@@ -14,7 +14,7 @@ import ..Utilities: @drop_recursion_limits, @drop_constprop
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities:
     stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
-import ..Utilities: safe_mapreduce, linear_index_and_stride, UnitRangeSubArray
+import ..Utilities: safe_mapreduce, NoInit, linear_index_and_stride, UnitRangeSubArray
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -665,7 +665,6 @@ include("registers.jl")
 # constant propagation, since turning it off there shifts kernel codegen
 # enough to flip cases near the sm_60 register brink.
 @drop_constprop _foreach_slice, unfused_slice_loop,
-foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
-Base.fill!, Base.copyto!
+foreach_point, foreach_level, foreach_slab, foreach_column, Base.fill!, Base.copyto!
 
 end # module

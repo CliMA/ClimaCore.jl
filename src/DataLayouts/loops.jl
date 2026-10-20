@@ -438,27 +438,22 @@ end
 # Reduce all points assigned to this thread with safe_mapreduce (pairwise
 # splitting for logarithmic roundoff, @simd for vectorization); Base's pairwise
 # mapreduce has an empty-collection error path that cannot compile in GPU
-# kernels. The @simd loops only vectorize sums and products, whose
-# floating-point operations LLVM may reassociate, and only when the point
-# values are read by inlined code. Inlining into other reductions (e.g., with
-# the NaN-aware comparisons of min and max) can double their compilation time,
-# while making them at most 20% faster.
+# kernels. The point values are read by inlined code, which lets the @simd
+# loops vectorize sums and products, and which makes other reductions (e.g.,
+# max and min) several times faster without measurably slowing compilation.
 #
 # A thread can be assigned no points (slice_subscope rounds a slice up to a
 # power of two, or a mask leaves fewer active points than threads). Such a
 # thread folds a duplicate of the first point's value; every scope that can
-# leave a thread empty excludes it from its own fold (see num_reduced_threads
-# in the CUDA extension). A mask can also leave a whole kernel block empty,
-# which the grid-level fold cannot exclude, so masked kernel reductions
-# require an init value (enforced in the CUDA extension). With no points at
-# all, only an init value can define the result, so empty reductions still
-# require one.
+# leave a thread empty excludes it from its own fold. A mask can also leave
+# a whole kernel block empty, which the grid-level fold cannot exclude, so
+# masked kernel reductions require an init value (enforced in the CUDA
+# extension). With no points at all, only an init value can define the result,
+# so empty reductions still require one.
 @inline function reduce_points(::ThisThread, op::O, arg; mask, init...) where {O}
     all_indices = reduced_point_indices(arg, mask)
     indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), all_indices)
-    value =
-        op isa Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)} ?
-        @inline(index -> @inbounds arg[index]) : (index -> @inbounds arg[index])
+    value = @inline(index -> @inbounds arg[index])
     isempty(init) &&
         isempty(indices) &&
         !isempty(all_indices) &&
@@ -466,28 +461,90 @@ end
     return safe_mapreduce(value, op, indices; init...)
 end
 
-"""
-    column_reduce!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
+# Whether scans using op can be parallelized by combining point values in any
+# grouping (leaving the order unchanged), with identical results up to roundoff.
+is_associative(_) = false
+is_associative(::Union{typeof(+), typeof(Base.add_sum)}) = true
+is_associative(::Union{typeof(*), typeof(Base.mul_prod)}) = true
+is_associative(::Union{typeof(max), typeof(min), typeof(&), typeof(|)}) = true
 
-Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
-`op`, storing the results in the corresponding columns of `dest`. Setting `flip`
-to `Val(true)` changes the order of reduction from left-associative (default) to
-right-associative, and `init` seeds the fold when it is given.
+# Whether reductions can use op to combine values of type T in any order, as
+# reduce_points does. Despite being associative, matrix products do not commute.
+is_commutative(op::O, _) where {O} = is_associative(op)
+is_commutative(::Union{typeof(*), typeof(Base.mul_prod)}, ::Type{<:AbstractMatrix}) = false
+
+# Whether the point at a linear index is in the calling thread's strided subset of points.
+@inline owns_point(scope, index) =
+    rem(index - 1, Int(num_threads(scope))) == Int(thread_rank(scope)) - 1
+
 """
-@inline column_reduce!(
-    op::O,
-    dest,
-    arg;
-    mask = NoMask(),
-    flip = Val(false),
-    init...,
-) where {O} =
-    foreach_column(dest, arg; mask) do dest_column, arg_column
-        maybe_reverse = flip isa Val{true} ? reverse : identity
-        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
+    scan_points(f, op, arg, [reverse], [init])
+
+Combine all values of a [`DataLayout`](@ref) or similarly indexable argument with
+`op`, as a generalization of `accumulate!`, calling `f(index, value)` at
+every index into `arg` with the currently accumulated value. In contrast to
+[`reduce_points`](@ref), which traverses `arg` in an arbitrary order,
+accumulation always uses a fixed order: increasing by default, and decreasing
+when `reverse` is set to `true`. GPU devices can parallelize accumulation over
+multiple threads when `op` is associative, but non-associative operators must be
+accumulated independently by each thread.
+"""
+@inline scan_points(f::F, op::O, arg, reverse = false, init = NoInit()) where {F, O} =
+    scan_points(DataScope(arg), f, op, arg, reverse, init)
+
+@inline function scan_points(scope, f::F, op::O, arg, reverse, init) where {F, O}
+    @inline f_at_own_points(index, value) =
+        owns_point(scope, index) ? f(index, value) : nothing
+    if arg isa LazyDataLayout || stored_in_registers(arg)
+        buffer = buffer_similar(arg, drop_auto_broadcasters(safe_eltype(arg)))
+        copyto!(buffer, arg)
+        synchronize(scope)
+        result = scan_points(ThisThread(), f_at_own_points, op, buffer, reverse, init)
+        synchronize(scope)
+    else
+        result = scan_points(ThisThread(), f_at_own_points, op, arg, reverse, init)
     end
+    return result
+end
 
-# TODO: Extend this to column_accumulate!
+@inline scan_points(::ThisThreadPool, f::F, op::O, arg, reverse, init) where {F, O} =
+    scan_points(ThisThread(), f, op, arg, reverse, init)
+
+@inline function scan_points(::ThisThread, f::F, op::O, arg, reverse, init) where {F, O}
+    n = length(arg)
+    point_index(position) = reverse ? n + 1 - position : position
+    @inbounds first_value = arg[point_index(1)]
+    value = init isa NoInit ? first_value : op(init, first_value)
+    f(point_index(1), value)
+    for position in 2:n
+        value = op(value, @inbounds arg[point_index(position)])
+        f(point_index(position), value)
+    end
+    return value
+end
+
+"""
+    fold_points(op, arg, [reverse], [init])
+
+Analogue of [`reduce_points`](@ref) that can guarantee a fixed evaluation order:
+increasing by default, and decreasing when `reverse` is set to `true`. When only
+one thread is available, this falls back to [`reduce_points`](@ref) if `op` is
+commutative; otherwise, it calls the more generic [`scan_points`](@ref). In both
+cases, `init` is combined with the first value, so that it can set the type of
+the result.
+"""
+@inline fold_points(op::O, arg, reverse = false, init = NoInit()) where {O} =
+    if DataScope(arg) == ThisThread() && is_commutative(op, eltype(arg))
+        init isa NoInit ? reduce_points(op, arg) : reduce_points(op, arg; init)
+    elseif is_commutative(op, eltype(arg)) && !(arg isa LazyDataLayout)
+        # Every thread would combine init with its own values in reduce_points,
+        # so init is handled separately. Lazy values are passed to scan_points
+        # instead of reduce_points, since scan_points compiles faster on GPUs.
+        result = reduce_points(op, arg)
+        init isa NoInit ? result : op(init, result)
+    else
+        scan_points(Returns(nothing), op, arg, reverse, init)
+    end
 
 # Convert the value before the fill! loop. Even though setindex! converts at
 # every point, the compiler does not hoist the conversion, and filling a Float64

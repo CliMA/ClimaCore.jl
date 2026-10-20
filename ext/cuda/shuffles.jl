@@ -1,4 +1,4 @@
-import ClimaCore: Operators
+import ClimaCore: Operators, MatrixFields
 import StaticArrays
 
 # Warp shuffles work on power-of-two segments of a warp, which other sizes would straddle.
@@ -7,14 +7,34 @@ import StaticArrays
 # Every active thread of the sub-warp has to call this at once; shfl_sync's checked lane
 # conversions fold away for UInt32s and a source lane reduced to its sub-warp offset.
 @inline function shuffle_point_value(scope::ThisSubBlock{N}, value, rank) where {N}
+    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
+    shfl(x) = CUDA.shfl_sync(subwarp_lanes(scope), x, source_lane, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# The value of the thread at a distance of offset below (above, when flip) the calling thread
+# in its sub-warp, or the calling thread's own value when there is no such thread.
+@inline function shuffle_shift(scope::ThisSubBlock{N}, value, offset, flip) where {N}
+    shfl(x) =
+        flip ? CUDA.shfl_down_sync(subwarp_lanes(scope), x, offset % UInt32, N % UInt32) :
+        CUDA.shfl_up_sync(subwarp_lanes(scope), x, offset % UInt32, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# The value of the thread whose rank in the sub-warp differs from the calling thread's rank
+# by the bits of offset.
+@inline function shuffle_xor(scope::ThisSubBlock{N}, value, offset) where {N}
+    shfl(x) = CUDA.shfl_xor_sync(subwarp_lanes(scope), x, offset % UInt32, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# Mask of the active lanes in the calling thread's sub-warp.
+@inline function subwarp_lanes(::ThisSubBlock{N}) where {N}
     lane_index = DataLayouts.thread_rank(ThisWarp()) - one(UInt32)
     lanes =
         N == THREADS_PER_WARP ? CUDA.FULL_MASK :
         ((one(UInt32) << N) - one(UInt32)) << (lane_index & ~UInt32(N - 1))
-    active = CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp()))
-    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
-    shfl(x) = CUDA.shfl_sync(lanes & active, x, source_lane, N % UInt32)
-    return shuffle_components(shfl, value)
+    return lanes & (CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp())))
 end
 
 @inline shuffle_components(shfl::F, x::Union{Tuple, NamedTuple}) where {F} =
@@ -125,3 +145,41 @@ end
     array = ShuffledArray(parent(data), DataLayouts.DataScope(data))
     return Fields.Field(DataLayouts.unchecked_rebuild(data, array), axes(field))
 end
+
+@generated log2_num_threads(::ThisSubBlock{N}) where {N} =
+    8 * sizeof(N) - leading_zeros(N) - 1
+
+# Butterfly reduction of the first num_values threads' values in a sub-warp, in which each
+# thread combines its value with the one shuffled from the thread whose rank differs by a
+# power of two; the first thread ends up with the combination of all num_values values.
+@inline function shuffle_reduce(scope, op::O, value, num_values) where {O}
+    rank = DataLayouts.thread_rank(scope)
+    for offset in ntuple(n -> one(UInt32) << (n - 1), Val(log2_num_threads(scope)))
+        shuffled_value = shuffle_xor(scope, value, offset)
+        if rank <= num_values && xor(rank - one(rank), offset) + one(rank) <= num_values
+            value = op(value, shuffled_value)
+        end
+    end
+    return value
+end
+
+# Kogge-Stone scan of a sub-warp, in which each thread combines its value with the one
+# shuffled from the thread at every power-of-two offset below (above, when reverse) its rank;
+# a thread past num_values never sends a value to a thread at or before num_values.
+@inline function shuffle_scan(scope, op::O, value, num_values, reverse) where {O}
+    rank = DataLayouts.thread_rank(scope)
+    for offset in ntuple(n -> one(UInt32) << (n - 1), Val(log2_num_threads(scope)))
+        shuffled_value = shuffle_shift(scope, value, offset, reverse)
+        if reverse ? rank + offset <= num_values : rank > offset
+            value = op(shuffled_value, value)
+        end
+    end
+    return value
+end
+
+# A sub-warp reads neighboring rows from their threads' registers. This is only
+# valid when each thread owns one row, as multiple rows would require offsets.
+@inline MatrixFields.pcr_neighbors(scope::ThisSubBlock, (row,)::Tuple{Any}, indices, n, s) =
+    shuffles_in_warp(scope) ?
+    ((shuffle_shift(scope, row, s, false), shuffle_shift(scope, row, s, true)),) :
+    Base.@invoke MatrixFields.pcr_neighbors(scope::Any, (row,), indices, n, s)

@@ -282,8 +282,7 @@ which holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
 memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
 
 Private buffers are used on CPUs, and on GPUs when one thread evaluates a whole
-slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point) or a
-whole column (e.g., in [`column_reduce!`](@ref)).
+slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point).
 """
 @inline has_private_buffers(arg) = DataLayouts.DataScope(arg) == DataLayouts.ThisThread()
 

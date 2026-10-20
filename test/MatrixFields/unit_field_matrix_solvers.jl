@@ -132,6 +132,23 @@ end
         )
     end
 
+    # On GPUs, columns with more rows than a warp are divided among several warps, and
+    # columns with more rows than a block's threads give each thread several rows.
+    for velem in (40, 150)
+        deep_center_space, deep_face_space = test_spaces(FT; velem)
+        for (space, string) in
+            ((deep_center_space, "cell centers"), (deep_face_space, "cell faces"))
+            matrix = random_field(TridiagonalMatrixRow{FT}, space) ./ λ .+ (I,)
+            test_field_matrix_solver(;
+                test_name = "tri-diagonal solve on $velem $string",
+                alg = MatrixFields.BlockDiagonalSolve(),
+                A = MatrixFields.FieldMatrix((@name(_), @name(_)) => matrix),
+                b = Fields.FieldVector(; _ = random_field(FT, space)),
+                use_rel_error = true,
+            )
+        end
+    end
+
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
     # Note: StationaryIterativeSolve updates x in place with an expression that reads x
