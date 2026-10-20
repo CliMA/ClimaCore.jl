@@ -70,7 +70,8 @@ DataLayouts.foreach_level
 DataLayouts.foreach_slab
 DataLayouts.foreach_column
 DataLayouts.reduce_points
-DataLayouts.column_reduce!
+DataLayouts.scan_points
+DataLayouts.fold_points
 ```
 
 ## Masks

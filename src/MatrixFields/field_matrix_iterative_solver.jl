@@ -458,7 +458,6 @@ end
 check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
     check_preconditioner(alg.P_alg, cache.P_cache, A, b)
 
-is_CuArray_type(::Type{T}) where {T} = false
 function run_field_matrix_solver!(
     alg::StationaryIterativeSolve,
     cache,
@@ -468,7 +467,7 @@ function run_field_matrix_solver!(
 )
     P = lazy_or_concrete_preconditioner(alg.P_alg, cache.P_cache, A)
     using_cuda =
-        is_CuArray_type(ClimaComms.array_type(concrete_field_vector(b)))
+        Fields.is_gpu_array_type(ClimaComms.array_type(concrete_field_vector(b)))
     if get_debug(alg) && !using_cuda
         @debug begin
             e₀ = concrete_field_vector(b) # Initialize e to any nonzero vector.
