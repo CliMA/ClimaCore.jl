@@ -137,6 +137,20 @@ inlined_buffer_bytes(bc::NonPointwiseBroadcasted) =
 inlined_buffer_bytes(bc::OperatorBroadcasted) =
     buffer_bytes(bc) + unrolled_sum(inlined_buffer_bytes, bc.args)
 single_field_buffer_bytes(arg, ::Type{T} = eltype(arg)) where {T} = sizeof(T) * length(arg)
+# Bytes of the shared buffers that an argument prepared for an operator reads (see
+# cached_arg), from the types of their layouts, so that the bytes are known when the
+# operator is compiled. A buffer that is live at the same time as these ones is placed
+# after them (see buffer_similar), and every buffer is aligned to 32 bytes.
+# The bytes are Vals, whose sums are computed from type parameters (see add_bytes).
+@inline shared_buffer_bytes(_) = Val(0)
+@inline shared_buffer_bytes(field::Field) =
+    aligned_bytes(DataLayouts.shared_buffer_bytes(Fields.field_values(field)))
+@inline shared_buffer_bytes(bc::Broadcast.Broadcasted) = shared_buffer_bytes(bc.args)
+@inline shared_buffer_bytes(::Tuple{}) = Val(0)
+@inline shared_buffer_bytes(args::Tuple) =
+    add_bytes(shared_buffer_bytes(first(args)), shared_buffer_bytes(Base.tail(args)))
+@inline add_bytes(::Val{a}, ::Val{b}) where {a, b} = Val(a + b)
+@inline aligned_bytes(::Val{bytes}) where {bytes} = Val(cld(bytes, 32) * 32)
 # Bytes of a cached_arg buffer of T values at the points of arg (see cached_values).
 cached_bytes(arg, ::Type{T} = eltype(arg)) where {T} =
     caches_in_registers(DataLayouts.DataScope(arg), arg, Val(true)) ? 0 :
@@ -149,16 +163,51 @@ cached_bytes(arg, ::Type{T} = eltype(arg)) where {T} =
 # the unlimited scopes of unsliced fields, any buffers fit and their bytes are not computed,
 # since run-time sizes would make the decisions taken when broadcasts are built (e.g., in
 # MatrixFields.projected_operand) type-unstable.
+#
+# In a scope whose buffers alias (see DataLayouts.aliases_buffers), only the buffers of one
+# operator application are live at a time, so each application's buffers have to fit in
+# the whole limit instead, whether its operator is inlined or not.
 fits_inlined_buffers(bc, bytes = inlined_buffer_bytes) =
-    let limit = DataLayouts.total_buffer_limit(DataLayouts.DataScope(bc))
-        limit == typemax(Int) || 2 * bytes(bc) <= limit
+    let scope = DataLayouts.DataScope(bc), limit = DataLayouts.total_buffer_limit(scope)
+        limit == typemax(Int) ||
+            (
+                DataLayouts.aliases_buffers(scope) ? aliased_buffer_bytes(bytes, bc) :
+                2 * bytes(bc)
+            ) <= limit
     end
+aliased_buffer_bytes(::typeof(inlined_buffer_bytes), bc) = largest_application_bytes(bc)
+aliased_buffer_bytes(bytes, bc) = bytes(bc)
+
+# Bytes of the buffers of the operator application in an expression that needs the most.
+largest_application_bytes(arg) = 0
+largest_application_bytes(bc::NonPointwiseBroadcasted) =
+    unrolled_mapreduce(largest_application_bytes, max, bc.args; init = 0)
+largest_application_bytes(bc::OperatorBroadcasted) = max(
+    application_bytes(bc),
+    unrolled_mapreduce(largest_application_bytes, max, bc.args; init = 0),
+)
+application_bytes(bc) = buffer_bytes(bc)
+
+# Bytes of intermediates that an operator uses one dimension at a time: each has its own
+# buffer, unless the buffers of the scope alias, in which case they are one buffer.
+dimension_bytes(arg, bytes_per_dimension) =
+    DataLayouts.aliases_buffers(DataLayouts.DataScope(arg)) ?
+    unrolled_mapreduce(identity, max, bytes_per_dimension; init = 0) :
+    unrolled_sum(bytes_per_dimension)
 
 # Recursively replace all operator broadcasts with the result of apply_operator.
 apply_operators(arg) = arg
 apply_operators(bc::NonPointwiseBroadcasted) = apply_pointwise_operators(bc.style, bc)
 apply_operators(bc::OperatorBroadcasted) =
-    fits_inlined_buffers(bc) ? inline_apply_operators(bc) : noinline_apply_operators(bc)
+    compiles_inline(bc) ? inline_apply_operators(bc) : noinline_apply_operators(bc)
+
+# Whether the operators of an expression are inlined: when their buffers fit together, or
+# when the buffers of their scope alias (see DataLayouts.aliases_buffers), since compiling
+# operators separately only lets buffers share memory when they would not already. An
+# expression whose buffers do not fit in an aliasing scope is evaluated with private
+# buffers instead (see DataLayouts.total_buffer_limit).
+compiles_inline(bc) =
+    fits_inlined_buffers(bc) || DataLayouts.aliases_buffers(DataLayouts.DataScope(bc))
 
 @inline inline_apply_operators(bc) =
     apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
@@ -170,7 +219,7 @@ apply_operators(bc::OperatorBroadcasted) =
 # separately, so that the buffers of different operators can share memory.
 apply_pointwise_operators(_, bc) = Broadcast.broadcasted(
     bc.f,
-    unrolled_map(fits_inlined_buffers(bc) ? apply_operators : apply_separately, bc.args)...,
+    unrolled_map(compiles_inline(bc) ? apply_operators : apply_separately, bc.args)...,
 )
 apply_separately(arg) = apply_operators(arg)
 apply_separately(bc::OperatorBroadcasted) = noinline_apply_operators(bc)
@@ -255,8 +304,8 @@ function copyto_by_slices!(dest, bc)
         # their inlined buffers would add up; a statement in a separately compiled function
         # shares memory with the equally sized buffers of other statements.
         shares_buffers =
-            !has_private_buffers(bc) && !iszero(inlined_buffer_bytes(bc)) &&
-            can_compile_separately(dest, bc)
+            !has_private_buffers(bc) && !DataLayouts.aliases_buffers(scope) &&
+            !iszero(inlined_buffer_bytes(bc)) && can_compile_separately(dest, bc)
         DataLayouts.scoped_slice_loop(
             DataLayouts.slice_subscope(scope, op, dest, bc),
             scope,
@@ -301,14 +350,18 @@ register_similar(arg, ::Type{T}) where {T} =
     )
 
 """
-    buffer_similar(arg, [T])
+    buffer_similar(arg, [T], [Val(offset)])
 
 Allocate a `Field` like `Base.similar(arg, T)`, but always through the argument's
 [`DataLayouts.DataScope`](@ref) (shared memory on GPUs), never in per-thread
-registers; used for every buffer whose values cross a thread boundary.
+registers; used for every buffer whose values cross a thread boundary. A buffer that is
+live at the same time as another one is placed after it, at a byte `offset` of at least
+its size (see the buffer reuse invariant in [`apply_operator`](@ref)).
 """
-@inline buffer_similar(arg, ::Type{T}) where {T} =
-    Field(DataLayouts.buffer_similar(Fields.field_values(arg), T), Fields.shared_space(arg))
+@inline buffer_similar(arg, ::Type{T}, offset::Val = Val(0)) where {T} = Field(
+    DataLayouts.buffer_similar(Fields.field_values(arg), T, offset),
+    Fields.shared_space(arg),
+)
 @inline buffer_similar(arg) = buffer_similar(arg, eltype(arg))
 
 """
@@ -331,20 +384,20 @@ without full inlining.
     arg
 
 """
-    materialize_buffer(arg)
+    materialize_buffer(arg, [Val(offset)])
 
 Materialize `arg` like `Base.materialize(arg)`, but store the result of a lazy
 `Broadcasted` expression in a buffer from [`buffer_similar`](@ref) that every
 thread in the argument's scope can read; register-resident `Field`s (see
 [`register_similar`](@ref)) are also copied into such a buffer, and other
-arguments are returned unchanged. On GPUs two
-buffers of equal byte size can share memory, so callers must keep their
-lifetimes disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
+arguments are returned unchanged. On GPUs buffers share memory unless they are given
+different offsets (see [`buffer_similar`](@ref)), so callers must keep their lifetimes
+disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 """
-@inline materialize_buffer(arg) = arg
-@inline materialize_buffer(arg::MaybeLazyField) =
+@inline materialize_buffer(arg, offset = Val(0)) = arg
+@inline materialize_buffer(arg::MaybeLazyField, offset = Val(0)) =
     arg isa LazyField || DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
-    constant_field(copyto!(buffer_similar(arg), arg)) : arg
+    constant_field(copyto!(buffer_similar(arg, eltype(arg), offset), arg)) : arg
 
 """
     maybe_private_buffer(arg)
@@ -379,27 +432,30 @@ is a shallow `Broadcasted` over materialized values and a single thread owns the
     bc : cached_arg(bc, Val(true))
 
 """
-    cached_arg(arg, branch_free)
+    cached_arg(arg, branch_free, [Val(offset)])
 
 Prepare an argument that an operator reads at points other than the ones it evaluates, so
 that each of its values is computed once (by the thread that owns its point) and can be read
 by every thread in its scope. Lazy expressions and `Field`s in registers are evaluated by
 [`cached_values`](@ref), into a buffer (see the buffer reuse invariant in
 [`apply_operator`](@ref)) or, when `branch_free` is `Val(true)` (the operator reads it
-without branching on the point), possibly into registers.
+without branching on the point), possibly into registers. A buffer is placed at the byte
+`offset` of [`buffer_similar`](@ref).
 """
-@inline cached_arg(arg, branch_free) =
-    is_cached(arg) ? cached_values(DataLayouts.DataScope(arg), arg, branch_free) : arg
+@inline cached_arg(arg, branch_free, offset = Val(0)) =
+    is_cached(arg) ? cached_values(DataLayouts.DataScope(arg), arg, branch_free, offset) :
+    arg
 
 """
-    cached_values(scope, arg, branch_free)
+    cached_values(scope, arg, branch_free, [Val(offset)])
 
 Evaluate an argument for [`cached_arg`](@ref) in a [`DataLayouts.DataScope`](@ref), by
 default into a buffer from [`materialize_buffer`](@ref); devices whose threads can read each
 other's registers keep arguments read without branching there (see [`register_values`](@ref)
 and [`caches_in_registers`](@ref)).
 """
-@inline cached_values(_, arg, _) = materialize_buffer(arg)
+@inline cached_values(scope, arg, branch_free, offset = Val(0)) =
+    materialize_buffer(arg, offset)
 
 """
     caches_in_registers(scope, arg, branch_free)

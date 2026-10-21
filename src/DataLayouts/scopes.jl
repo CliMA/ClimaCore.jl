@@ -237,11 +237,15 @@ scoped_array(scope, ::Type{T}, dims; buffer = false) where {T} =
 @generated invalid_allocation_string(scope) = "Cannot allocate array for $scope"
 
 """
-    scoped_static_array(scope, T, dims)
+    scoped_static_array(scope, T, dims, [Val(offset)])
 
 Return a statically sized array with element type `T` and size `dims`, whose values
 can be modified by every thread in a [`DataScope`](@ref). If a `DataScope` does not
 provide its own method, this falls back to calling [`scoped_array`](@ref).
+
+A scope whose allocations share memory (as with dynamic shared memory on GPUs) places the
+array at byte `offset` of that memory, which is 0 by default; arrays that are live at the
+same time must be given non-overlapping offsets. Other scopes ignore the offset.
 
 Two allocations with equal byte sizes may be assigned to the same
 memory (this is what happens for block-level allocations on GPUs, which are
@@ -249,6 +253,18 @@ stored in shared memory), so their lifetimes must not overlap unless they are
 guaranteed to hold identical values.
 """
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
+
+"""
+    aliases_buffers(scope)
+
+Whether the arrays from [`scoped_static_array`](@ref) in a [`DataScope`](@ref) share memory
+unless they are given different offsets (as with dynamic shared memory on GPUs), so that
+only the buffers that are live at the same time add up. By default, every array has its
+own memory.
+"""
+aliases_buffers(_) = false
+scoped_static_array(scope, ::Type{T}, dims, ::Val) where {T} =
+    scoped_static_array(scope, T, dims)
 
 """
     strided_access(scope)
