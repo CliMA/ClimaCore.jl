@@ -137,15 +137,21 @@ struct ThisBlock <: ThisCooperativeGroup end
 # global "shmem", so unequal allocations can share and write out of bounds.
 # Putting the byte size in the name (this is otherwise CuStaticSharedArray's
 # llvmcall) lets only EQUAL allocations share, so the buffer reuse invariant of
-# Operators.apply_operator has to hold for every equally sized pair.
-@generated function shmem_pointer(::Type{T}, ::Val{bytes}) where {T, bytes}
+# Operators.apply_operator has to hold for every equally sized pair. Scratch
+# globals have common linkage, which also merges them within a function.
+@generated function shmem_pointer(
+    ::Type{T}, ::Val{bytes}, ::Val{name} = Val(:shmem),
+) where {T, bytes, name}
     LLVM.@dispose ctx = LLVM.Context() begin
         pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})
         llvm_f, _ = LLVM.Interop.create_function(pointer_type)
         array_type = LLVM.ArrayType(LLVM.Int8Type(), bytes)
         global_var = LLVM.GlobalVariable(
-            LLVM.parent(llvm_f), array_type, "shmem_$(bytes)B", CUDA.AS.Shared)
-        LLVM.linkage!(global_var, LLVM.API.LLVMInternalLinkage)
+            LLVM.parent(llvm_f), array_type, "$(name)_$(bytes)B", CUDA.AS.Shared)
+        LLVM.linkage!(
+            global_var,
+            name == :scratch ? LLVM.API.LLVMCommonLinkage : LLVM.API.LLVMInternalLinkage,
+        )
         LLVM.initializer!(global_var, LLVM.null(array_type))
         LLVM.alignment!(global_var, max(32, Base.datatype_alignment(T)))
         LLVM.@dispose builder = LLVM.IRBuilder() begin
@@ -160,6 +166,9 @@ end
 @inline DataLayouts.scoped_static_array(::ThisBlock, ::Type{T}, dims) where {T} =
     CUDA.CuDeviceArray{T, length(dims), CUDA.AS.Shared}(
         shmem_pointer(T, Val(prod(dims) * sizeof(T))), (dims...,))
+@inline DataLayouts.scoped_scratch_array(::ThisBlock, ::Type{T}, dims) where {T} =
+    CUDA.CuDeviceArray{T, length(dims), CUDA.AS.Shared}(
+        shmem_pointer(T, Val(prod(dims) * sizeof(T)), Val(:scratch)), (dims...,))
 
 """
     ThisSubBlock{N}()
@@ -230,11 +239,15 @@ end
 # num_subscopes(scope, ThisWarp()): a warp is a subscope of a ThisSubBlock{N}
 # with N > THREADS_PER_WARP and not the other way around, so that call throws
 # an InvalidSubscopeError for wide sub-blocks.
-@inline function DataLayouts.scoped_static_array(
-    scope::ThisSubBlock{N}, ::Type{T}, dims,
-) where {N, T}
+@inline DataLayouts.scoped_static_array(scope::ThisSubBlock, ::Type{T}, dims) where {T} =
+    subblock_array(DataLayouts.scoped_static_array, scope, T, dims)
+@inline DataLayouts.scoped_scratch_array(scope::ThisSubBlock, ::Type{T}, dims) where {T} =
+    subblock_array(DataLayouts.scoped_scratch_array, scope, T, dims)
+@inline function subblock_array(
+    allocate::F, scope::ThisSubBlock{N}, ::Type{T}, dims,
+) where {F, N, T}
     max_subblocks = cld(max_subblock_launch_threads(scope), N)
-    array = DataLayouts.scoped_static_array(ThisBlock(), T, (dims..., max_subblocks))
+    array = allocate(ThisBlock(), T, (dims..., max_subblocks))
     subblock_index = DataLayouts.subscope_rank(scope, ThisBlock())
     return @inbounds view(array, ntuple(Returns(:), Val(length(dims)))..., subblock_index)
 end

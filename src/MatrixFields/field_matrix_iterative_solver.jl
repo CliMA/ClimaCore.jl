@@ -88,7 +88,7 @@ into the concrete `FieldMatrix` `P_cache.P` when the `PreconditionerAlgorithm`
 `P_alg` requires a `FieldMatrixSolverAlgorithm` to invert it. Return `nothing` if
 `P_alg` is `nothing`.
 """
-NVTX.@annotate function lazy_or_concrete_preconditioner(P_alg, P_cache, A)
+function lazy_or_concrete_preconditioner(P_alg, P_cache, A)
     isnothing(P_alg) && return nothing
     lazy_P = lazy_preconditioner(P_alg, A)
     (is_diagonal(P_alg) || !is_lazy(lazy_P)) && return lazy_P
@@ -104,7 +104,7 @@ represents the product `@. inv(P) * b`. Here, `lazy_b` is a (possibly lazy)
 `FieldVectorView` that represents `b`. When `P_alg` requires a solver, the result
 is stored in `P_cache.x`.
 """
-NVTX.@annotate function apply_preconditioner(P_alg, P_cache, P, lazy_b)
+function apply_preconditioner(P_alg, P_cache, P, lazy_b)
     isnothing(P_alg) && return lazy_b
     is_diagonal(P_alg) && return lazy_mul(lazy_inv(P), lazy_b)
     @. P_cache.b = lazy_b
@@ -437,6 +437,7 @@ function StationaryIterativeSolve(;
     return StationaryIterativeSolve{params...}(P_alg, n_iters, eigsolve_kwargs′)
 end
 get_debug(::StationaryIterativeSolve{CS, debug}) where {CS, debug} = debug
+is_debugging(alg::StationaryIterativeSolve) = get_debug(alg) || is_debugging(alg.P_alg)
 
 # Extract correlated_solves as if it were a regular field, not a type parameter.
 Base.getproperty(
@@ -452,13 +453,16 @@ function field_matrix_solver_cache(alg::StationaryIterativeSolve, A, b)
     # similar to b, rather than just keys(x) == keys(b).
     previous_x_cache =
         alg.correlated_solves ? (; previous_x = zero.(similar(b))) : (;)
-    return (; P_cache, previous_x_cache...)
+    # Without a preconditioner solve, an increment of x reads x at neighboring points, so
+    # it is stored before x is updated.
+    Δx_cache = isnothing(alg.P_alg) || is_diagonal(alg.P_alg) ? (; Δx = similar(b)) : (;)
+    return (; P_cache, previous_x_cache..., Δx_cache...)
 end
 
 check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
     check_preconditioner(alg.P_alg, cache.P_cache, A, b)
 
-function run_field_matrix_solver!(
+@inline function run_field_matrix_solver!(
     alg::StationaryIterativeSolve,
     cache,
     x,
@@ -466,9 +470,8 @@ function run_field_matrix_solver!(
     b,
 )
     P = lazy_or_concrete_preconditioner(alg.P_alg, cache.P_cache, A)
-    using_cuda =
-        Fields.is_gpu_array_type(ClimaComms.array_type(concrete_field_vector(b)))
-    if get_debug(alg) && !using_cuda
+    if get_debug(alg) &&
+       !Fields.is_gpu_array_type(ClimaComms.array_type(concrete_field_vector(b)))
         @debug begin
             e₀ = concrete_field_vector(b) # Initialize e to any nonzero vector.
             λs, _, info = KrylovKit.eigsolve(e₀, 1; alg.eigsolve_kwargs...) do e
@@ -505,7 +508,12 @@ function run_field_matrix_solver!(
                 "||x[$(iter - 1)] - x'||₂ ≈ $norm_Δx"
             end _group = :error_norm
         end
-        @. x += lazy_Δx
+        if haskey(cache, :Δx)
+            @. cache.Δx = lazy_Δx
+            @. x += cache.Δx
+        else
+            @. x += lazy_Δx
+        end
     end
     if get_debug(alg)
         @debug begin

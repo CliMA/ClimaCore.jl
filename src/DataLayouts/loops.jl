@@ -84,9 +84,15 @@ slice a scope with a statically known number of threads.
 """
 @inline function slice_subscope(scope, op::O, args...) where {O}
     partition(scope) == ThisThread() && return ThisThread()
+    # In a slice loop, a loop over one slice keeps the outer slice's scope: the subsets of
+    # the scope that got no slice would skip every barrier of the slice's function.
+    is_nested_slice(scope, op, first(args)) && return scope
     max_slice_points = unrolled_maximum(Base.Fix1(num_slice_points, op), args)
     return points_subscope(scope, max_slice_points)
 end
+@inline is_nested_slice(scope, op, arg) =
+    !isnothing(static_num_threads(scope)) && !needs_loop_setup(scope) &&
+    has_inferred_size(arg) && isone(length(each_slice_index(op, arg)))
 
 # Recursing on the precomputed point count (rather than on op and args) keeps
 # the descent from re-materializing the argument tuple and re-slicing every
@@ -104,6 +110,11 @@ end
 @inline slice_exceeds_subscope(scope, subscope, max_slice_points) =
     !isnothing(static_num_threads(scope)) &&
     something(static_num_threads(subscope), typemax(Int)) < max_slice_points
+
+# Whether foreach_slice can run f on every slice of args in one fused loop over scope with
+# the given mask; scopes with limits on fused loops (like GPU kernel parameter memory)
+# extend this.
+fits_slice_loop(scope, op, f, mask, args...) = true
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.

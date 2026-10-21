@@ -40,6 +40,9 @@ function check_field_matrix_solver end
 
 Set `x` to the value that solves the equation `A * x = b` using the
 `FieldMatrixSolverAlgorithm` `alg` and its `cache`.
+
+Methods should be inlined: when the columns of a GPU kernel are solved in one loop, a call
+of a method that is too large to inline copies its arguments to local memory.
 """
 function run_field_matrix_solver! end
 
@@ -88,9 +91,95 @@ NVTX.@annotate function field_matrix_solve!(
     )
     A_with_tree = replace_name_tree(A, keys(b_view).name_tree)
     check_field_matrix_solver(alg, cache, A_with_tree, b_view)
-    run_field_matrix_solver!(alg, cache, x_view, A_with_tree, b_view)
+    # On GPUs, every column is solved in one loop, unless the algorithm itself stores Fields
+    # or logs norms of whole vectors. On CPUs, setting up every statement of a solver in each
+    # column takes longer than looping over the columns of each statement.
+    x₁ = first(state_fields(x_view))
+    states = (cache, x_view, A_with_tree, b_view)
+    is_solved =
+        isbits(alg) && !is_debugging(alg) &&
+        !(DataLayouts.DataScope(x₁) isa DataLayouts.ThisThreadPool) &&
+        solve_in_one_loop!(alg, x₁, states)
+    is_solved || run_field_matrix_solver!(alg, states...)
     return x
 end
+
+# Solve all columns in one loop if every Field has the mask of x₁ (unlike, e.g., a level
+# Field with an extruded one) and the loop fits its arguments, and return whether it did.
+# States without Fields (e.g., an empty cache) are captured by the loop's function.
+function solve_in_one_loop!(alg, x₁, states)
+    constants =
+        unrolled_map(state -> isempty(state_fields(state)) ? state : nothing, states)
+    sliced_states = unrolled_filter(state -> !isempty(state_fields(state)), states)
+    f = (_, slices...) -> run_field_matrix_solver!(alg, with_slices(constants, slices)...)
+    mask = Spaces.get_mask(axes(x₁))
+    scope = DataLayouts.DataScope(x₁)
+    unrolled_all(unrolled_flatmap(state_fields, sliced_states)) do field
+        Spaces.get_mask(axes(field)) === mask
+    end && DataLayouts.fits_slice_loop(scope, column, f, mask, x₁, sliced_states...) ||
+        return false
+    DataLayouts._foreach_slice(column, f, mask, Val(false), x₁, sliced_states...)
+    return true
+end
+
+# Fill in every nothing in constants with the next slice.
+@inline with_slices(constants, slices) =
+    isempty(constants) ? () :
+    isnothing(first(constants)) ?
+    (first(slices), with_slices(Base.tail(constants), Base.tail(slices))...) :
+    (first(constants), with_slices(Base.tail(constants), slices)...)
+
+is_debugging(alg) =
+    unrolled_any(
+        is_debugging,
+        ntuple(Base.Fix1(getfield, alg), Val(fieldcount(typeof(alg)))),
+    )
+
+# A FieldNameDict or NamedTuple passed to a slice loop is sliced, scoped, and reassigned
+# like every Field in it, which lets a solver's state be split into columns.
+const SolverState = Union{FieldNameDict, NamedTuple}
+@inline state_fields(_) = ()
+@inline state_fields(field::Fields.Field) = (field,)
+@inline state_fields(state::SolverState) = unrolled_flatmap(state_fields, values(state))
+@inline map_state_fields(_, entry) = entry
+@inline map_state_fields(f::F, field::Fields.Field) where {F} = f(field)
+@inline map_state_fields(f::F, state::NamedTuple) where {F} =
+    NamedTuple{keys(state)}(map_entries(f, values(state)))
+@inline map_state_fields(f::F, state::FieldNameDict) where {F} =
+    FieldNameDict(keys(state), map_entries(f, values(state)))
+# The recursion only passes through functions without recursion limits (no closures), and
+# Base's map is avoided because it cannot infer results for more than 31 entries.
+@inline map_entries(f::F, entries) where {F} =
+    unrolled_map(map_state_fields, unrolled_map(Returns(f), entries), entries)
+@drop_recursion_limits state_fields map_state_fields map_entries
+@inline DataLayouts.DataScope(state::SolverState) =
+    DataLayouts.DataScope(state_fields(state)...)
+@inline DataLayouts.reassign(state::SolverState, scope) =
+    map_state_fields(Base.Fix2(DataLayouts.reassign, scope), state)
+@inline DataLayouts.has_inferred_size(state::SolverState) =
+    unrolled_all(DataLayouts.has_inferred_size, state_fields(state))
+@inline DataLayouts.each_slice_index(::typeof(column), state::SolverState) =
+    DataLayouts.each_slice_index(column, first(state_fields(state)))
+@inline DataLayouts.num_slice_points(::typeof(column), state::SolverState) =
+    unrolled_maximum(Base.Fix1(DataLayouts.num_slice_points, column), state_fields(state))
+Base.@propagate_inbounds DataLayouts.slice_arg(
+    ::typeof(column),
+    state::SolverState,
+    indices...,
+) = map_state_fields(field -> DataLayouts.slice_arg(column, field, indices...), state)
+# Toggling every Field separately avoids Adapt's recursion over nested NamedTuples, which
+# leaves dynamic calls in kernels.
+@inline Grids.toggle_placeholder_grid(state::SolverState, grid::Grids.AbstractGrid) =
+    map_state_fields(Base.Fix2(Grids.toggle_placeholder_grid, grid), state)
+# Whether a FieldNameDict holds slices in a loop, like the column loop of field_matrix_solve!.
+# A statement in such a loop ends with a barrier when it writes to the dict, since later
+# statements can read values that other threads wrote.
+@inline in_slice_loop(dict) = unrolled_any(is_sliced_field, values(dict))
+@inline is_sliced_field(entry) =
+    entry isa Fields.Field && !DataLayouts.needs_loop_setup(DataLayouts.DataScope(entry))
+@inline synchronize_in_loop(dict) =
+    in_slice_loop(dict) ?
+    DataLayouts.synchronize(DataLayouts.DataScope(first(state_fields(dict)))) : nothing
 
 function check_block_diagonal_matrix_has_no_missing_blocks(A, b)
     rows_with_missing_blocks =
@@ -173,7 +262,7 @@ LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂) =
 Base.zero(lsc::LazySchurComplement) =
     LazySchurComplement(map(fn -> zero(getfield(lsc, fn)), fieldnames(lsc))...)
 
-NVTX.@annotate function lazy_mul(A₂₂′::LazySchurComplement, x₂)
+function lazy_mul(A₂₂′::LazySchurComplement, x₂)
     (; A₁₁, A₁₂, A₂₁, A₂₂, alg₁, cache₁, A₁₂_x₂, invA₁₁_A₁₂_x₂) = A₂₂′
     zero_rows = setdiff(keys(A₁₂_x₂), matrix_row_keys(keys(A₁₂)))
     @. A₁₂_x₂ = A₁₂ * x₂ + zero(A₁₂_x₂[zero_rows])
@@ -263,7 +352,7 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+@inline run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
     multiple_field_solve!(cache, x, A, b)
 
 """
@@ -319,7 +408,7 @@ function check_field_matrix_solver(alg::BlockLowerTriangularSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂, cache.b₂′)
 end
 
-function run_field_matrix_solver!(
+@inline function run_field_matrix_solver!(
     alg::BlockLowerTriangularSolve,
     cache,
     x,
@@ -390,7 +479,7 @@ function check_field_matrix_solver(alg::BlockArrowheadSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, cache.A₂₂′, cache.b₂′)
 end
 
-function run_field_matrix_solver!(
+@inline function run_field_matrix_solver!(
     alg::BlockArrowheadSolve,
     cache,
     x,
@@ -473,7 +562,7 @@ function check_field_matrix_solver(
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂′, cache.b₂′)
 end
 
-function run_field_matrix_solver!(
+@inline function run_field_matrix_solver!(
     alg::SchurComplementReductionSolve,
     cache,
     x,

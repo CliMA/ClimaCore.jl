@@ -63,8 +63,8 @@ end
     else
         DataLayouts.owns_point(scope, 1) &&
             band_matrix_solve!(eltype(A), unzip_tuple_field_values(cache), x, Aⱼs, b)
-        DataLayouts.synchronize(scope)
     end
+    DataLayouts.synchronize(scope)
     return nothing
 end
 
@@ -238,17 +238,36 @@ end
 
 # Coefficients of the rows at a distance of stride below and above each of the calling
 # thread's rows, published in a buffer that every thread of the scope can read; a row that
-# is not in the matrix is replaced by the boundary row closest to it.
+# is not in the matrix is replaced by the boundary row closest to it. Rows are published in
+# chunks of 8 words, so that every solve over as many threads shares one scratch buffer.
 @inline function pcr_neighbors(scope, coefficients, positions, stride, n)
-    buffer = DataLayouts.scoped_static_array(scope, eltype(coefficients), n)
-    DataLayouts.synchronize(scope)
-    unrolled_foreach(positions, coefficients) do position, row
-        position <= n && (@inbounds buffer[position] = row)
+    words = map(coefficients) do row
+        DataLayouts.bitcast_struct(DataLayouts.words_type(typeof(row)), row)
     end
-    DataLayouts.synchronize(scope)
-    return map(positions) do position
-        i = min(position, n)
-        @inbounds (buffer[max(i - stride, 1)], buffer[min(i + stride, n)])
+    num_words = Val(fieldcount(eltype(words)))
+    slots = length(positions) * DataLayouts.static_num_threads(scope)
+    buffer =
+        DataLayouts.scoped_scratch_array(scope, NTuple{8, eltype(eltype(words))}, slots)
+    chunks = ntuple(Val(cld(fieldcount(eltype(words)), 8))) do chunk
+        DataLayouts.synchronize(scope)
+        unrolled_foreach(positions, words) do position, row_words
+            chunk_words = ntuple(Val(8)) do k
+                word = 8 * (chunk - 1) + k
+                word <= length(row_words) ? row_words[word] : zero(eltype(row_words))
+            end
+            position <= n && (@inbounds buffer[position] = chunk_words)
+        end
+        DataLayouts.synchronize(scope)
+        map(positions) do position
+            i = min(position, n)
+            @inbounds (buffer[max(i - stride, 1)], buffer[min(i + stride, n)])
+        end
+    end
+    return ntuple(Val(length(positions))) do p
+        ntuple(Val(2)) do side
+            row_words = ntuple(k -> chunks[cld(k, 8)][p][side][mod1(k, 8)], num_words)
+            DataLayouts.bitcast_struct(eltype(coefficients), row_words)
+        end
     end
 end
 

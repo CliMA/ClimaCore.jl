@@ -40,11 +40,8 @@ end
 ) where {F} = shfl(x)
 @inline shuffle_components(shfl::F, x::T) where {F, T} = DataLayouts.bitcast_struct(
     T,
-    map(shfl, DataLayouts.bitcast_struct(shuffle_words_type(T), x)),
+    map(shfl, DataLayouts.bitcast_struct(DataLayouts.words_type(T), x)),
 )
-@generated shuffle_words_type(::Type{T}) where {T} =
-    sizeof(T) % 4 == 0 ? NTuple{sizeof(T) ÷ 4, UInt32} :
-    sizeof(T) % 2 == 0 ? NTuple{sizeof(T) ÷ 2, UInt16} : NTuple{sizeof(T), UInt8}
 
 # Read-only RegisterArray with at most one point per thread, read by shuffles that every
 # thread issues together.

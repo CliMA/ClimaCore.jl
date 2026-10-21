@@ -40,6 +40,18 @@ main
   column fits in a warp, and other band matrices by Gaussian elimination.
 - ![][badge-🚀performance] Unmasked reductions over a single column, such as
   `column_reduce!` on CPUs, use linear indices, which vectorize.
+- ![][badge-✨feature/enhancement] On GPUs, `MatrixFields.field_matrix_solve!`
+  (and `ldiv!` of a `FieldMatrixWithSolver`) solves all of its block operations
+  and matrix solves in one kernel over columns, unless its algorithm stores
+  Fields or logs debug information, or its arguments do not fit in the kernel's
+  parameter memory. Every parallel cyclic reduction in the kernel shares one
+  shared-memory buffer, allocated by the new `DataLayouts.scoped_scratch_array`.
+- ![][badge-🔥behavioralΔ] `StationaryIterativeSolve` without a preconditioner or
+  with a diagonal one computes every increment of `x` from the previous iterate,
+  which it stores in a new cache vector. The update used to read `x` at
+  neighboring levels while writing it, which was a data race on GPUs and made
+  CPUs converge faster than the documented iteration, so CPUs now need as many
+  iterations as GPUs.
 - ![][badge-🐛bugfix] GPU kernels support at most 2^31 - 1 elements per array
   (not 2^32 - 1), the same limit as for slices per `DataLayouts.foreach_slice`:
   `LLVM.jl` can sign-extend 32-bit indices, so they should not use the sign bit.

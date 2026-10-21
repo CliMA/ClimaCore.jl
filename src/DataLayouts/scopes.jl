@@ -252,6 +252,15 @@ guaranteed to hold identical values.
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
 
 """
+    scoped_scratch_array(scope, T, dims)
+
+Like [`scoped_static_array`](@ref), but allocations with equal byte sizes may be assigned
+to the same memory even when they are compiled together, so the lifetime of every such
+allocation must end (e.g., with a [`synchronize`](@ref)) before another one begins.
+"""
+scoped_scratch_array(scope, ::Type{T}, dims) where {T} = scoped_static_array(scope, T, dims)
+
+"""
     strided_access(scope)
 
 Return whether [`subscope_indices`](@ref) should return a strided range of

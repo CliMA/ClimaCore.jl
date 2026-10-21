@@ -156,3 +156,9 @@ For more information about `reinterpret` and padding, see the following:
     S = NTuple{num_indices, eltype(array)}
     return Expr(:block, :@inline, bitcast_struct_expr(T, S, :array, :index))
 end
+
+# The tuple of the widest unsigned words (of at most 4 bytes) that a value of type T can be
+# bitcast to, e.g., for copying values of any type through warp shuffles or shared buffers.
+@generated words_type(::Type{T}) where {T} =
+    sizeof(T) % 4 == 0 ? NTuple{sizeof(T) ÷ 4, UInt32} :
+    sizeof(T) % 2 == 0 ? NTuple{sizeof(T) ÷ 2, UInt16} : NTuple{sizeof(T), UInt8}

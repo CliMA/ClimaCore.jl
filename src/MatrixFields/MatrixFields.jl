@@ -59,9 +59,11 @@ import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
+import ..column
 import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
+import ..Grids
 import ..Spaces
 import ..Fields
 import ..Operators
