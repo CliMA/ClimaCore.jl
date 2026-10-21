@@ -19,6 +19,17 @@ main
 - ![][badge-🚀performance] Unmasked reductions over a single column, such as
   `column_reduce!` on CPUs, use linear indices, which vectorize, and reductions
   read their values with inlined code, which speeds up `max` and `min`.
+- ![][badge-✨feature/enhancement] On GPUs, `MatrixFields.field_matrix_solve!`
+  (and `ldiv!` of a `FieldMatrixWithSolver`) solves all of its block operations
+  and matrix solves in one kernel over columns, unless its algorithm stores
+  Fields or logs debug information, or its arguments do not fit in the kernel's
+  parameter memory.
+- ![][badge-🔥behavioralΔ] `StationaryIterativeSolve` without a preconditioner or
+  with a diagonal one computes every increment of `x` from the previous iterate,
+  which it stores in a new cache vector. The update used to read `x` at
+  neighboring levels while writing it, which was a data race on GPUs and made
+  CPUs converge faster than the documented iteration, so CPUs now need as many
+  iterations as GPUs.
 - ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
   whenever every argument supports them, except over layouts whose sizes are
   all static, with several axes longer than 1 and an axis whose length is not a

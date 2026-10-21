@@ -74,10 +74,14 @@ function single_column_solve!(cache, x, A, b)
     Aⱼs = subfields(A.entries)
     x′ = Base.broadcastable(x)
     b′ = Base.broadcastable(b)
-    use_parallel_solver(A) && return parallel_band_matrix_solve!(x′, Aⱼs, b′)
     scope = DataLayouts.DataScope(x)
-    DataLayouts.owns_point(scope, 1) &&
-        band_matrix_solve!(subfields(cache), x′, Aⱼs, b′)
+    # In a slice loop, other threads can read the solution in later statements.
+    if use_parallel_solver(A)
+        parallel_band_matrix_solve!(x′, Aⱼs, b′)
+    else
+        DataLayouts.owns_point(scope, 1) &&
+            band_matrix_solve!(subfields(cache), x′, Aⱼs, b′)
+    end
     DataLayouts.synchronize(scope)
 end
 

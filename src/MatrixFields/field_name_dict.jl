@@ -1039,32 +1039,52 @@ Base.Broadcast.materialize!(
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
 
-NVTX.@annotate function copyto_foreach!(
-    dest::FieldNameDict,
-    vector_or_matrix::FieldNameDict,
-)
+# Broadcasts at the top level check their keys, but those in a slice loop (like the loop of
+# field_matrix_solve!, which checks its arguments first) skip checks and NVTX annotations.
+# A destination without Fields can only be compared with its result, which also compiles in
+# a slice loop on a GPU.
+Base.Broadcast.materialize!(dest::FieldNameDict, vector_or_matrix::FieldNameDict) =
+    in_slice_loop(dest) ?
+    (copyto_foreach!(dest, vector_or_matrix, Val(false)); synchronize_in_loop(dest)) :
+    !unrolled_any(Base.Fix2(isa, Fields.Field), values(dest)) && !is_lazy(dest) ?
+    checked_copyto_foreach!(dest, vector_or_matrix) :
+    checked_materialize!(dest, vector_or_matrix)
+
+NVTX.@annotate checked_materialize!(dest, vector_or_matrix) =
+    checked_copyto_foreach!(dest, vector_or_matrix)
+function checked_copyto_foreach!(dest, vector_or_matrix)
+    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
+    # It is not always the case that keys(vector_or_matrix) == keys(dest).
+    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) ||
+        error(incompatible_keys_string(keys(vector_or_matrix), keys(dest)))
+    copyto_foreach!(dest, vector_or_matrix, Val(true))
+end
+
+# The messages are compile-time constants, so that GPU kernels need not build them.
+@generated immutable_entry_string(
+    key,
+) = "matrix entry at $(key <: Tuple ? map(T -> T.instance, fieldtypes(key)) : key.instance) \
+     is immutable"
+@generated incompatible_keys_string(keys1, keys2) =
+    Base.issingletontype(keys1) && Base.issingletontype(keys2) ?
+    "Broadcast result and destination keys are incompatible: \
+     $(set_string(keys1.instance)) vs. $(set_string(keys2.instance))" :
+    "Broadcast result and destination keys are incompatible"
+
+function copyto_foreach!(dest, vector_or_matrix, check)
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
         if dest[key] isa ScalingFieldMatrixEntry
-            dest[key] == entry || error("matrix entry at $key is immutable")
+            check isa Val{false} || dest[key] == entry || error(immutable_entry_string(key))
         elseif entry isa ScalingFieldMatrixEntry
             dest[key] .= (entry,)
+        elseif check isa Val{false}
+            # A call in a slice loop would pass the statement through local memory on a GPU.
+            Operators.apply_operators!(dest[key], entry)
         else
             dest[key] .= entry
         end
     end
-end
-
-NVTX.@annotate function Base.Broadcast.materialize!(
-    dest::FieldNameDict,
-    vector_or_matrix::FieldNameDict,
-)
-    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
-    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) || error(
-        "Broadcast result and destination keys are incompatible: \
-         $(set_string(keys(vector_or_matrix))) vs. $(set_string(keys(dest)))",
-    ) # It is not always the case that keys(vector_or_matrix) == keys(dest).
-    copyto_foreach!(dest, vector_or_matrix)
 end
 
 #=
