@@ -127,15 +127,6 @@ Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
 # registers of its result (see register_similar) in an MArray on the heap.
 @inline Base.copy(bc::NonPointwiseBroadcasted) = copyto!(similar(bc), bc)
 
-# Bytes of the buffers that inlining every operator application in a broadcast expression
-# allocates in its scope: the sum of each operator's buffer_bytes, which counts the buffers
-# that its apply_operator method allocates. Buffers are in shared memory on GPUs, where a
-# scope that exchanges values through registers allocates no buffer for them.
-inlined_buffer_bytes(arg) = 0
-inlined_buffer_bytes(bc::NonPointwiseBroadcasted) =
-    unrolled_sum(inlined_buffer_bytes, bc.args)
-inlined_buffer_bytes(bc::OperatorBroadcasted) =
-    buffer_bytes(bc) + unrolled_sum(inlined_buffer_bytes, bc.args)
 single_field_buffer_bytes(arg, ::Type{T} = eltype(arg)) where {T} = sizeof(T) * length(arg)
 # Bytes of the shared buffers that an argument prepared for an operator reads (see
 # cached_arg), from the types of their layouts, so that the bytes are known when the
@@ -156,29 +147,20 @@ cached_bytes(arg, ::Type{T} = eltype(arg)) where {T} =
     caches_in_registers(DataLayouts.DataScope(arg), arg, Val(true)) ? 0 :
     single_field_buffer_bytes(arg, T)
 
-# Whether inlined buffers (by default those of the operators of an expression) need no more
-# than half of the buffer limit of their scope. The other half is left for the buffers of
-# operators that are compiled separately, which only share memory when they have equal
-# sizes, so many separately compiled buffers of different sizes can exceed the limit. In
+# Whether the buffers of an expression fit in the buffer limit of its scope: by default, the
+# buffers of the operator application in it that needs the most, since only the buffers of
+# one application are live at a time (see the buffer reuse invariant in apply_operator). In
 # the unlimited scopes of unsliced fields, any buffers fit and their bytes are not computed,
 # since run-time sizes would make the decisions taken when broadcasts are built (e.g., in
 # MatrixFields.projected_operand) type-unstable.
-#
-# In a scope whose buffers alias (see DataLayouts.aliases_buffers), only the buffers of one
-# operator application are live at a time, so each application's buffers have to fit in
-# the whole limit instead, whether its operator is inlined or not.
-fits_inlined_buffers(bc, bytes = inlined_buffer_bytes) =
-    let scope = DataLayouts.DataScope(bc), limit = DataLayouts.total_buffer_limit(scope)
-        limit == typemax(Int) ||
-            (
-                DataLayouts.aliases_buffers(scope) ? aliased_buffer_bytes(bytes, bc) :
-                2 * bytes(bc)
-            ) <= limit
+fits_buffers(bc, bytes = largest_application_bytes) =
+    let limit = DataLayouts.total_buffer_limit(DataLayouts.DataScope(bc))
+        limit == typemax(Int) || bytes(bc) <= limit
     end
-aliased_buffer_bytes(::typeof(inlined_buffer_bytes), bc) = largest_application_bytes(bc)
-aliased_buffer_bytes(bytes, bc) = bytes(bc)
 
-# Bytes of the buffers of the operator application in an expression that needs the most.
+# Bytes of the buffers that an operator application allocates (see buffer_bytes), for the
+# application in an expression that needs the most. Buffers are in shared memory on GPUs,
+# where a scope that exchanges values through registers allocates no buffer for them.
 largest_application_bytes(arg) = 0
 largest_application_bytes(bc::NonPointwiseBroadcasted) =
     unrolled_mapreduce(largest_application_bytes, max, bc.args; init = 0)
@@ -188,41 +170,21 @@ largest_application_bytes(bc::OperatorBroadcasted) = max(
 )
 application_bytes(bc) = buffer_bytes(bc)
 
-# Bytes of intermediates that an operator uses one dimension at a time: each has its own
-# buffer, unless the buffers of the scope alias, in which case they are one buffer.
-dimension_bytes(arg, bytes_per_dimension) =
-    DataLayouts.aliases_buffers(DataLayouts.DataScope(arg)) ?
-    unrolled_mapreduce(identity, max, bytes_per_dimension; init = 0) :
-    unrolled_sum(bytes_per_dimension)
+# Bytes of intermediates that an operator uses one dimension at a time, which share one
+# buffer (see the buffer reuse invariant in apply_operator).
+dimension_bytes(bytes_per_dimension) =
+    unrolled_mapreduce(identity, max, bytes_per_dimension; init = 0)
 
 # Recursively replace all operator broadcasts with the result of apply_operator.
 apply_operators(arg) = arg
 apply_operators(bc::NonPointwiseBroadcasted) = apply_pointwise_operators(bc.style, bc)
-apply_operators(bc::OperatorBroadcasted) =
-    compiles_inline(bc) ? inline_apply_operators(bc) : noinline_apply_operators(bc)
-
-# Whether the operators of an expression are inlined: when their buffers fit together, or
-# when the buffers of their scope alias (see DataLayouts.aliases_buffers), since compiling
-# operators separately only lets buffers share memory when they would not already. An
-# expression whose buffers do not fit in an aliasing scope is evaluated with private
-# buffers instead (see DataLayouts.total_buffer_limit).
-compiles_inline(bc) =
-    fits_inlined_buffers(bc) || DataLayouts.aliases_buffers(DataLayouts.DataScope(bc))
-
+apply_operators(bc::OperatorBroadcasted) = inline_apply_operators(bc)
 @inline inline_apply_operators(bc) =
-    apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
-@noinline noinline_apply_operators(bc) =
     apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
 
 # The evaluation of pointwise functions of operators can depend on the style.
-# Operators in an expression whose shared buffers do not fit together are compiled
-# separately, so that the buffers of different operators can share memory.
-apply_pointwise_operators(_, bc) = Broadcast.broadcasted(
-    bc.f,
-    unrolled_map(compiles_inline(bc) ? apply_operators : apply_separately, bc.args)...,
-)
-apply_separately(arg) = apply_operators(arg)
-apply_separately(bc::OperatorBroadcasted) = noinline_apply_operators(bc)
+apply_pointwise_operators(_, bc) =
+    Broadcast.broadcasted(bc.f, unrolled_map(apply_operators, bc.args)...)
 
 # An MArray that is passed to a separately compiled function is allocated on the heap.
 can_compile_separately(args...) = !unrolled_any(has_mutable_registers, args)
@@ -270,7 +232,6 @@ operator_arg(arg) = apply_operators(arg)
 # Like apply_operators, but copies the result into dest (styles can write it directly).
 apply_operators!(dest, bc) = copyto_slice!(dest, apply_operators(bc))
 # Slice loops inline the function of every slice, so the barrier has to be at this call.
-noinline_apply_operators!(dest, bc) = @noinline apply_operators!(dest, bc)
 
 # The inliner leaves large statements out of line, so a statement of a slice loop body
 # freezes the register temporaries that it reads, and it is inlined if it writes to one.
@@ -300,17 +261,13 @@ function copyto_by_slices!(dest, bc)
     if DataLayouts.needs_loop_setup(scope)
         DataLayouts._foreach_slice(scope, op, apply_operators!, mask, Val(false), dest, bc)
     else
-        # Every statement of a slice loop body is compiled into the same function, so
-        # their inlined buffers would add up; a statement in a separately compiled function
-        # shares memory with the equally sized buffers of other statements.
-        shares_buffers =
-            !has_private_buffers(bc) && !DataLayouts.aliases_buffers(scope) &&
-            !iszero(inlined_buffer_bytes(bc)) && can_compile_separately(dest, bc)
+        # Every statement of a slice loop body is inlined into it; the buffers of different
+        # statements are never live at the same time, so they share memory.
         DataLayouts.scoped_slice_loop(
             DataLayouts.slice_subscope(scope, op, dest, bc),
             scope,
             op,
-            shares_buffers ? noinline_apply_operators! : apply_operators!,
+            apply_operators!,
             mask,
             Val(false),
             dest,

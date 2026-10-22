@@ -107,7 +107,7 @@ end
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
-@inline slice_loop_flags(; mask = NoMask(), enumerate = Val(false), shmem = nothing) =
+@inline slice_loop_flags(; mask = NoMask(), enumerate = Val(false), shmem = Val(:medium)) =
     (mask, enumerate, shmem)
 
 """

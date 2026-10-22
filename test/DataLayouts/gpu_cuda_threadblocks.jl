@@ -21,13 +21,8 @@ ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
         @test block_threads % N == 0
 
         # One wide sub-block per block, so a block-wide barrier is exactly that
-        # sub-block's barrier. Narrower sub-blocks keep sharing a block.
+        # sub-block's barrier. Narrower sub-blocks share blocks of up to 1024 threads.
         @test cld(block_threads, N) ==
-              (N > ext.THREADS_PER_WARP ? 1 : cld(ext.MAX_SUBBLOCK_LAUNCH_THREADS, N))
-
-        # The trailing dimension of a sub-block's shared memory has one entry per
-        # sub-block a block can hold, so the largest index a launched block can
-        # produce has to be in range.
-        @test cld(cap, N) == cld(block_threads, N)
+              (N > ext.THREADS_PER_WARP ? 1 : cld(1024, N))
     end
 end

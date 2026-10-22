@@ -237,8 +237,10 @@ function uncached_launch_configuration(
        isnothing(default_granularity)
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
-        # CUDA's shmem is only the dynamic shared memory; it adds the static memory itself.
-        @assert CUDA.launch_configuration(cu_func; shmem = dynamic_shmem) == cuda_config
+        # CUDA's shmem is only the dynamic shared memory; it adds the static memory itself,
+        # and it takes a Function (not any callable) of the number of threads per block.
+        cuda_shmem = threads -> dynamic_shmem(threads)
+        @assert CUDA.launch_configuration(cu_func; shmem = cuda_shmem) == cuda_config
     end
 
     return (;

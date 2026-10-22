@@ -7,18 +7,10 @@ const MAX_SHMEM_PER_BLOCK = 48 * 1024
 # descends through; see partition(::ThisSubBlock) below.
 const MIN_THREADS_PER_SUBBLOCK = 2
 
-# Cap on the number of threads in a block that assigns one slice to each of
-# its sub-blocks. A sub-block's shared memory is allocated for the largest
-# number of sub-blocks a block can hold (see scoped_static_array below), and
-# that allocation is compiled into the kernel before its launch configuration
-# is known, so the two have to agree on a bound. Without a cap the bound is a
-# full 1024-thread block, which makes every slab loop reserve eight times the
-# shared memory it can use -- and shared memory is what limits the occupancy
-# of spectral element kernels. A cap of 128 reserves half the shared memory
-# per block of a 256-thread bound, which raised occupancy and measured faster
-# on an A100 baroclinic wave (h_elem = 30, z_elem = 63). Slabs with more
-# points than the cap fall back to multiple points per thread (see
-# DataLayouts.slice_subscope).
+# Number of threads in the largest sub-block that a slice loop can assign a slice to, at
+# the top of the chain of scopes that slice_subscope descends through (see
+# partition(::ThisKernel) below). Slices with more points than this are evaluated with
+# multiple points per thread (see DataLayouts.slice_subscope).
 const MAX_SUBBLOCK_LAUNCH_THREADS = 128
 
 # To reduce latency, only check device attributes before the first launch.
@@ -51,16 +43,20 @@ with its device-side analogue [`ThisKernel`](@ref) through `Adapt.jl`. Aside
 from array allocations, other standard `DataScope` operations are not supported.
 
 The type parameter is the level of shared memory that slice loops over the scope give
-each slice (see [`DataLayouts.with_shared_memory`](@ref)), `:medium` by default.
+each slice (see [`DataLayouts.with_shared_memory`](@ref)). It is `nothing` when no level
+is chosen (as for broadcasts), which gives slices the shared memory of `:medium` and
+evaluates them with one thread each, as at `:none`, if their buffers do not fit (see
+_foreach_slice).
 """
 struct ThisHost{L} <: DataLayouts.DataScope end
-ThisHost() = ThisHost{:medium}()
+ThisHost() = ThisHost{nothing}()
 
 # Bytes of dynamic shared memory per thread at each level of DataLayouts.foreach_slice.
 # At :none, every slice is evaluated by one thread, with private buffers.
 shmem_level_bytes(::Val{:none}) = 0
 shmem_level_bytes(::Val{:low}) = shmem_per_thread() ÷ 4
 shmem_level_bytes(::Val{:medium}) = shmem_per_thread() ÷ 2
+shmem_level_bytes(::Val{nothing}) = shmem_level_bytes(Val(:medium))
 shmem_level_bytes(::Val{:max}) = shmem_per_thread()
 shmem_level_bytes(::Val{bytes}) where {bytes} =
     bytes isa Integer && bytes >= 0 ? Int(bytes) :
@@ -153,34 +149,6 @@ struct ThisBlock <: ThisCooperativeGroup end
 @inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x % UInt32
 @inline DataLayouts.synchronize(::ThisBlock) = CUDA.sync_threads()
 
-# Equal sizes invariant: two static shared-memory allocations are given the
-# same memory only when they ask for the same number of bytes. Separately
-# compiled allocations share whenever their globals have the same name, at the
-# size of whichever module merged first; CUDA.CuStaticSharedArray names every
-# global "shmem", so unequal allocations can share and write out of bounds.
-# Putting the byte size in the name (this is otherwise CuStaticSharedArray's
-# llvmcall) lets only EQUAL allocations share, so the buffer reuse invariant of
-# Operators.apply_operator has to hold for every equally sized pair.
-@generated function shmem_pointer(::Type{T}, ::Val{bytes}) where {T, bytes}
-    LLVM.@dispose ctx = LLVM.Context() begin
-        pointer_type = convert(LLVM.LLVMType, Core.LLVMPtr{T, CUDA.AS.Shared})
-        llvm_f, _ = LLVM.Interop.create_function(pointer_type)
-        array_type = LLVM.ArrayType(LLVM.Int8Type(), bytes)
-        global_var = LLVM.GlobalVariable(
-            LLVM.parent(llvm_f), array_type, "shmem_$(bytes)B", CUDA.AS.Shared)
-        LLVM.linkage!(global_var, LLVM.API.LLVMInternalLinkage)
-        LLVM.initializer!(global_var, LLVM.null(array_type))
-        LLVM.alignment!(global_var, max(32, Base.datatype_alignment(T)))
-        LLVM.@dispose builder = LLVM.IRBuilder() begin
-            LLVM.position!(builder, LLVM.BasicBlock(llvm_f, "entry"))
-            zeros = [LLVM.ConstantInt(0), LLVM.ConstantInt(0)]
-            first_byte = LLVM.gep!(builder, array_type, global_var, zeros)
-            LLVM.ret!(builder, LLVM.bitcast!(builder, first_byte, pointer_type))
-        end
-        LLVM.Interop.call_function(llvm_f, Core.LLVMPtr{T, CUDA.AS.Shared})
-    end
-end
-
 # Base pointer of a kernel's dynamic shared memory.
 @generated function dynamic_shmem_base(::Type{T}) where {T}
     LLVM.@dispose ctx = LLVM.Context() begin
@@ -199,10 +167,6 @@ end
         LLVM.Interop.call_function(llvm_f, Core.LLVMPtr{T, CUDA.AS.Shared})
     end
 end
-
-@inline static_shared_array(::ThisBlock, ::Type{T}, dims) where {T} =
-    CUDA.CuDeviceArray{T, length(dims), CUDA.AS.Shared}(
-        shmem_pointer(T, Val(prod(dims) * sizeof(T))), (dims...,))
 
 """
     ThisSubBlock{N}()
@@ -257,8 +221,7 @@ end
 #
 # ONE WIDE SUB-BLOCK PER BLOCK. A sub-block of at most a warp has a barrier of
 # its own (sync_warp), independent of every other warp in the block, so a
-# block may hold as many such sub-blocks as MAX_SUBBLOCK_LAUNCH_THREADS
-# allows. A wider sub-block has no barrier of its own and is synchronized with
+# block may hold as many such sub-blocks as its threads allow. A wider sub-block has no barrier of its own and is synchronized with
 # the block-wide sync_threads instead (see synchronize(::ThisSubBlock) above),
 # so a block must hold exactly one of them: two sub-blocks in one block are
 # given consecutive ranks by subscope_indices, which hands rank r the strided
@@ -269,36 +232,13 @@ end
 # the kernel, and sync_threads reached by only part of a block is undefined
 # behavior. Giving each wide sub-block a block of its own makes the block-wide
 # barrier exactly the sub-block's barrier, and makes subscope_rank(scope,
-# ThisBlock()) always one, so the shared memory below holds a single sub-block's
-# worth of values instead of MAX_SUBBLOCK_LAUNCH_THREADS ÷ N of them.
+# ThisBlock()) always one.
 #
-# With dynamic shared memory, each sub-block's buffers are sized by the number of
-# sub-blocks that a block is launched with (see dynamic_shared_array), so narrow sub-blocks
-# need no cap other than the largest block.
+# The shared memory of every sub-block is sized by the number of sub-blocks that a block is
+# launched with (see dynamic_shared_array), so narrow sub-blocks need no cap other than the
+# largest block.
 @inline max_subblock_launch_threads(::ThisSubBlock{N}) where {N} =
-    N > THREADS_PER_WARP ? N :
-    use_dynamic_shmem() ? MAX_WARPS_PER_BLOCK * THREADS_PER_WARP :
-    MAX_SUBBLOCK_LAUNCH_THREADS
-
-# Assign threads in a sub-block one slice of an array shared across their
-# block. The sub-block count comes from max_subblock_launch_threads, the cap
-# on a sub-block slice loop's block size, rather than from
-# num_subscopes(scope, ThisWarp()): a warp is a subscope of a ThisSubBlock{N}
-# with N > THREADS_PER_WARP and not the other way around, so that call throws
-# an InvalidSubscopeError for wide sub-blocks.
-@inline function static_shared_array(scope::ThisSubBlock{N}, ::Type{T}, dims) where {N, T}
-    max_subblocks = cld(max_subblock_launch_threads(scope), N)
-    array = static_shared_array(ThisBlock(), T, (dims..., max_subblocks))
-    subblock_index = DataLayouts.subscope_rank(scope, ThisBlock())
-    return @inbounds view(array, ntuple(Returns(:), Val(length(dims)))..., subblock_index)
-end
-
-# Whether the shared arrays of blocks and sub-blocks are allocated in dynamic shared
-# memory (see dynamic_shared_array) instead of static globals (see static_shared_array).
-# A compile-time constant, set by CLIMA_CUDA_DYNAMIC_SHMEM before the extension
-# precompiles, or by redefining this method.
-use_dynamic_shmem() = USE_DYNAMIC_SHMEM
-const USE_DYNAMIC_SHMEM = _getenv_bool("CLIMA_CUDA_DYNAMIC_SHMEM"; default = false)
+    N > THREADS_PER_WARP ? N : MAX_WARPS_PER_BLOCK * THREADS_PER_WARP
 
 # Bytes of dynamic shared memory that each thread of a sub-block can use for its buffers
 # (see DataLayouts.total_buffer_limit), at most the shared memory of a multiprocessor
@@ -309,9 +249,9 @@ const USE_DYNAMIC_SHMEM = _getenv_bool("CLIMA_CUDA_DYNAMIC_SHMEM"; default = fal
 # CLIMA_CUDA_SHMEM_PER_THREAD before the extension precompiles. An expression whose buffers
 # do not fit fails to compile (see check_shmem_level); the :max level of foreach_slice.
 const SHMEM_PER_THREAD = _getenv_int("CLIMA_CUDA_SHMEM_PER_THREAD", 74)
-shmem_per_thread() = SHMEM_PER_THREAD # can be redefined, like use_dynamic_shmem
+shmem_per_thread() = SHMEM_PER_THREAD # can be redefined, e.g., to compare levels
 
-# Allocations are aligned to 32 bytes, like the globals of shmem_pointer.
+# Allocations are aligned to 32 bytes.
 aligned_shmem_bytes(bytes) = cld(bytes, 32) * 32
 
 # Dynamic shared memory is divided into one region per sub-block (or a single region for
@@ -366,16 +306,11 @@ const SHMEM_LEVEL_ERROR = "climacore_shared_memory_exceeds_level"
     ::Type{T},
     dims,
     offset::Val = Val(0),
-) where {T} =
-    use_dynamic_shmem() ? dynamic_shared_array(scope, T, dims, offset) :
-    static_shared_array(scope, T, dims)
+) where {T} = dynamic_shared_array(scope, T, dims, offset)
 
 DataLayouts.total_buffer_limit(::Union{ThisHost, ThisKernel}) = typemax(Int)
 DataLayouts.total_buffer_limit(::ThisBlock) = MAX_SHMEM_PER_BLOCK
-DataLayouts.total_buffer_limit(scope::ThisSubBlock{N, B}) where {N, B} =
-    use_dynamic_shmem() ? N * B :
-    fld(MAX_SHMEM_PER_BLOCK, cld(max_subblock_launch_threads(scope), N))
-DataLayouts.aliases_buffers(::Union{ThisBlock, ThisSubBlock}) = use_dynamic_shmem()
+DataLayouts.total_buffer_limit(::ThisSubBlock{N, B}) where {N, B} = N * B
 
 # The last sub-block in a block may be only partially filled, so its active
 # thread count is computed from the block's total. This is not the same as using
@@ -466,13 +401,10 @@ end
     args...,
 ) = eachindex(args...)
 
-# The bytes of a layout in an array from dynamic_shared_array or static_shared_array.
+# The bytes of a layout in an array from dynamic_shared_array.
 @generated function DataLayouts.shared_buffer_bytes(data::DataLayouts.DataLayout)
     A = DataLayouts.parent_type(data)
-    shared_array_type = Union{
-        CUDA.CuDeviceArray{<:Any, <:Any, CUDA.AS.Shared},
-        SubArray{<:Any, <:Any, <:CUDA.CuDeviceArray{<:Any, <:Any, CUDA.AS.Shared}},
-    }
+    shared_array_type = CUDA.CuDeviceArray{<:Any, <:Any, CUDA.AS.Shared}
     (A <: shared_array_type && DataLayouts.has_inferred_size(data)) || return :(Val(0))
     B = eltype(A)
     Nf = DataLayouts.num_basetypes(B, eltype(data))

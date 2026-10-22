@@ -551,7 +551,7 @@ recomputable_node(_) = true
 caches_values(arg) =
     is_cached(arg) &&
     !recomputable(arg) &&
-    (reads_registers(arg) || fits_inlined_buffers(arg, single_field_buffer_bytes))
+    (reads_registers(arg) || fits_buffers(arg, single_field_buffer_bytes))
 reads_registers(_) = false
 reads_registers(field::Field) = DataLayouts.stored_in_registers(Fields.field_values(field))
 reads_registers(bc::Broadcast.Broadcasted) = unrolled_any(reads_registers, bc.args)
@@ -581,14 +581,10 @@ operator_arg(bc::StencilOperatorBroadcasted) =
 
 # A pointwise expression over stencil operators is evaluated in one pass, which
 # also evaluates the operators that it reads at the same point, as long as at most
-# one of them caches its arguments. An operator is instead applied separately (see
-# operator_arg) if it caches arguments when other operators do too, or if it needs
-# more than half of the buffer limit of its scope; when the operators that cache
-# arguments do not fit together, each of them is compiled separately.
-pointwise_stencil(bc) = pointwise_stencil(
-    bc,
-    compiles_inline(bc) ? Val(num_caching_operators(bc) <= 1) : Val(:separately),
-)
+# one of them caches its arguments. An operator is instead applied on its own (see
+# operator_arg) if it caches arguments when other operators do too, or if its buffers
+# do not fit in its scope.
+pointwise_stencil(bc) = pointwise_stencil(bc, Val(num_caching_operators(bc) <= 1))
 pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
@@ -600,8 +596,7 @@ pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
 pointwise_arg(arg, _) = operator_arg(arg)
 pointwise_arg(bc::StencilBroadcasted, fuse_caching) = pointwise_stencil(bc, fuse_caching)
 pointwise_arg(bc::StencilOperatorBroadcasted, fuse_caching) =
-    fuse_caching isa Val{:separately} && caches_args(bc) ? apply_separately(bc) :
-    fits_inlined_buffers(bc) && (fuse_caching isa Val{true} || !caches_args(bc)) ?
+    fits_buffers(bc) && (fuse_caching isa Val{true} || !caches_args(bc)) ?
     pointwise_stencil(bc, fuse_caching) : apply_operators(bc)
 in_pass(bc) = unrolled_map(Returns(Val(true)), bc.args)
 in_pass(bc::StencilOperatorBroadcasted) =
@@ -613,9 +608,8 @@ num_caching_operators(bc::StencilBroadcasted) =
         same_pass isa Val{true} ? num_caching_operators(arg) : 0
     end)
 
-# On GPUs, every operator in an inlined body allocates a shared buffer per cached argument.
-inlined_buffer_bytes(bc::StencilOperatorBroadcasted) = published_bytes(bc, Val(false))
-# The buffers of an operator's pass are all live at once (see stencil_args).
+# On GPUs, an operator allocates a shared buffer per cached argument, and the buffers of
+# its pass are all live at once (see stencil_args).
 application_bytes(bc::StencilOperatorBroadcasted) = published_bytes(bc, Val(false))
 published_bytes(arg, reads) =
     reads_neighbor(reads) && passes_through(arg) ? published_bytes(arg.args[1], reads) :
@@ -692,8 +686,6 @@ Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
 apply_pointwise_operators(::StencilStyle, bc) = apply_stencil(pointwise_stencil(bc))
 # Unlike apply_operator, an application keeps its stored axes (see Fields.shared_space).
 @inline inline_apply_operators(bc::StencilOperatorBroadcasted) =
-    apply_stencil(fused_stencil(bc))
-@noinline noinline_apply_operators(bc::StencilOperatorBroadcasted) =
     apply_stencil(fused_stencil(bc))
 apply_operators!(dest, bc::StencilBroadcasted) =
     apply_stencil!(dest, pointwise_stencil(bc), Val(true))
@@ -2733,6 +2725,6 @@ materialize_buffer,
 register_values, apply_stencil!, shared_buffer_bytes
 
 # Constant propagation on these never improves inference; it re-infers the whole expression.
-@drop_constprop apply_operators, inline_apply_operators, noinline_apply_operators,
+@drop_constprop apply_operators, inline_apply_operators,
 apply_operators!, operator_arg, pointwise_arg, apply_operator, apply_stencil,
 apply_stencil!, materialize_buffer, column_value, stencil_value

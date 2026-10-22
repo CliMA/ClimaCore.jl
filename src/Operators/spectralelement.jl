@@ -437,7 +437,6 @@ function apply_operator(op::Divergence{F}, arg) where {F}
 end
 # The contravariant component cached per dimension has the type of the divergence.
 buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence}) = dimension_bytes(
-    bc.args[1],
     map(_ -> cached_bytes(bc.args[1], eltype(bc)), horizontal_dims(bc.args[1])),
 )
 
@@ -586,7 +585,6 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
 end
 buffer_bytes(bc::SpectralOperatorBroadcasted{<:SplitDivergence}) =
     dimension_bytes(
-        bc.args[1],
         map(horizontal_dims(bc.args[1])) do _
             cached_bytes(bc.args[1], Geometry.divergence_result_type(eltype(bc.args[1])))
         end,
@@ -794,12 +792,10 @@ function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl})
     (arg,) = bc.args
     (dims, lg) = (horizontal_dims(arg), Fields.local_geometry_field(arg))
     term_bytes(dim) = cached_bytes(arg, eltype(levi_civita(dim, arg, lg)))
-    return dimension_bytes(
-        arg,
-        (
-            unrolled_in(1, dims) ? term_bytes(Val(1)) : 0,
-            unrolled_in(2, dims) ? term_bytes(Val(2)) : 0,
-        ),
+    return dimension_bytes((
+        unrolled_in(1, dims) ? term_bytes(Val(1)) : 0,
+        unrolled_in(2, dims) ? term_bytes(Val(2)) : 0,
+    ),
     )
 end
 

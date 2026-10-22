@@ -61,9 +61,8 @@ end
         max_slices = length(DataLayouts.each_slice_index(op, first(args)))
         check_slice_count(max_slices)
         if subscope isa ThisSubBlock
-            # Each sub-block gets one slice. The block size is capped at the
-            # value that sizes the sub-blocks' shared memory (see
-            # scoped_static_array) and constrained to whole sub-blocks: a
+            # Each sub-block gets one slice. The block size is capped (see
+            # max_subblock_launch_threads) and constrained to whole sub-blocks: a
             # partially populated sub-block skips its missing threads' points
             # (see the whole subscopes invariant in subscope_launch_threads).
             subblock_threads = Int(DataLayouts.num_threads(subscope))
@@ -79,17 +78,26 @@ end
                     granularity = subblock_threads,
                     shmem,
                 )
-            launch_at_level(kernel_function, compact_args, config, shmem, Val(L))
+            launch_at_level(Val(L), kernel_function, compact_args, config, shmem) do
+                thread_kernel_function =
+                    SliceLoopKernel(op, f, mask, enumerate, DataLayouts.ThisThread())
+                launch_per_thread(thread_kernel_function, compact_args, max_slices)
+            end
         else
-            # One thread per slice (at the :none level, or when slices have one point);
-            # extra threads run empty loops, so this isn't a strict limit.
+            # One thread per slice (at the :none level, or when slices have one point).
             max_threads =
                 subscope isa DataLayouts.ThisThread ? max_slices : maximum(length, args)
             check_slice_count(max_threads)
-            config = kernel -> launch_configuration(kernel, max_threads; strict = false)
-            auto_launch!(kernel_function, compact_args; config)
+            launch_per_thread(kernel_function, compact_args, max_threads)
         end
     end
+
+# Extra threads run empty loops, so max_threads isn't a strict limit.
+launch_per_thread(kernel_function, compact_args, max_threads) = auto_launch!(
+    kernel_function,
+    compact_args;
+    config = kernel -> launch_configuration(kernel, max_threads; strict = false),
+)
 
 # The subscope of every slice at a level of shared memory (see ThisHost): one thread at
 # :none, and otherwise a sub-block whose threads have the level's bytes.
@@ -99,12 +107,26 @@ slice_subscope_at_level(::ThisSubBlock{N}, level::Val) where {N} =
     ThisSubBlock{N, shmem_level_bytes(level)}()
 
 # Every region of a sub-block slice loop is given the bytes of its level.
-subblock_shmem(::ThisSubBlock{N, B}) where {N, B} =
-    use_dynamic_shmem() ? DynamicShmem(N * B, N) : NO_DYNAMIC_SHMEM
+subblock_shmem(::ThisSubBlock{N, B}) where {N, B} = DynamicShmem(N * B, N)
 
-# A buffer that exceeds the level fails to compile (see check_shmem_level), with an error
-# that is reported here in terms of levels.
-function launch_at_level(kernel_function, compact_args, config, shmem, level)
+# A buffer that exceeds the level fails to compile (see check_shmem_level). When no level
+# was chosen (as for broadcasts), the slice loop is then evaluated with one thread per
+# slice by calling fallback, and otherwise the error is reported in terms of levels. The
+# kernels that do not fit are cached by type, so that they are only compiled once.
+const OVER_LEVEL_KERNELS = IdDict{Type, Nothing}()
+const OVER_LEVEL_KERNELS_LOCK = ReentrantLock()
+function launch_at_level(
+    fallback::G,
+    level,
+    kernel_function,
+    compact_args,
+    config,
+    shmem,
+) where {G}
+    key = typeof((kernel_function, compact_args))
+    level isa Val{nothing} &&
+        @lock(OVER_LEVEL_KERNELS_LOCK, haskey(OVER_LEVEL_KERNELS, key)) &&
+        return fallback()
     try
         auto_launch!(kernel_function, compact_args; config, shmem)
     catch err
@@ -116,6 +138,10 @@ function launch_at_level(kernel_function, compact_args, config, shmem, level)
             message,
         )
         isnothing(m) && rethrow()
+        if level isa Val{nothing}
+            @lock OVER_LEVEL_KERNELS_LOCK OVER_LEVEL_KERNELS[key] = nothing
+            return fallback()
+        end
         (bytes, threads, per_thread) = parse.(Int, m.captures)
         needed = cld(bytes, threads)
         levels = filter(
@@ -143,9 +169,7 @@ check_slice_count(n) =
 # Dynamic shared memory of a reduction kernel: the warp results of a block reduction,
 # which is retired before the block allocates its flag in the same memory.
 block_reduction_shmem(::Type{T}) where {T} =
-    use_dynamic_shmem() ?
-    DynamicShmem(aligned_shmem_bytes(max(MAX_WARPS_PER_BLOCK * sizeof(T), 1)), 0) :
-    NO_DYNAMIC_SHMEM
+    DynamicShmem(aligned_shmem_bytes(max(MAX_WARPS_PER_BLOCK * sizeof(T), 1)), 0)
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))

@@ -254,15 +254,6 @@ guaranteed to hold identical values.
 """
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
 
-"""
-    aliases_buffers(scope)
-
-Whether the arrays from [`scoped_static_array`](@ref) in a [`DataScope`](@ref) share memory
-unless they are given different offsets (as with dynamic shared memory on GPUs), so that
-only the buffers that are live at the same time add up. By default, every array has its
-own memory.
-"""
-aliases_buffers(_) = false
 scoped_static_array(scope, ::Type{T}, dims, ::Val) where {T} =
     scoped_static_array(scope, T, dims)
 
