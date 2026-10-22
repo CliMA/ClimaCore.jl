@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: climacommon/2024_10_10
+  modules: climacommon
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
@@ -31,6 +31,7 @@ steps:
       slurm_mem: 80G
       slurm_gpus: 1
       slurm_cpus_per_task: 12
+    timeout_in_minutes: 150
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 12
 
