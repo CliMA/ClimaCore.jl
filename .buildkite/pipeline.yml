@@ -155,6 +155,7 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/runtests.jl"
+        timeout_in_minutes: 60
         env:
           CLIMACOMMS_DEVICE: "CUDA"
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"

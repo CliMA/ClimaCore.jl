@@ -402,12 +402,8 @@ const GPU_BUFFER = 1.15
 const CPU_BUFFER = 2
 
 # The reference tables hold, per device:
-# - A100: mean device (kernel) times from `device_time_ns`, which is what
-#   `benchmark_func!` measures on GPU, as the median over 5 runs. Most entries
-#   vary by about 1% between runs, but some kernels (e.g., `op_nest_interp_8!`)
-#   occasionally run up to ~20% slower for a whole run;
-# - P100: mean device times from `device_time_ns`, from a single CI run
-#   (climacore-ci build 8048);
+# - A100: mean device (kernel) times from `device_time_ns`
+# - P100: mean device times from `device_time_ns`
 # - CPU: minimum wall times of `@benchmark`.
 #
 # Reference timings are keyed by GPU model; CI pins the hardware with a `gres`
