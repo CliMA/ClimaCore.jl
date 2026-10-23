@@ -237,18 +237,35 @@ scoped_array(scope, ::Type{T}, dims; buffer = false) where {T} =
 @generated invalid_allocation_string(scope) = "Cannot allocate array for $scope"
 
 """
-    scoped_static_array(scope, T, dims)
+    scoped_static_array(scope, T, dims, [Val(offset)])
 
 Return a statically sized array with element type `T` and size `dims`, whose values
 can be modified by every thread in a [`DataScope`](@ref). If a `DataScope` does not
 provide its own method, this falls back to calling [`scoped_array`](@ref).
 
-Two allocations with equal byte sizes may be assigned to the same
-memory (this is what happens for block-level allocations on GPUs, which are
-stored in shared memory), so their lifetimes must not overlap unless they are
-guaranteed to hold identical values.
+A scope whose allocations share memory (as with the dynamic shared memory of GPU blocks)
+places the array at byte `offset` of that memory, which is 0 by default, so two arrays
+that are live at the same time must be given non-overlapping offsets; see the buffer reuse
+invariant in `Operators.apply_operator`. Every array in such memory occupies
+[`aligned_buffer_bytes`](@ref) of it, so an offset after another array is the aligned
+byte size of that array. Other scopes ignore the offset.
 """
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
+scoped_static_array(scope, ::Type{T}, dims, ::Val) where {T} =
+    scoped_static_array(scope, T, dims)
+
+# Byte alignment of the arrays of a scope whose allocations share memory (see
+# scoped_static_array); the single definition that host-side byte accounting and device-side
+# allocation both use, so that the offsets computed on the host match the device's layout.
+const BUFFER_ALIGNMENT = 32
+
+"""
+    aligned_buffer_bytes(bytes)
+
+Bytes that an array of `bytes` bytes from [`scoped_static_array`](@ref) occupies in memory
+that allocations share: `bytes` rounded up to a multiple of `BUFFER_ALIGNMENT`.
+"""
+@inline aligned_buffer_bytes(bytes) = cld(bytes, BUFFER_ALIGNMENT) * BUFFER_ALIGNMENT
 
 """
     strided_access(scope)

@@ -82,22 +82,34 @@ Base.size(bc::LazyDataLayout, i::Integer) =
     register_similar(bc, T)
 
 """
-    buffer_similar(data, T)
-    buffer_similar(bc, T)
+    buffer_similar(data, T, [Val(offset)])
+    buffer_similar(bc, T, [Val(offset)])
 
 Allocate a new [`DataLayout`](@ref) through its [`DataScope`](@ref)'s memory
 (see [`scoped_array`](@ref) and [`scoped_static_array`](@ref)), so that every
 thread in the scope can read the result. `Base.similar` on a
 [`LazyDataLayout`](@ref) instead routes through [`register_similar`](@ref),
 whose result may only be read by the writing thread, so any buffer whose values
-cross a thread boundary has to be allocated with this function.
+cross a thread boundary has to be allocated with this function. Buffers that are live at
+the same time are given different byte offsets of the scope's memory (see
+[`scoped_static_array`](@ref)).
 """
-@inline buffer_similar(data::DataLayout, ::Type{T}) where {T} =
-    similar_layout(data, T)
-@inline buffer_similar(bc::LazyDataLayout, ::Type{T}) where {T} = similar(
-    layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)},
-    size(bc),
-)
+@inline buffer_similar(data::DataLayout, ::Type{T}, offset::Val = Val(0)) where {T} =
+    similar_layout_at(
+        data,
+        T,
+        checked_valid_basetype(eltype(parent_type(data)), T),
+        offset,
+    )
+@inline function buffer_similar(
+    bc::LazyDataLayout,
+    ::Type{T},
+    offset::Val = Val(0),
+) where {T}
+    D = layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)}
+    B = checked_valid_basetype(eltype(parent_type(D)), T)
+    return similar_layout_at(D, T, B, offset, size(bc))
+end
 
 # Define a MultiBroadcastFusion type, FusedMultiBroadcast, and a corresponding
 # @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.
