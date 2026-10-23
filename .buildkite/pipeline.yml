@@ -1338,6 +1338,14 @@ steps:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT} ClimaCoreSpectra#${BUILDKITE_COMMIT} ClimaCoreTempestRemap#${BUILDKITE_COMMIT}"
         soft_fail: true # downstream test failures don't block a merge
 
+      - label: ":rocket: Downstream: trigger ClimaLand CI"
+        trigger: "climaland-ci"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+
   - wait
 
   - label: ":chart_with_downwards_trend: build history"
