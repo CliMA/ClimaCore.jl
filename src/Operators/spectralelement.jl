@@ -238,14 +238,18 @@ end
     end
 end
 
-# Apply clipped_muladd_slab! along all available horizontal dimensions (or
-# plain muladd_slab! when only one is available). The two synchronizations make
-# every write to partial_result visible before it is read, and every read
-# complete before its buffer can be reused (see the buffer reuse invariant).
+# Apply clipped_muladd_slab! along all available horizontal dimensions (or plain
+# muladd_slab! when only one is available), reading arg at other threads' points, so a
+# buffer arg is published first: by a synchronization along one dimension, and along two by
+# the allocation of partial_result, which synchronizes (see the buffer reuse invariant). The
+# two synchronizations after that make every write to partial_result visible before it is
+# read, and every read complete before its buffer can be reused.
 @inline sequential_muladd_slab!(dest, matrix, arg, offset = Val(0)) =
     if horizontal_dims(arg) == (1,)
+        reads_buffer(arg) && DataLayouts.synchronize(DataLayouts.DataScope(arg))
         muladd_slab!(dest, matrix, arg, Val(:i))
     elseif horizontal_dims(arg) == (2,)
+        reads_buffer(arg) && DataLayouts.synchronize(DataLayouts.DataScope(arg))
         muladd_slab!(dest, matrix, arg, Val(:j))
     elseif horizontal_dims(arg) == (1, 2)
         # partial_result crosses threads (the :j pass reads the :i pass's
@@ -881,8 +885,8 @@ tensor_unweighted(::Interpolate, dest) = dest
 tensor_unweighted(::Restrict, dest) = jacobian_unweighted(WeakForm(), dest)
 
 function apply_operator(op::TensorOperator, arg)
+    # A buffered arg′ is published by sequential_muladd_slab! before it is read.
     arg′ = tensor_weighted(op, arg)
-    DataLayouts.synchronize(DataLayouts.DataScope(arg))
     # The destination's shape comes from the output space's local geometry type
     # (not a value, which would make the buffer's size dynamic and its
     # allocation dynamically dispatched) and its scope from the argument.
@@ -1123,12 +1127,12 @@ function apply_operator(op::LumpedRestriction, arg)
     # Every coarse point reads every point of WJ f, so publish it through a
     # buffer even when arg is register-resident (e.g., the result of Gradient).
     arg′ = materialize_buffer(Base.broadcasted(*, arg, WJ))
-    DataLayouts.synchronize(scope)
     B = Quadratures.interpolation_matrix(FT, fine_quadrature_style, op.quadrature_style)
     Bᵢ = dim_matrix(Val(1), dims, B)
     Bⱼ = dim_matrix(Val(2), dims, B)
     # θ is live at the same time as arg′, so it is placed after it; see the buffer reuse
-    # invariant.
+    # invariant. Its allocation synchronizes the scope, which publishes arg′ before
+    # lumped_restrict_slab! reads it.
     θ = coarse_buffer(slab_data(arg′), T, dims, Val(Nc), shared_buffer_bytes(arg′))
     lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
     DataLayouts.synchronize(scope)

@@ -808,19 +808,16 @@ end
 
 # Evaluate a stencil expression over a column into dest, each point on its own thread (in
 # rounds of the whole scope where cached reads need every thread; see update_points!). The
-# first synchronization publishes the values the pass reads, and the last one protects them
-# until all threads have read them (a cached argument's reader synchronizes instead). If
-# operator results are in scope registers (see register_similar), a pass that caches no
-# arguments skips both, since every earlier pass that read buffers ended synchronized (see
-# is_fused).
+# first synchronization publishes the cached values the pass reads (a cached argument's
+# reader synchronizes instead), and the last one publishes dest when it is a buffer that a
+# later pass may read at other threads' points. Neither retires a buffer: the allocation
+# that next overlaps one synchronizes (see the buffer reuse invariant in apply_operator),
+# so a pass that caches no arguments into a result in registers has no barriers.
 @inline function apply_stencil!(dest, bc, finish, offset = Val(0))
     scope = DataLayouts.DataScope(bc)
     space = Fields.shared_space(bc)
     stencil_bc = stencil_arg(bc, Val(false), offset)
-    syncs =
-        num_caching_operators(bc) > 0 ||
-        !DataLayouts.has_scope_registers(Fields.field_values(destination_template(bc)))
-    syncs && DataLayouts.synchronize(scope)
+    num_caching_operators(bc) > 0 && DataLayouts.synchronize(scope)
     dest_data = Fields.field_values(dest)
     if has_private_buffers(bc)
         # One thread owns the column (as on CPUs): entering update_points!'s loop directly
@@ -839,7 +836,9 @@ end
             @inbounds column_value(stencil_bc, space, vertical_index(space, index))
         end
     end
-    syncs && finish isa Val{true} && DataLayouts.synchronize(scope)
+    finish isa Val{true} &&
+        !DataLayouts.stored_in_registers(dest_data) &&
+        DataLayouts.synchronize(scope)
     return dest
 end
 
