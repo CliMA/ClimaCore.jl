@@ -186,10 +186,9 @@ end
     test_fused_column_loop(tall_space, tall_space)
 end
 
-# Every statement of a fused loop body is compiled into the same GPU kernel, and the inlined
-# buffers of a statement that caches values in shared memory would add up across statements.
-# A statement with such buffers is compiled separately, which lets statements share buffers
-# of equal sizes; buffers of different sizes still add up.
+# Every statement of a fused loop body is compiled into the same GPU kernel, and statements
+# share the shared memory of their slice, since the buffers of different statements are
+# never live at the same time.
 @testset "fused loops with many shared-memory buffers" begin
     FT = Float64
     context = ClimaComms.context(ClimaComms.device())
@@ -203,8 +202,8 @@ end
     reference(arg) =
         Base.materialize(Base.broadcasted(ᶜinterp, Base.broadcasted(ᶠinterp, arg)))
 
-    # 17 statements that each cache a column of 64 faces with 6 values (3 KB): 51 KB of
-    # shared memory if they did not share their buffers, over the 48 KB of a GPU block.
+    # 17 statements that each cache a column of 64 faces with 6 values (3 KB) when it fits in
+    # shared memory, 51 KB if they did not share their buffers.
     x = tuple_field(6)
     outputs = ntuple(_ -> similar(x), 17)
     foreach_column(outputs..., x) do args...
@@ -228,8 +227,9 @@ end
     sum_output = Base.materialize(reduce((a, b) -> Base.broadcasted(+, a, b), terms))
     @test parent(sum_output) == sum(n -> parent(outputs[n]), 1:17)
 
-    # The 17 statements on a temporary of the loop body, which is in registers on GPUs.
-    foreach_column(outputs..., x) do args...
+    # The 17 statements on a temporary of the loop body, which is in registers on GPUs and
+    # has to be cached in shared memory (48 bytes per thread of a column).
+    foreach_column(outputs..., x; shmem = Val(:max)) do args...
         temp = @. 2 * args[18]
         ntuple(Val(17)) do n
             output = args[n]
@@ -244,7 +244,7 @@ end
     )
 
     # 14 statements whose cached columns have 1 to 14 values (0.5 KB to 7 KB): 52.5 KB of
-    # shared memory, which statements cannot share since every buffer has a different size.
+    # shared memory if they did not share it; those that do not fit are recomputed.
     inputs = ntuple(tuple_field, 14)
     outputs = map(similar, inputs)
     fused_loop!() = foreach_column(outputs..., inputs...) do args...
@@ -263,12 +263,8 @@ end
     tall_x = fill(ntuple(FT, 6), tall_space)
     @test parent(@. ᶜinterp(ᶠinterp(2 * tall_x))) ==
           parent(fill(ntuple(n -> 2 * FT(n), 6), tall_space))
-    if ClimaComms.device() isa ClimaComms.CUDADevice
-        @test_broken (fused_loop!(); correct()) # the kernel needs too much shared memory
-    else
-        fused_loop!()
-        @test correct()
-    end
+    fused_loop!()
+    @test correct()
 end
 
 # Temporaries of a fused loop body are in registers on GPUs (see register_similar), stored
@@ -295,16 +291,17 @@ end
     end
     @test all(==(FT(12)), Array(parent(output)))
 
-    # Temporaries that other threads read at neighboring points are cached even when their
-    # buffers need more than half of the shared memory of a GPU block (25 KB for 63 centers
-    # with 50 values, or 26 KB for 1100 centers with 3 values), since they are in registers.
+    # Temporaries that other threads read at neighboring points are cached in shared memory,
+    # since they are in registers, so a large one needs a level of shared memory that fits it:
+    # 25 KB for 63 centers with 50 values, or 26 KB for 1100 centers with 3 values (with 128
+    # threads per column, which takes a block over the default limit of 48 KB).
     for (zelem, n) in ((63, Val(50)), (1100, Val(3)))
         tall_space =
             TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem, helem = 1, Nq = 2, context)
         z = Fields.coordinate_field(tall_space).z
         x = map(z -> ntuple(i -> i * z^2, n), z)
         output = Fields.Field(eltype(x), Spaces.face_space(tall_space))
-        foreach_column(output, x) do output, x
+        foreach_column(output, x; shmem = Val(400)) do output, x
             temp = @. 2 * x
             @. output = ᶠinterp(temp)
             return nothing
@@ -312,11 +309,11 @@ end
         @test parent(output) ≈ parent(@. ᶠinterp(2 * x))
     end
 
-    # Operators on 6 values that need more than half of the shared memory of a GPU block.
+    # Operators on 6 values of temporaries, which need a level of shared memory that fits them.
     lazy_interp(arg) = Base.broadcasted(ᶜinterp, Base.broadcasted(ᶠinterp, arg))
     x = fill(ntuple(FT, 6), space)
     output = similar(x)
-    foreach_column(output, x) do output, x
+    foreach_column(output, x; shmem = Val(:max)) do output, x
         temp = @. 2 * x
         deep_interp = lazy_interp(lazy_interp(lazy_interp(lazy_interp(lazy_interp(temp)))))
         Base.materialize!(output, deep_interp)
@@ -328,7 +325,7 @@ end
         TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 1, helem = 1, Nq = 8, context)
     y = map(φ -> ntuple(n -> n * sind(φ), 6), Fields.coordinate_field(slab_space).lat)
     output = similar(y)
-    foreach_slab(output, y) do output, y
+    foreach_slab(output, y; shmem = Val(400)) do output, y
         temp = @. 2 * y
         @. output = wdiv(grad(wdiv(grad(wdiv(grad(temp))))))
         return nothing

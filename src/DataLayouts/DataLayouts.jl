@@ -283,7 +283,28 @@ function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
     return similar_layout(data, T, B, maybe_dims...)
 end
-function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
+similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B} =
+    similar_layout_at(data, T, B, Val(0), maybe_dims...)
+
+"""
+    shared_buffer_bytes(data)
+
+Bytes of the scope memory that `data` occupies, as a `Val`, if it is stored in an array
+from [`scoped_static_array`](@ref) that the threads of its scope share (as on GPUs), or
+`Val(0)` otherwise. The bytes are found from the type of `data`, so that they are known
+when code that places buffers after `data` is compiled.
+"""
+shared_buffer_bytes(_) = Val(0)
+
+# Like similar_layout, with a statically sized array placed at a byte offset of its scope's
+# memory (see scoped_static_array).
+function similar_layout_at(
+    data,
+    ::Type{T},
+    ::Type{B},
+    offset::Val,
+    maybe_dims...,
+) where {T, B}
     Nf = num_basetypes(B, T)
     dims_or_data_size =
         isone(length(maybe_dims)) ? first(maybe_dims) :
@@ -291,7 +312,7 @@ function similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B}
     array_size = add_f_dim(dims_or_data_size, Nf, Val(f_dim(data)))
     array =
         has_inferred_size(data) ?
-        scoped_static_array(DataScope(data), B, array_size) :
+        scoped_static_array(DataScope(data), B, array_size, offset) :
         scoped_array(DataScope(data), B, array_size)
     # The new array has the layout's canonical size; skip the parent check.
     return @inbounds rebuild(data, array, T)
@@ -624,7 +645,7 @@ include("registers.jl")
 # The loop entry points only: the loop bodies keep
 # constant propagation, since turning it off there shifts kernel codegen
 # enough to flip cases near the sm_60 register brink.
-@drop_constprop _foreach_slice, unfused_slice_loop,
+@drop_constprop _foreach_slice, foreach_slice_with_shared_memory, unfused_slice_loop,
 foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
 Base.fill!, Base.copyto!
 

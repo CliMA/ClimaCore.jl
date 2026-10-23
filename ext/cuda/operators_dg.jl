@@ -623,6 +623,7 @@ function _cuda_tensor_product!(
         (out, indata, M, Val(Nij), Val(Nvt), Nv);
         threads_s = (Nij, Nij, Nvt),
         blocks_s = (Nh_runtime, cld(Nv, Nvt)),
+        shmem = DynamicShmem(aligned_shmem_bytes(Nij * Nij * Nvt * sizeof(eltype(out))), 0),
     )
     return out
 end

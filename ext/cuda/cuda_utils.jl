@@ -34,6 +34,9 @@ function uncached_device_attributes()
         get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR),
         reserved_shmem_per_block =
         get_attr(CUDA.DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK),
+        # a kernel can use more than max_shmem_per_block after opting in (see launch_kernel)
+        max_shmem_per_block_optin =
+        get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN),
 
         # more hardware properties from version 12.9 of the CUDA Runtime Headers
         # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L606-779
@@ -119,7 +122,8 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
 
     if !iszero(shmem_per_block)
         min_shmem_per_block = shmem_per_block + attrs.reserved_shmem_per_block
-        max_shmem_per_block = attrs.max_shmem_per_block + attrs.reserved_shmem_per_block
+        max_shmem_per_block =
+            attrs.max_shmem_per_block_optin + attrs.reserved_shmem_per_block
         allocated_shmem_per_block =
             round_up(min_shmem_per_block, attrs.shmem_per_allocation)
         allocated_shmem_per_block > max_shmem_per_block && return (0, :shared_memory)
@@ -132,6 +136,22 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     return (max_blocks_per_sm * attrs.sm_count, limit)
 end
 
+"""
+    DynamicShmem(region_bytes, region_threads)
+
+Dynamic shared memory of a kernel launch, as a function of its number of threads per block:
+`region_bytes` for every `region_threads` threads, or for the whole block when
+`region_threads` is 0 (see `dynamic_shared_array`).
+"""
+struct DynamicShmem
+    region_bytes::Int
+    region_threads::Int
+end
+(shmem::DynamicShmem)(threads_per_block) =
+    iszero(shmem.region_threads) ? shmem.region_bytes :
+    shmem.region_bytes * fld(threads_per_block, shmem.region_threads)
+const NO_DYNAMIC_SHMEM = DynamicShmem(0, 0)
+
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
@@ -140,6 +160,7 @@ function uncached_launch_configuration(
     strict,
     max_waves,
     default_granularity,
+    dynamic_shmem,
     config_args...,
 )
     attrs = device_attributes()
@@ -192,7 +213,11 @@ function uncached_launch_configuration(
     (best_threads_per_block, best_num_blocks, best_limit) = (0, 0, :user)
     for threads_per_block in block_sizes
         (max_blocks_per_wave, active_blocks_limit) =
-            max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
+            max_active_blocks(
+                threads_per_block,
+                regs_per_thread,
+                shmem_per_block + dynamic_shmem(threads_per_block),
+            )
         user_max_blocks = get_user_max_blocks(threads_per_block, config_args...)
         user_constraints_ignorable &= user_max_blocks >= max_blocks_per_wave * max_waves
         (num_blocks, limit) =
@@ -212,7 +237,10 @@ function uncached_launch_configuration(
        isnothing(default_granularity)
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
-        @assert CUDA.launch_configuration(cu_func) == cuda_config
+        # CUDA's shmem is only the dynamic shared memory; it adds the static memory itself,
+        # and it takes a Function (not any callable) of the number of threads per block.
+        cuda_shmem = threads -> dynamic_shmem(threads)
+        @assert CUDA.launch_configuration(cu_func; shmem = cuda_shmem) == cuda_config
     end
 
     return (;
@@ -226,14 +254,16 @@ end
 # CUDA.CUfunction before CUDA.jl v6 and CUDA.CUDACore.CUfunction after).
 const CUfunction = fieldtype(CUDA.CuFunction, :handle)
 const MISSING_LAUNCH_CONFIGURATION = (; threads = -1, blocks = -1, limit = :missing)
-const LAUNCH_CONFIGURATION_CACHE =
-    Dict{Tuple{CUfunction, Bool, Int, Int, Int, Int}, typeof(MISSING_LAUNCH_CONFIGURATION)}()
+const LAUNCH_CONFIGURATION_CACHE = Dict{
+    Tuple{CUfunction, Bool, Int, Int, DynamicShmem, Int, Int},
+    typeof(MISSING_LAUNCH_CONFIGURATION),
+}()
 const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
 
 """
-    launch_configuration(kernel; [max_waves], [granularity])
-    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity])
-    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity])
+    launch_configuration(kernel; [max_waves], [granularity], [shmem])
+    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity], [shmem])
+    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity], [shmem])
 
 Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
 which maximizes occupancy across the entire device instead of just one
@@ -266,6 +296,10 @@ the smallest unit a block can usefully be made of; a loop that hands each slice
 to a sub-block needs the coarser unit of one sub-block (see
 `DataLayouts.subscope_launch_threads`).
 
+A kernel that uses dynamic shared memory is given it as a [`DynamicShmem`](@ref) `shmem`,
+which every block size considered has to accommodate along with the kernel's static
+shared memory.
+
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
 also returns a symbol identifying the dominant factor that limits occupancy:
@@ -288,6 +322,7 @@ function launch_configuration(
     strict = true,
     max_waves = MAX_WAVES[],
     granularity = nothing,
+    shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
 )
     cu_func = kernel.fun
     cache_key = (
@@ -295,6 +330,7 @@ function launch_configuration(
         strict,
         max_waves,
         something(granularity, -1),
+        shmem,
         get(config_args, 1, -1),
         get(config_args, 2, -1),
     )
@@ -306,6 +342,7 @@ function launch_configuration(
                 strict,
                 max_waves,
                 granularity,
+                shmem,
                 config_args...,
             )
             LAUNCH_CONFIGURATION_CACHE[cache_key] = config
@@ -451,8 +488,8 @@ end
     converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
     compile_kernel(call, ::Nothing) = CUDA.kernel_compile(call; always_inline = true)
     compile_kernel(call, name) = CUDA.kernel_compile(call; name, always_inline = true)
-    launch_kernel(kernel, call, threads, blocks) =
-        CUDA.kernel_launch(kernel, call; threads, blocks)
+    launch_kernel(kernel, call, threads, blocks, shmem) =
+        CUDA.kernel_launch(kernel, call; threads, blocks, shmem)
 else
     converted_kernel_call(f!::F!, args) where {F!} = (;
         f! = isbitstype(F!) ? f! : CUDA.cudaconvert(f!),
@@ -464,19 +501,45 @@ else
     compile_kernel(call, name) =
         CUDA.cufunction(call.f!, argument_types(call); name, always_inline = true)
     argument_types(call) = Tuple{map(Core.Typeof, call.args)...}
-    launch_kernel(kernel, call, threads, blocks) =
-        GC.@preserve call kernel(call.args...; threads, blocks, convert = Val(false))
+    launch_kernel(kernel, call, threads, blocks, shmem) = GC.@preserve call kernel(
+        call.args...;
+        threads,
+        blocks,
+        shmem,
+        convert = Val(false),
+    )
+end
+
+# A kernel can only be launched with more than the default limit on dynamic shared memory
+# per block (48 KB) once the limit of its function is raised. The raised limits are cached
+# (and only ever raised), since setting and querying them are driver calls.
+const DYNAMIC_SHMEM_LIMITS = Dict{CUfunction, Int}()
+const DYNAMIC_SHMEM_LIMITS_LOCK = ReentrantLock()
+function allow_dynamic_shmem!(kernel, bytes)
+    bytes <= MAX_SHMEM_PER_BLOCK && return nothing
+    handle = kernel.fun.handle
+    @lock DYNAMIC_SHMEM_LIMITS_LOCK begin
+        if get(DYNAMIC_SHMEM_LIMITS, handle, 0) < bytes
+            attribute = CUDA.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+            CUDA.attributes(kernel.fun)[attribute] = bytes
+            DYNAMIC_SHMEM_LIMITS[handle] = bytes
+        end
+    end
+    return nothing
 end
 
 """
-    auto_launch!(f!, args; [nitems], [config], [threads_s], [blocks_s])
+    auto_launch!(f!, args; [nitems], [config], [threads_s], [blocks_s], [shmem])
 
 Launch a cuda kernel, using `launch_configuration` to determine the number of
 threads and blocks.
 
 The threads and blocks are computed from the compiled kernel by `config` if it is
 given, or else so that each of `nitems` items gets its own thread; otherwise, the
-suggested threads and blocks (`threads_s`, `blocks_s`) are used.
+suggested threads and blocks (`threads_s`, `blocks_s`) are used. The kernel is launched
+with the [`DynamicShmem`](@ref) `shmem` evaluated at its number of threads per block (none
+by default), which a `config` must also pass to `launch_configuration`. Every kernel that
+allocates dynamic shared memory (see `dynamic_shared_array`) must be given enough of it.
 """
 function auto_launch!(
     f!::F!,
@@ -485,6 +548,7 @@ function auto_launch!(
     config = nothing,
     threads_s = nothing,
     blocks_s = nothing,
+    shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -560,10 +624,12 @@ function auto_launch!(
     elseif isnothing(nitems)
         (threads, blocks) = (threads_s, blocks_s)
     else
-        threads = launch_configuration(kernel, nitems; strict = false).threads
+        threads = launch_configuration(kernel, nitems; strict = false, shmem).threads
         blocks = cld(nitems, threads)
     end
-    launch_kernel(kernel, call, threads, blocks)
+    dynamic_bytes = shmem(prod(threads))
+    allow_dynamic_shmem!(kernel, dynamic_bytes)
+    launch_kernel(kernel, call, threads, blocks, dynamic_bytes)
     RECORD_KERNELS[] && push!(RECORDED_KERNELS, kernel)
 
     if collect_kernel_stats() # only for development use
