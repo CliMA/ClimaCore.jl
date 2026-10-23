@@ -167,49 +167,11 @@ mean_op = Operators.LumpedRestriction(Quadratures.GL{1}())
 @test Array(parent(mean_op.(norm_sqr.(grad.(f))))) ≈
       parent(mean_op.(norm_sqr.(grad.(f_cpu))))
 
-# Check the equal sizes invariant in the CUDA extension's shmem_pointer on
-# compiled kernels: allocations share a global only when they ask for the same
-# number of bytes AND are emitted from separately compiled functions.
 const CUDA_EXT = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
-# N Float64s, so 8N bytes; tag makes call sites separately compiled functions.
-@noinline function scoped_edge(::Val{N}, ::Val{tag} = Val(1)) where {N, tag}
-    array = ClimaCore.DataLayouts.scoped_static_array(CUDA_EXT.ThisBlock(), Float64, (N,))
-    i = Int(CUDA.threadIdx().x)
-    @inbounds array[i] = i * tag
-    CUDA.sync_threads()
-    return @inbounds array[N + 1 - i]
-end
-two_shared_sizes!(dest) =
-    (@inbounds dest[1] = scoped_edge(Val(256)) + scoped_edge(Val(512)); nothing)
-one_shared_size!(dest) =
-    (@inbounds dest[1] = scoped_edge(Val(256)) + scoped_edge(Val(256), Val(2)); nothing)
-function one_function_two_arrays!(dest)
-    a = ClimaCore.DataLayouts.scoped_static_array(CUDA_EXT.ThisBlock(), Float64, (256,))
-    b = ClimaCore.DataLayouts.scoped_static_array(CUDA_EXT.ThisBlock(), Float64, (256,))
-    i = Int(CUDA.threadIdx().x)
-    @inbounds a[i] = i
-    @inbounds b[i] = 2 * i
-    CUDA.sync_threads()
-    @inbounds dest[1] = a[257 - i] + b[257 - i]
-    return nothing
-end
-@testset "shared memory globals are sized by their allocations" begin
-    llvm(f) = sprint() do io
-        arg_types = Tuple{CUDA.CuDeviceVector{Float64, CUDA.AS.Global}}
-        CUDA.code_llvm(io, f, arg_types; dump_module = true, always_inline = true)
-    end
-    shared_sizes(f) =
-        sort([
-            parse(Int, m[1]) for m in eachmatch(r"addrspace\(3\) global \[(\d+) x", llvm(f))
-        ])
-    @test shared_sizes(two_shared_sizes!) == [2048, 4096]
-    @test shared_sizes(one_shared_size!) == [2048] # equal sizes are merged
-    @test shared_sizes(one_function_two_arrays!) == [2048, 2048] # never merged
-end
 
 # A slice loop over an argument that is already one slice keeps the scope it is
-# given; splitting it into smaller subscopes would double the shared memory
-# reserved for every buffer (see Operators.inlined_buffer_bytes).
+# given; splitting it into smaller subscopes would change how its points are assigned to
+# threads and registers (see DataLayouts.slice_exceeds_subscope).
 @testset "slice loops over one slice keep their scope" begin
     slice_subscope = ClimaCore.DataLayouts.slice_subscope
     slab = ClimaCore.DataLayouts.slab
@@ -220,40 +182,55 @@ end
     @test slice_subscope(subscope, slab, slab(data, index...)) == subscope
 end
 
-# Operators.inlined_buffer_bytes is the estimate that picks between inlined operator
-# applications (each with its own buffers) and separately compiled ones (which share buffers
-# of equal sizes). It must match the shared memory of the kernels that apply operators, so
-# that inlining is only avoided when an expression would need too much shared memory.
-# Slabs that fit in a warp cache arguments in registers, which need no shared memory.
-@testset "inlined and separately compiled operator applications" begin
-    function predicted_shared_bytes(dest, bc) # for each block
-        op = Operators.slice_operator(bc.style)
-        scope = DataLayouts.slice_subscope(CUDA_EXT.ThisKernel(), op, dest, bc)
-        slice = op === Fields.column ? Fields.column(bc, 1, 1, 1) : Fields.slab(bc, 1, 1)
-        scopes_per_block = cld(
-            CUDA_EXT.max_subblock_launch_threads(scope),
-            DataLayouts.num_threads(scope),
-        )
-        return scopes_per_block *
-               Operators.inlined_buffer_bytes(DataLayouts.reassign(slice, scope))
-    end
-    function shared_bytes(bc) # (predicted, compiled) for each block
+# Operators.fits_buffers decides the shared memory of a broadcast's slice loop from the
+# buffers of its operator applications (Operators.largest_application_bytes, since only one
+# application's buffers are live at a time): the :medium level when they fit, else :max,
+# else one thread per slice with private buffers (see DataLayouts.foreach_slice). Kernels use
+# no static shared memory, and slabs that fit in a warp cache arguments in registers, which
+# need no shared memory.
+@testset "shared memory of operator applications" begin
+    function check(bc, bc_cpu, subscope)
         dest = Base.materialize(bc)
-        predicted = predicted_shared_bytes(dest, bc)
-        CUDA_EXT.RECORD_KERNELS[] = true
-        Base.Broadcast.materialize!(dest, bc)
-        CUDA_EXT.RECORD_KERNELS[] = false
-        kernel = only(splice!(CUDA_EXT.RECORDED_KERNELS, 1:1))
-        return (predicted, Int(CUDA.memory(kernel).shared))
+        kernel = last(TU.recorded_kernels(() -> Base.Broadcast.materialize!(dest, bc)))
+        @test Int(CUDA.memory(kernel).shared) == 0
+        @test TU.slice_subscope_type(kernel) == subscope
+        # Some of these operators act on fields that only vary vertically, which gives
+        # values near round-off, so the comparison needs an absolute tolerance too.
+        @test isapprox(
+            Array(parent(dest)),
+            parent(Base.materialize(bc_cpu));
+            nans = true,
+            atol = 1e-12,
+            rtol = sqrt(eps(FT)), # passing atol would otherwise set rtol to 0
+        )
     end
     bc(f, args...) = Base.Broadcast.broadcasted(f, args...)
+    # The subscope of a broadcast whose operator applications need `bytes` of shared memory
+    # on each slab of N threads: a sub-block at the first level that holds them (see the
+    # CUDA extension's slice_subscope_at_level), whose bytes per thread the device sets, or
+    # one thread per slab beyond the :max level.
+    function subscope_for(bytes, N = 64)
+        for name in DataLayouts.SHMEM_LEVELS
+            B = CUDA_EXT.shmem_level_bytes(Val(name), Val(N))
+            bytes <= N * B && return CUDA_EXT.ThisSubBlock{N, B}
+        end
+        return DataLayouts.ThisThread
+    end
 
-    # Buffer sizes are multiples of 32 bytes, so their alignment adds no padding.
-    space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 63, helem = 2, Nq = 8)
-    x = sin.(Fields.coordinate_field(space).z)
-    u₁₂ = map(_ -> Geometry.Covariant12Vector(FT(1), FT(2)), x)
-    u₁₂₃ = map(_ -> Geometry.Covariant123Vector(FT(1), FT(2), FT(3)), x)
-    uᶜ₁₂ = map(_ -> Geometry.Contravariant12Vector(FT(1), FT(2)), x)
+    cpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    (space, space_cpu) = map((nothing, cpu_context)) do context
+        kwargs = isnothing(context) ? (;) : (; context)
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 63, helem = 2, Nq = 8, kwargs...)
+    end
+    fields(space) =
+        let x = sin.(Fields.coordinate_field(space).z)
+            (;
+                x,
+                u₁₂ = map(_ -> Geometry.Covariant12Vector(FT(1), FT(2)), x),
+                u₁₂₃ = map(_ -> Geometry.Covariant123Vector(FT(1), FT(2), FT(3)), x),
+                uᶜ₁₂ = map(_ -> Geometry.Contravariant12Vector(FT(1), FT(2)), x),
+            )
+        end
     ᶜinterp = Operators.InterpolateF2C()
     ᶠinterp = Operators.InterpolateC2F(;
         bottom = Operators.Extrapolate(),
@@ -266,22 +243,40 @@ end
     ᶜdiv = Operators.DivergenceF2C()
     ᶠgrad = Operators.GradientC2F()
     lumped = Operators.LumpedRestriction(Quadratures.GLL{4}())
-    space₄ = Spaces.SpectralElementSpace2D(grid_topology, Quadratures.GLL{4}())
-    space₈ = Spaces.SpectralElementSpace2D(grid_topology, Quadratures.GLL{8}())
-    (x₄, x₈) = map(s -> sin.(Fields.coordinate_field(s).x), (space₄, space₈))
-    for (expression, bytes) in (
-        (bc(ᶜinterp, bc(ᶠinterp, x)), 512), # one column of faces
-        (bc(*, bc(ᶜdiv, bc(ᶠgrad, x)), bc(ᶜinterp, bc(ᶠwinterp, x, x))), 1024),
-        (bc(grad, x), 1024), # one slab per dimension
-        (bc(wdiv, bc(grad, x)), 2048),
-        (bc(curl, u₁₂), 1024),
-        (bc(wcurl, u₁₂₃), 2048), # two components per dimension
-        (bc(Operators.SplitDivergence(), uᶜ₁₂, bc(*, 2, x)), 1536),
-        (bc(lumped, x), 640), # one fine and one coarse slab
-        (bc(Operators.Interpolate(space₈), bc(*, 2, x₄)), 640),
-        (bc(Operators.Restrict(space₄), bc(*, 2, x₈)), 4096), # 8 slabs per block
+    expressions(fs, topology) =
+        let (; x, u₁₂, u₁₂₃, uᶜ₁₂) = fs
+            space₄ = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{4}())
+            space₈ = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{8}())
+            (x₄, x₈) = map(s -> sin.(Fields.coordinate_field(s).x), (space₄, space₈))
+            # Each expression with the bytes of shared memory that its operator
+            # applications need on a slab, of the 64 points of its destination's slabs, or
+            # the 16 points of space₄ for Restrict. Finite difference operators need none
+            # (they recompute what does not fit), and a buffer of a slab of Float64s is
+            # 512 bytes.
+            (
+                bc(ᶜinterp, bc(ᶠinterp, x)) => subscope_for(0),
+                bc(*, bc(ᶜdiv, bc(ᶠgrad, x)), bc(ᶜinterp, bc(ᶠwinterp, x, x))) =>
+                    subscope_for(0),
+                bc(grad, x) => subscope_for(1024), # the argument, cached per dimension
+                bc(wdiv, bc(grad, x)) => subscope_for(1024),
+                bc(curl, u₁₂) => subscope_for(512),
+                bc(wcurl, u₁₂₃) => subscope_for(1024),
+                # a cached argument and a per-dimension intermediate at once
+                bc(Operators.SplitDivergence(), uᶜ₁₂, bc(*, 2, x)) => subscope_for(1024),
+                bc(lumped, x) => subscope_for(640), # a fine and a coarse slab at once
+                # an argument and a partial result at once
+                bc(Operators.Interpolate(space₈), bc(*, 2, x₄)) => subscope_for(640),
+                bc(Operators.Restrict(space₄), bc(*, 2, x₈)) => subscope_for(512, 16),
+                # a register-resident argument's 64 Covariant12Vectors, republished through
+                # a buffer, and the partial result of the same size
+                bc(Operators.Restrict(space₄), bc(grad, x₈)) => subscope_for(2048, 16),
+            )
+        end
+    for ((expression, subscope), (expression_cpu, _)) in zip(
+        expressions(fields(space), grid_topology),
+        expressions(fields(space_cpu), grid_topology_cpu),
     )
-        @test shared_bytes(expression) == (bytes, bytes)
+        check(expression, expression_cpu, subscope)
     end
 
     deep(x) = @. wdiv(grad(wdiv(grad(wdiv(grad(wdiv(grad(wdiv(grad(x)))))))))) # 10
@@ -305,17 +300,28 @@ end
     @test !in_registers(wide_f, 64)
     @test Array(parent(deep(wide_f))) ≈ parent(deep(wide_f_cpu))
 
-    # An expression whose buffers need more than half of the shared memory of a block
-    # applies some of its operators separately.
-    lazy_deep(x) = foldl((y, _) -> bc(wdiv, bc(grad, y)), 1:3; init = x) # 6 operators
-    (t₈, t₈_cpu) = map((grid_topology, grid_topology_cpu)) do topology
+    # Gradient of n values per point caches n values per point per dimension: 3 KB for 3
+    # values on an 8x8 slab and 6 KB for 6 values (the :medium and :max levels on an A100),
+    # however deep the expression, since one application's buffers are live at a time.
+    lazy_deep(x, n) = foldl((y, _) -> bc(wdiv, bc(grad, y)), 1:n; init = x)
+    tuple_fields(::Val{m}) where {m} = map((grid_topology, grid_topology_cpu)) do topology
         space₈ = Spaces.SpectralElementSpace2D(topology, Quadratures.GLL{8}())
-        map(x -> ntuple(n -> n * x, 6), sin.(Fields.coordinate_field(space₈).x))
+        map(x -> ntuple(n -> n * x, Val(m)), sin.(Fields.coordinate_field(space₈).x))
     end
-    deep_t₈ = Base.Broadcast.instantiate(lazy_deep(t₈))
-    @test 2 * predicted_shared_bytes(t₈, deep_t₈) > CUDA_EXT.MAX_SHMEM_PER_BLOCK
-    @test Array(parent(Base.materialize(deep_t₈))) ≈
-          parent(Base.materialize(lazy_deep(t₈_cpu)))
+    (t₃, t₃_cpu) = tuple_fields(Val(3))
+    check(
+        Base.Broadcast.instantiate(lazy_deep(t₃, 1)),
+        lazy_deep(t₃_cpu, 1),
+        subscope_for(3072),
+    )
+    (t₆, t₆_cpu) = tuple_fields(Val(6))
+    for depth in (1, 3)
+        check(
+            Base.Broadcast.instantiate(lazy_deep(t₆, depth)),
+            lazy_deep(t₆_cpu, depth),
+            subscope_for(6144),
+        )
+    end
 end
 
 # A buffered quadrature-weighted argument can alias a same-size per-dimension
@@ -340,7 +346,7 @@ end
 
 # A block holding only part of a sub-block never visits some of a slab's
 # points, which only bites once a slab needs more than one warp; see the whole
-# subscopes invariant in DataLayouts.subscope_launch_threads.
+# subscopes invariant in DataLayouts.subscope_indices.
 @testset "slabs that need more than one warp" begin
     wide_mesh = Meshes.RectilinearMesh(domain, 3, 3)
     wide_coords(device, Nq_wide) = Fields.coordinate_field(
