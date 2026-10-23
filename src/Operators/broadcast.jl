@@ -221,7 +221,47 @@ operator_arg(arg) = apply_operators(arg)
 # Like apply_operators, but copies the result into dest (styles can write it directly).
 apply_operators!(dest, bc) = copyto_slice!(dest, apply_operators(bc))
 # Slice loops inline the function of every slice, so the barrier has to be at this call.
-noinline_apply_operators!(dest, bc) = @noinline apply_operators!(dest, bc)
+# Arguments of a call that is not inlined are copied onto the stack of every GPU thread,
+# and most of their bytes are copies of the grid (one per field and operator node), so
+# the grid crosses the barrier once and every copy of it is replaced by a placeholder.
+@inline function noinline_apply_operators!(dest, bc)
+    grid = barrier_grid(axes(dest))
+    isnothing(grid) && return @noinline apply_operators!(dest, bc)
+    compact_dest = Grids.toggle_placeholder_grid(dest, grid)
+    compact_bc = Grids.toggle_placeholder_grid(bc, grid)
+    apply_compact_operators!(grid, compact_dest, compact_bc)
+    return dest
+end
+# Returns nothing, since a returned destination would be copied back through the stack.
+@noinline function apply_compact_operators!(grid, compact_dest, compact_bc)
+    apply_operators!(
+        Grids.toggle_placeholder_grid(compact_dest, grid),
+        Grids.toggle_placeholder_grid(compact_bc, grid),
+    )
+    return nothing
+end
+# Grid of a destination space whose copies can be replaced by placeholders, if any.
+barrier_grid(_) = nothing
+barrier_grid(
+    space::Union{
+        Spaces.AbstractFiniteDifferenceSpace,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
+) = Spaces.grid(space)
+
+# Number of statements of a slice loop body whose inlined buffers fit in their scope together.
+# A statement that is not inlined copies its arguments onto the stack of every GPU thread,
+# which costs far more than its buffers when they are small, so a statement is only compiled
+# separately when its buffers take more than 1/INLINED_STATEMENTS of the half of the scope's
+# buffer limit that fits_inlined_buffers leaves for inlined buffers (2 KB of the 48 KB of a
+# GPU block). Smaller buffers can then only crowd out the buffers of separately compiled
+# statements in bodies with more than INLINED_STATEMENTS statements, and they can exceed
+# the limit in bodies with more than 2 * INLINED_STATEMENTS statements. A smaller threshold
+# would compile the statements of fused bodies in columns of more than 64 faces separately
+# (e.g., with 1 KB, the bodies of perf/fused_column_fd.jl are up to 18x slower).
+const INLINED_STATEMENTS = 12
+inlines_statement(bc) =
+    fits_inlined_buffers(bc, bc -> INLINED_STATEMENTS * inlined_buffer_bytes(bc))
 
 # The inliner leaves large statements out of line, so a statement of a slice loop body
 # freezes the register temporaries that it reads, and it is inlined if it writes to one.
@@ -253,9 +293,10 @@ function copyto_by_slices!(dest, bc)
     else
         # Every statement of a slice loop body is compiled into the same function, so
         # their inlined buffers would add up; a statement in a separately compiled function
-        # shares memory with the equally sized buffers of other statements.
+        # shares memory with the equally sized buffers of other statements. Statements with
+        # small buffers are still inlined (see inlines_statement).
         shares_buffers =
-            !has_private_buffers(bc) && !iszero(inlined_buffer_bytes(bc)) &&
+            !has_private_buffers(bc) && !inlines_statement(bc) &&
             can_compile_separately(dest, bc)
         DataLayouts.scoped_slice_loop(
             DataLayouts.slice_subscope(scope, op, dest, bc),

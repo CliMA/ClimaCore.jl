@@ -7,6 +7,9 @@ without hitting a parameter memory limit, since the `Field`s in a broadcast
 expression all contain pointers to the same grid data as the broadcast's
 destination. Once inside a GPU kernel, every `PlaceholderGrid` is replaced by
 its original grid, with redundant pointers stored in each thread's registers.
+Statements of fused slice loops that are compiled separately also pass their
+arguments with placeholders, since every GPU thread copies the arguments of a
+call that is not inlined onto its stack.
 """
 struct PlaceholderGrid <: AbstractGrid end
 
@@ -51,8 +54,15 @@ Adapt.adapt_storage((; grid)::PlaceholderGridAdaptor, ::PlaceholderGrid) = grid
 
 Replace every copy of `grid` in `arg` with a [`PlaceholderGrid`](@ref), or turn
 every placeholder back into `grid`. Level and column views are unwrapped, so
-their full grids get toggled. This is only applied to arguments of GPU kernels
-launched from a host device, and it is reversed at the start of each kernel.
+their full grids get toggled. This is applied to arguments of GPU kernels
+launched from a host device and reversed at the start of each kernel, and to
+arguments of separately compiled statements in GPU slice loops (see
+`Operators.noinline_apply_operators!`) and reversed in the callee.
+
+Grids are matched by type rather than by value, so every grid in `arg` with the
+same type as `grid` becomes a placeholder, and toggling back turns it into
+`grid`. This assumes that every such grid in `arg` is `grid` itself, as for the
+fields and operators of a broadcast over a single space or column.
 """
 function toggle_placeholder_grid(arg, grid::AbstractGrid)
     full_grid = grid isa Union{LevelGrid, ColumnGrid} ? grid.full_grid : grid
