@@ -100,17 +100,27 @@ uses_extrapolate(op) =
 
 ################################################################################
 
-struct FDOperatorMatrix{O <: Operators.FiniteDifferenceOperator} <:
-       Operators.FiniteDifferenceOperator
+# The rows of an FDOperatorMatrix in the boundary window of a missing boundary condition:
+# `NaN`s when the matrix comes from rewriting `@. op(arg)` (like the pointwise stencils),
+# and the interior rows without their ghost entries when it comes from `operator_matrix`
+# (see `matrix_boundary_row`).
+struct NaNBoundaryRows end
+struct InteriorBoundaryRows end
+
+struct FDOperatorMatrix{
+    O <: Operators.FiniteDifferenceOperator,
+    R <: Union{NaNBoundaryRows, InteriorBoundaryRows},
+} <: Operators.FiniteDifferenceOperator
     op::O
+    missing_bc_rows::R
 end
-function FDOperatorMatrix(op::O) where {O}
+function FDOperatorMatrix(op::O, missing_bc_rows = NaNBoundaryRows()) where {O}
     has_affine_bc(op) &&
         @warn "$(O.name.name) applies an affine transformation because of the \
                boundary conditions it has been assigned; in order to be \
                represented by an operator matrix, it must be converted into a \
                linear operator, so its boundary conditions will be zeroed out"
-    return FDOperatorMatrix{O}(op)
+    return FDOperatorMatrix{O, typeof(missing_bc_rows)}(op, missing_bc_rows)
 end
 
 struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
@@ -118,13 +128,14 @@ struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
 end
 
 Adapt.adapt_structure(to, op::FDOperatorMatrix) =
-    FDOperatorMatrix(Adapt.adapt_structure(to, op.op))
+    FDOperatorMatrix(Adapt.adapt_structure(to, op.op), op.missing_bc_rows)
 
 # Since the operator matrix of a one-argument operator does not have any
-# arguments, we need to use a lazy operator to add an argument.
+# arguments, we need to use a lazy operator to add an argument. Only
+# `operator_matrix` makes lazy operator matrices.
 replace_lazy_operator(space, lazy_op::LazyOneArgFDOperatorMatrix) =
     Base.Broadcast.broadcasted(
-        FDOperatorMatrix(lazy_op.op),
+        FDOperatorMatrix(lazy_op.op, InteriorBoundaryRows()),
         Fields.local_geometry_field(operator_input_space(lazy_op.op, space)),
     )
 
@@ -387,6 +398,25 @@ In general, when `op` has nonzero boundary conditions that make it apply an
 affine transformation, `operator_matrix(op)` prints a warning and zeros out the
 boundary conditions before computing the operator matrix.
 
+When `op` has no boundary condition at a boundary where it needs one (e.g.
+`GradientC2F()`), `@. op(arg)` gives `NaN` there, but `operator_matrix(op)`
+extends the interior rows of the matrix to the boundary, dropping the entries
+that lie outside of the matrix. For example, the matrix of `GradientC2F()` is
+
+```math
+\\textrm{grad}(arg) = \\begin{bmatrix}
+ \\textbf{e}^3 &              0 &              0 & \\cdots &              0 &             0 \\\\
+-\\textbf{e}^3 &  \\textbf{e}^3 &              0 & \\cdots &              0 &             0 \\\\
+       \\vdots &        \\vdots &        \\vdots & \\ddots &        \\vdots &       \\vdots \\\\
+             0 &              0 &              0 & \\cdots & -\\textbf{e}^3 & \\textbf{e}^3 \\\\
+             0 &              0 &              0 & \\cdots &              0 & -\\textbf{e}^3
+\\end{bmatrix} * arg
+```
+
+The only exception is `WeightedInterpolateC2F`, whose interior rows at the
+boundary depend on the weight outside of the domain; its boundary rows are
+filled with `NaN`s.
+
 In addition to affine transformations, there are also some operators that apply
 nonlinear transformations to their arguments; that is, transformations which
 cannot be accurately approximated without using more terms of the form
@@ -401,9 +431,9 @@ cannot be accurately approximated without using more terms of the form
 When `op` is such an operator, `operator_matrix(op)` throws an error.
 """
 operator_matrix(op::OneArgFDOperator) = LazyOneArgFDOperatorMatrix(op)
-operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op)
+operator_matrix(op::TwoArgFDOperator) = FDOperatorMatrix(op, InteriorBoundaryRows())
 operator_matrix(op::Operators.AdvectionOperator) =
-    Operators.has_linear_stencil(op) ? FDOperatorMatrix(op) :
+    Operators.has_linear_stencil(op) ? FDOperatorMatrix(op, InteriorBoundaryRows()) :
     error(
         "$(typeof(op).name.name) applies a nonlinear transformation to its \
          argument (in its interior stencil or through a boundary condition), \
@@ -480,8 +510,16 @@ Base.@propagate_inbounds function Operators.stencil_value(
             fold_ghosts(row, op, right_bc, right_ghosts, nin),
         ) : fold_ghosts(left_row, op, right_bc, right_ghosts, nin)
     FT = Spaces.undertype(space)
-    row = select_row(in_left, boundary_row(row, op, left_bc, FT, left_ghosts), row)
-    return select_row(in_right, boundary_row(row, op, right_bc, FT, right_ghosts), row)
+    row = select_row(
+        in_left,
+        matrix_boundary_row(row, op_matrix, left_bc, FT, left_ghosts),
+        row,
+    )
+    return select_row(
+        in_right,
+        matrix_boundary_row(row, op_matrix, right_bc, FT, right_ghosts),
+        row,
+    )
 end
 
 @inline select_row(condition, row1, row2) =
@@ -537,7 +575,10 @@ end
     interior_op = Operators.DivergenceF2C()
     interior_matrix = Base.Broadcast.Broadcasted(
         matrix1.style,
-        FDOperatorMatrix{typeof(interior_op)}(interior_op),
+        FDOperatorMatrix{typeof(interior_op), NaNBoundaryRows}(
+            interior_op,
+            NaNBoundaryRows(),
+        ),
         matrix1.args,
         matrix1.axes,
     )
@@ -616,6 +657,28 @@ const InputFixingFDOperator = Union{Operators.GradientF2C, Operators.DivergenceF
     clip_row(row, nothing, ghosts[1] + 1, max(ghosts[2], 0) + 1, ghosts[3])
 @inline boundary_row(row, op::Operators.SetValueC2FOperator, ::Operators.SetValue, _, g) =
     (op isa Operators.UpwindBiasedProductC2F ? 1 : 2) * clip_row(row, nothing, g...)
+
+# A matrix from `operator_matrix` instead extends its interior rows to the boundary window
+# of a missing condition, zeroing their ghost entries, so that it can be composed with other
+# operator matrices (e.g. `div_matrix() * grad_matrix()` in a Jacobian) without turning the
+# zeros of their boundary rows into `NaN`s. WeightedInterpolateC2F keeps its `NaN`s, since
+# its interior row at a boundary face depends on the weight beyond the face.
+@inline matrix_boundary_row(row, op_matrix, bc, ::Type{FT}, ghosts) where {FT} =
+    boundary_row(row, op_matrix.op, bc, FT, ghosts)
+@inline matrix_boundary_row(
+    row,
+    ::FDOperatorMatrix{<:Any, InteriorBoundaryRows},
+    ::Operators.NullBoundaryCondition,
+    ::Type{FT},
+    ghosts,
+) where {FT} = clip_row(row, nothing, ghosts...)
+@inline matrix_boundary_row(
+    row,
+    op_matrix::FDOperatorMatrix{<:Operators.WeightedInterpolateC2F, InteriorBoundaryRows},
+    bc::Operators.NullBoundaryCondition,
+    ::Type{FT},
+    ghosts,
+) where {FT} = boundary_row(row, op_matrix.op, bc, FT, ghosts)
 
 ################################################################################
 
