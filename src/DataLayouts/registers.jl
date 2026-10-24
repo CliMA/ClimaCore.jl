@@ -227,3 +227,47 @@ end
     # The register array has the layout's canonical size; skip the parent check.
     return @inbounds rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
 end
+
+# Single-point view of level v of a column layout. When the column is stored in
+# per-thread registers across a multi-thread subscope, only thread
+# rem(v - 1, N) + 1 holds level v in its RegisterArray; broadcasting that
+# point's value across the scope into a RegisterPointView-backed DataF lets
+# every thread read the level while keeping the layout's subscope across
+# rebuild and broadcastable calls.
+@propagate_inbounds column_level_view(arg::IndexableData, v) =
+    view(arg, CartesianIndex(v, 1, 1, 1))
+@propagate_inbounds function column_level_view(data::DataLayout, v)
+    stored_in_scope_registers(data) || return view(data, CartesianIndex(v, 1, 1, 1))
+    @boundscheck checkbounds(data, CartesianIndex(v, 1, 1, 1))
+    return broadcast_register_level(DataScope(data), data, v)
+end
+
+@inline broadcast_point_data(
+    ::Type{T},
+    scope,
+    sarray::StaticArrays.SVector{Nf, B},
+) where {T, Nf, B} = DataF{T, typeof(scope)}(
+    RegisterPointView(
+        RegisterArray{(Nf,), 1, 1}(sarray),
+        Val(Nf),
+        CartesianIndex(),
+        Val(1),
+    ),
+)
+
+@inline function broadcast_register_level(scope, data::DataLayout, v)
+    T = eltype(data)
+    B = eltype(parent_type(data))
+    Nf = num_basetypes(B, T)
+    buf = scoped_static_array(scope, B, (Nf,))
+    if owns_column_level(scope, v)
+        val = @inbounds data[CartesianIndex(v, 1, 1, 1)]
+        entries = bitcast_struct(NTuple{Nf, B}, val)
+        @inbounds for f in 1:Nf
+            buf[f] = entries[f]
+        end
+    end
+    synchronize(scope)
+    sarray = StaticArrays.SVector{Nf, B}(ntuple(f -> @inbounds(buf[f]), Val(Nf)))
+    return broadcast_point_data(T, scope, sarray)
+end

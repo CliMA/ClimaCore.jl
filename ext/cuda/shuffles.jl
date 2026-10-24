@@ -126,3 +126,30 @@ end
     array = ShuffledArray(parent(data), DataLayouts.DataScope(data))
     return Fields.Field(DataLayouts.rebuild(data, array, eltype(data)), axes(field))
 end
+
+# Sub-warps broadcast a single level of a register-resident column with warp
+# shuffles.
+@inline function DataLayouts.broadcast_register_level(
+    scope::ThisSubBlock{N},
+    data::DataLayouts.DataLayout,
+    v,
+) where {N}
+    shuffles_in_warp(scope) ||
+        return Base.@invoke DataLayouts.broadcast_register_level(
+            scope::Any,
+            data::DataLayouts.DataLayout,
+            v,
+        )
+    T = eltype(data)
+    B = eltype(DataLayouts.parent_type(data))
+    Nf = DataLayouts.num_basetypes(B, T)
+    owner = rem(v - 1, N) + 1
+    own_val = @inbounds data[CartesianIndex(v, 1, 1, 1)]
+    val = shuffle_point_value(scope, own_val, owner)
+    entries = DataLayouts.bitcast_struct(NTuple{Nf, B}, val)
+    return DataLayouts.broadcast_point_data(
+        T,
+        scope,
+        StaticArrays.SVector{Nf, B}(entries),
+    )
+end

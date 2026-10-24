@@ -70,7 +70,11 @@ vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
 # A column grid's indices are valid for its full grid, so kernels need not repeat the check.
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) =
-    @inbounds column(local_geometry_data(colgrid.full_grid, staggering), colgrid.indices...)
+    DataLayouts.slice_arg(
+        column,
+        local_geometry_data(colgrid.full_grid, staggering),
+        colgrid.indices...,
+    )
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
 
 issubgrid(subgrid::ColumnGrid, grid::ColumnGrid) = subgrid === grid

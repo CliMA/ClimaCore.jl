@@ -82,6 +82,11 @@ DataScope(scope1::DataScope, scope2::DataScope) =
     is_subscope(scope2, scope1) ? scope2 :
     throw(NonOverlappingScopesError(scope1, scope2))
 
+DataScope(::Union{Tuple{}, NamedTuple{(), Tuple{}}}) =
+    throw(UnknownScopeError{Tuple{}}())
+@inline DataScope(args::Union{Tuple, NamedTuple}) =
+    unrolled_mapreduce(DataScope, DataScope, values(args))
+
 @inline DataScope(arg1, arg2, args...) =
     unrolled_mapreduce(DataScope, DataScope, (arg1, arg2, args...))
 

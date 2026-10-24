@@ -996,10 +996,11 @@ removes it while leaving the operator's node-class means unchanged.
 
 # Buffer usage
 
-Two buffers are live in sequence, never at once: the ``WJ``-weighted argument
-(the size of one slab of `f`) while the coarse values are accumulated, and the
-coarse values ``\\theta`` (the size of one coarse slab) while they are
-interpolated back; see the buffer reuse invariant in [`apply_operator`](@ref).
+Two buffers are live at once during the accumulation of coarse values: the
+``WJ``-weighted argument (the size of one slab of `f`) at offset `0`, and the
+coarse values ``\\theta`` (the size of one coarse slab) placed after it at
+`shared_buffer_bytes(arg′)` for the coarse reduction and interpolation back; see
+the buffer reuse invariant in [`apply_operator`](@ref).
 """
 struct LumpedRestriction{Q <: Quadratures.QuadratureStyle} <: SpectralElementOperator
     quadrature_style::Q
@@ -1014,9 +1015,8 @@ return_eltype(::LumpedRestriction, arg) = eltype(arg)
 # only traps on GPUs and never surfaces as an ArgumentError. The operator is the
 # identity for the space's own quadrature, a no-op on spaces without a
 # horizontal quadrature (columns), and otherwise needs fewer coarse points than
-# the space has: a different quadrature with the same number of points would
-# give the coarse buffer the byte size of the weighted argument's buffer (see
-# the buffer reuse invariant), so it is rejected rather than handled.
+# the space has, since a basis change without degree-of-freedom reduction does
+# not smooth.
 function return_space(op::LumpedRestriction, arg)
     check_coarse_quadrature(op, Fields.shared_space(arg))
     return Fields.shared_space(arg)

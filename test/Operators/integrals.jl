@@ -290,6 +290,66 @@ function test_column_reduce_and_accumulate_column_fields!(center_space)
     end
 end
 
+function test_fused_foreach_column_integrals!(center_space)
+    FT = Spaces.undertype(center_space)
+    face_space = Spaces.face_space(center_space)
+    ᶜa = Fields.coordinate_field(center_space).z .+ 1
+    ᶠc = cos.(Fields.coordinate_field(face_space).z)
+    sfc = Fields.level(ᶜa, 1) .* FT(2)
+
+    # 2D and 0D Field init values in standalone column_reduce!/accumulate!.
+    red_ref = similar(sfc)
+    red_out = similar(sfc)
+    column_reduce!(+, red_ref, ᶜa)
+    @. red_ref += sfc
+    column_reduce!(+, red_out, ᶜa; init = sfc)
+    @test parent(red_out) ≈ parent(red_ref) rtol = 100 * eps(FT)
+
+    acc_ref = similar(ᶜa)
+    acc_out = similar(ᶜa)
+    column_accumulate!(+, acc_ref, ᶜa; reverse = true)
+    @. acc_ref += sfc
+    column_accumulate!(+, acc_out, ᶜa; init = sfc, reverse = true)
+    @test parent(acc_out) ≈ parent(acc_ref) rtol = 100 * eps(FT)
+
+    ∫_ref = similar(sfc)
+    ᶠ∫_ref = similar(ᶠc)
+    ᶠ∫_fn_ref = similar(ᶠc)
+    fn(ϕ, z) = z^2
+    column_integral_definite!(∫_ref, ᶜa)
+    column_integral_indefinite!(ᶠ∫_ref, ᶜa)
+    column_integral_indefinite!(fn, ᶠ∫_fn_ref)
+
+    for shmem in (Val(:auto), Val(:none))
+        ∫_out = similar(sfc)
+        ᶠ∫_out = similar(ᶠc)
+        ᶠ∫_fn_out = similar(ᶠc)
+        fill!(red_out, zero(FT))
+        fill!(acc_out, zero(FT))
+        lvl_out = similar(sfc)
+        ClimaCore.DataLayouts.foreach_column(
+            ᶜa, sfc, (∫_out, ᶠ∫_out, ᶠ∫_fn_out, red_out, acc_out, lvl_out); shmem,
+        ) do ᶜa_col, sfc_col, (∫_col, ᶠ∫_col, ᶠ∫_fn_col, red_col, acc_col, lvl_col)
+            reg_col = similar(ᶜa_col)
+            @. reg_col = ᶜa_col
+            reg_face = similar(ᶜa_col, axes(ᶠ∫_col))
+            column_integral_definite!(∫_col, reg_col)
+            column_integral_indefinite!(reg_face, reg_col)
+            @. ᶠ∫_col = reg_face
+            column_integral_indefinite!(fn, ᶠ∫_fn_col)
+            column_reduce!(+, red_col, reg_col; init = sfc_col)
+            column_accumulate!(+, acc_col, reg_col; init = sfc_col, reverse = true)
+            lvl_col .= Fields.level(reg_col, 2)
+        end
+        @test parent(∫_out) ≈ parent(∫_ref) rtol = 100 * eps(FT)
+        @test parent(ᶠ∫_out) ≈ parent(ᶠ∫_ref) rtol = 100 * eps(FT)
+        @test parent(ᶠ∫_fn_out) ≈ parent(ᶠ∫_fn_ref) rtol = 100 * eps(FT)
+        @test parent(red_out) ≈ parent(red_ref) rtol = 100 * eps(FT)
+        @test parent(acc_out) ≈ parent(acc_ref) rtol = 100 * eps(FT)
+        @test parent(lvl_out) ≈ parent(Fields.level(ᶜa, 2)) rtol = 100 * eps(FT)
+    end
+end
+
 function test_fubinis_theorem(space)
     FT = Spaces.undertype(space)
     center_field = zeros(space)
@@ -319,6 +379,7 @@ end
             test_column_integral_indefinite_fn!(space)
             test_column_reduce_and_accumulate!(space)
             test_column_reduce_and_accumulate_lazy!(space)
+            test_fused_foreach_column_integrals!(space)
         end
         test_column_reduce_and_accumulate_column_fields!(
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context, topography = true),

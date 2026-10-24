@@ -167,6 +167,15 @@ largest_application_bytes(bc::OperatorBroadcasted) = max(
     unrolled_mapreduce(largest_application_bytes, max, bc.args; init = 0),
 )
 
+# Whether an expression or any operator in it allocates a shared buffer, as
+# opposed to reading from global memory or exchanging values in warp registers.
+uses_shared_buffers(arg) = false
+uses_shared_buffers(bc::NonPointwiseBroadcasted) =
+    unrolled_any(uses_shared_buffers, bc.args)
+uses_shared_buffers(bc::OperatorBroadcasted) =
+    buffer_bytes(bc) > 0 || unrolled_any(uses_shared_buffers, bc.args)
+@drop_recursion_limits uses_shared_buffers
+
 # Bytes of intermediates that an operator uses one dimension at a time, which share one
 # buffer (see the buffer reuse invariant in apply_operator).
 dimension_bytes(bytes_per_dimension) = max(0, bytes_per_dimension...)
@@ -230,8 +239,11 @@ operator_arg(arg, reads = Val(false)) = apply_operators(arg)
 apply_operators!(dest, bc) = copyto_slice!(dest, apply_operators(bc))
 # The buffers of a broadcast are those of its operators, which decides the level of shared
 # memory of a broadcast's slice loop (see DataLayouts.foreach_slice).
+DataLayouts.has_required_shared_memory(::typeof(apply_operators!)) = true
 DataLayouts.required_shared_memory(::typeof(apply_operators!), dest, bc) =
     largest_application_bytes(bc)
+DataLayouts.uses_shared_memory(::typeof(apply_operators!), dest, bc) =
+    uses_shared_buffers(bc)
 
 # Whether an argument is in registers once its operators are applied (see apply_operators),
 # so that an operator reading it at other threads' points copies it into a buffer.

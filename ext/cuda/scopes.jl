@@ -359,12 +359,15 @@ end
 # Unmasked point loops on device scopes iterate over eachindex instead of the
 # Cartesian each_slice_index. When every argument supports linear indexing, this
 # avoids the integer divisions required for linear-to-Cartesian conversion.
+@inline flatten_slice_args(arg) = (arg,)
+@inline flatten_slice_args(args::Union{Tuple, NamedTuple}) =
+    unrolled_flatmap(flatten_slice_args, values(args))
 @inline DataLayouts.each_maskable_slice_index(
     ::Union{ThisKernel, ThisCooperativeGroup},
     ::NoMask,
     ::typeof(view),
     args...,
-) = eachindex(args...)
+) = eachindex(unrolled_flatmap(flatten_slice_args, args)...)
 
 # The aligned bytes of a layout in an array from scoped_static_array, computed from its type
 # alone (the parent array's type, its base type, and the inferred size), so that the Val folds.

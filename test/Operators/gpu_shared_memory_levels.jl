@@ -5,7 +5,7 @@ using Revise; include("test/Operators/gpu_shared_memory_levels.jl")
 using Test
 using ClimaComms, ClimaCore
 ClimaComms.@import_required_backends
-import ClimaCore: DataLayouts, Fields, Geometry, Operators
+import ClimaCore: DataLayouts, Fields, Geometry, Operators, Spaces
 import CUDA
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -294,5 +294,122 @@ error_message(f) =
             bc,
         )
         @test subscope === expected
+    end
+
+    # At :auto, broadcasts that allocate no shared buffers (spectral operators
+    # on 4x4 slabs or branch-free stencils on <= 32 levels) reserve
+    # NO_DYNAMIC_SHMEM so the full L1 data cache remains available.
+    (small_gpu, _) = map((GPU.z, CPU.z)) do z
+        s = TU.CenterExtrudedFiniteDifferenceSpace(
+            FT;
+            zelem = 15,
+            helem = 2,
+            Nq = 4,
+            context = ClimaComms.context(z),
+        )
+        Fields.coordinate_field(s).z
+    end
+    for bc in (
+        Base.Broadcast.instantiate(Base.Broadcast.broadcasted(grad, small_gpu)),
+        Base.Broadcast.instantiate(
+            Base.Broadcast.broadcasted(
+                ᶜinterp,
+                Base.Broadcast.broadcasted(ᶠinterp, small_gpu),
+            ),
+        ),
+    )
+        dest = similar(bc)
+        op = Operators.slice_operator(bc.style)
+        subscope = CUDA_EXT.slice_subscope_at_level(
+            DataLayouts.slice_subscope(CUDA_EXT.ThisKernel(), op, dest, bc),
+            Val(:auto),
+            op,
+            Operators.apply_operators!,
+            dest,
+            bc,
+        )
+        @test subscope === CUDA_EXT.ThisSubBlock{16, 0}()
+        @test CUDA_EXT.subblock_shmem(subscope) === CUDA_EXT.NO_DYNAMIC_SHMEM
+    end
+
+    # Compound StencilBroadcasted expressions read at neighboring levels, 2D
+    # boundary fields, column accumulations, and tridiagonal/pentadiagonal
+    # solves fuse into one foreach_column kernel at both :auto and :none.
+    sfc_gpu = Fields.level(GPU.x, 1)
+    sfc_cpu = Fields.level(CPU.x, 1)
+    A_tri_gpu = map(
+        z -> ClimaCore.MatrixFields.TridiagonalMatrixRow(FT(0.2), FT(2.0), FT(0.2)),
+        GPU.z,
+    )
+    A_tri_cpu = map(
+        z -> ClimaCore.MatrixFields.TridiagonalMatrixRow(FT(0.2), FT(2.0), FT(0.2)),
+        CPU.z,
+    )
+    A_penta_gpu = map(
+        z -> ClimaCore.MatrixFields.PentadiagonalMatrixRow(
+            FT(0.1),
+            FT(0.2),
+            FT(2.5),
+            FT(0.2),
+            FT(0.1),
+        ),
+        GPU.z,
+    )
+    A_penta_cpu = map(
+        z -> ClimaCore.MatrixFields.PentadiagonalMatrixRow(
+            FT(0.1),
+            FT(0.2),
+            FT(2.5),
+            FT(0.2),
+            FT(0.1),
+        ),
+        CPU.z,
+    )
+    function fused_column_body!(ins, outs)
+        (; x, y, sfc, A_tri, A_penta) = ins
+        (o_stencil, o_tri, o_penta, o_acc) = outs
+        ᶠinterp_op = Operators.InterpolateC2F(;
+            bottom = Operators.SetValue(sfc),
+            top = Operators.Extrapolate(),
+        )
+        reg = similar(x)
+        @. reg = ᶜinterp(ᶠinterp_op(x) + ᶠinterp(y))
+        lvl2 = Fields.level(reg, 2)
+        @. o_stencil = reg + lvl2
+        ClimaCore.MatrixFields.single_field_solve!(o_tri, A_tri, reg)
+        ClimaCore.MatrixFields.single_field_solve!(o_penta, A_penta, reg)
+        reg_face = similar(x, Spaces.face_space(axes(x)))
+        Operators.column_integral_indefinite!((ϕ, z) -> z^2, reg_face)
+        @. o_acc = o_tri + ᶜinterp(reg_face)
+        Operators.column_accumulate!(+, o_acc, o_acc; reverse = true)
+        return nothing
+    end
+    outs_cpu = ntuple(_ -> similar(CPU.o), Val(4))
+    DataLayouts.foreach_column(
+        fused_column_body!,
+        (; x = CPU.x, y = CPU.y, sfc = sfc_cpu, A_tri = A_tri_cpu, A_penta = A_penta_cpu),
+        outs_cpu,
+    )
+    for (name, expected_subscope) in
+        ((:auto, level(:medium)), (:none, DataLayouts.ThisThread()))
+        outs_gpu = ntuple(_ -> similar(GPU.o), Val(4))
+        subscope = slice_loop_subscope() do
+            DataLayouts.foreach_column(
+                fused_column_body!,
+                (;
+                    x = GPU.x,
+                    y = GPU.y,
+                    sfc = sfc_gpu,
+                    A_tri = A_tri_gpu,
+                    A_penta = A_penta_gpu,
+                ),
+                outs_gpu;
+                shmem = Val(name),
+            )
+        end
+        @test subscope === expected_subscope
+        for (og, oc) in zip(outs_gpu, outs_cpu)
+            @test Array(parent(og)) ≈ parent(oc)
+        end
     end
 end

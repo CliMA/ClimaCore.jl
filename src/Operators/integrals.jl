@@ -80,8 +80,73 @@ end
 
 ################################################################################
 
-# Column input with every operator evaluated by the one thread that processes the column.
-column_input(input) = apply_operators(DataLayouts.reassign(input, DataLayouts.ThisThread()))
+# Materialized column input whose levels are readable across the scope: on a
+# single-thread scope, one thread evaluates the column; on a multi-thread
+# sub-block (inside foreach_column on GPUs), threads evaluate operators
+# cooperatively and publish the column through a shared buffer when the input
+# is in registers, aliases output, or is a lazy expression that fits in the
+# sub-block's shared memory.
+function column_input(input, output = nothing)
+    scope = DataLayouts.DataScope(input)
+    N = DataLayouts.static_num_threads(scope)
+    (isnothing(N) || N == 1) &&
+        return apply_operators(DataLayouts.reassign(input, DataLayouts.ThisThread()))
+    applied = apply_operators(input)
+    aliases =
+        !isnothing(output) &&
+        aliases_field(applied, parent(Fields.field_values(output)))
+    if in_registers_when_applied(applied) ||
+       aliases ||
+       (applied isa Fields.LazyField && fits_buffers(applied, single_field_buffer_bytes))
+        buf = constant_field(
+            copyto!(
+                buffer_similar(destination_template(applied), eltype(applied)),
+                applied,
+            ),
+        )
+        DataLayouts.synchronize(scope)
+        return buf
+    end
+    DataLayouts.synchronize(scope)
+    return applied
+end
+
+aliases_field(arg, out_parent) = false
+aliases_field(field::Fields.Field, out_parent) =
+    !DataLayouts.stored_in_registers(Fields.field_values(field)) &&
+    parent(Fields.field_values(field)) === out_parent
+aliases_field(bc::Base.AbstractBroadcasted, out_parent) =
+    unrolled_any(arg -> aliases_field(arg, out_parent), bc.args)
+@drop_recursion_limits aliases_field
+
+# Scalar initial value from a number, 0D Field, or 0D Broadcasted, with 2D
+# horizontal initial-value Fields sliced to the active column in loops.
+@inline init_value(init) =
+    init isa Union{Fields.Field, Base.AbstractBroadcasted} ? @inbounds(init[]) : init
+@inline column_init(init, colidx::Fields.ColumnIndex) =
+    init isa MaybeLazyField && Spaces.has_horizontal(Fields.shared_space(init)) ?
+    init[colidx] : init
+@inline column_init(init, i, j, h) =
+    init isa MaybeLazyField && Spaces.has_horizontal(Fields.shared_space(init)) ?
+    column(init, i, j, h) : init
+
+# On a multi-thread subscope, each thread writes only the levels it owns in
+# registers (or global memory), and global-memory outputs are synchronized once
+# the scan completes so subsequent statements see every level.
+@inline owns_output_level(output, output_level) =
+    DataLayouts.owns_column_level(
+        DataLayouts.DataScope(output),
+        level_index(axes(output), output_level),
+    )
+@inline function sync_column_output(output)
+    scope = DataLayouts.DataScope(output)
+    N = DataLayouts.static_num_threads(scope)
+    !isnothing(N) &&
+        N > 1 &&
+        !DataLayouts.stored_in_registers(Fields.field_values(output)) &&
+        DataLayouts.synchronize(scope)
+    return nothing
+end
 
 # A column field (e.g., Spaces.column(field, i, j, h)) keeps the space of its own column in
 # every column of a loop over other fields, so an operator expression with one is
@@ -144,8 +209,21 @@ function column_reduce!(
     transform::T = identity,
     reverse::Bool = false,
 ) where {F, T}
-    device = ClimaComms.device(output)
     space = axes(input)
+    scope = DataLayouts.DataScope(output, input)
+    if !DataLayouts.needs_loop_setup(scope)
+        single_column_reduce!(
+            f,
+            transform,
+            DataLayouts.reassign(output, scope),
+            DataLayouts.reassign(input, scope),
+            init,
+            space,
+            reverse,
+        )
+        return nothing
+    end
+    device = ClimaComms.device(output)
     input′ = loop_input(input, space)
     column_reduce_device!(device, f, transform, output, input′, init, space, reverse)
 end
@@ -173,7 +251,7 @@ function column_reduce_device!(
                     transform,
                     output[colidx],
                     input[colidx],
-                    init,
+                    column_init(init, colidx),
                     space[colidx],
                     reverse,
                 )
@@ -191,7 +269,10 @@ function single_column_reduce!(
     space,
     reverse,
 ) where {F, T}
-    input = column_input(_input)
+    input = column_input(
+        DataLayouts.reassign(_input, DataLayouts.DataScope(_output, _input)),
+        _output,
+    )
     first_level = left_idx(space)
     last_level = right_idx(space)
     start_level, stop_level, direction =
@@ -200,7 +281,7 @@ function single_column_reduce!(
         reduced_value = input[level_index(space, start_level)]
         next_level = start_level + direction
     else
-        reduced_value = init
+        reduced_value = init_value(init)
         next_level = start_level
     end
     n_steps = direction * (stop_level - next_level) + 1
@@ -208,7 +289,16 @@ function single_column_reduce!(
         level = next_level + direction * (i - 1)
         reduced_value = f(reduced_value, input[level_index(space, level)])
     end
-    Fields.field_values(_output)[] = transform(reduced_value)
+    out_data = Fields.field_values(_output)
+    scope = DataLayouts.DataScope(out_data)
+    N = DataLayouts.static_num_threads(scope)
+    if DataLayouts.stored_in_registers(out_data) ||
+       isnothing(N) ||
+       N == 1 ||
+       isone(DataLayouts.thread_rank(scope))
+        @inbounds out_data[] = transform(reduced_value)
+    end
+    sync_column_output(_output)
     return nothing
 end
 
@@ -280,12 +370,25 @@ function column_accumulate!(
     transform::T = identity,
     reverse::Bool = false,
 ) where {F, T}
-    device = ClimaComms.device(output)
     space = axes(input)
     init == UnspecifiedInit() &&
         Spaces.staggering(space) == Spaces.CellCenter() &&
         Spaces.staggering(axes(output)) == Spaces.CellFace() &&
         error("init must be specified for center-to-face accumulation")
+    scope = DataLayouts.DataScope(output, input)
+    if !DataLayouts.needs_loop_setup(scope)
+        single_column_accumulate!(
+            f,
+            transform,
+            DataLayouts.reassign(output, scope),
+            DataLayouts.reassign(input, scope),
+            init,
+            space,
+            reverse,
+        )
+        return nothing
+    end
+    device = ClimaComms.device(output)
     input′ = loop_input(input, space)
     column_accumulate_device!(device, f, transform, output, input′, init, space, reverse)
 end
@@ -313,7 +416,7 @@ function column_accumulate_device!(
                     transform,
                     output[colidx],
                     input[colidx],
-                    init,
+                    column_init(init, colidx),
                     space[colidx],
                     reverse,
                 )
@@ -331,7 +434,10 @@ function single_column_accumulate!(
     space,
     reverse,
 ) where {F, T}
-    input = column_input(_input)
+    input = column_input(
+        DataLayouts.reassign(_input, DataLayouts.DataScope(output, _input)),
+        output,
+    )
     first_level = left_idx(space)
     last_level = right_idx(space)
     is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
@@ -348,18 +454,27 @@ function single_column_accumulate!(
         next_level = start_level + direction
         init_output_level = is_c2c_or_f2f ? start_level : nothing
     else
-        accumulated_value = is_f2c ? f(init, input[level_index(space, start_level)]) : init
+        init_val = init_value(init)
+        accumulated_value =
+            is_f2c ? f(init_val, input[level_index(space, start_level)]) : init_val
         next_level = is_f2c ? start_level + direction : start_level
         init_output_level = is_c2f ? start_level - stagger : nothing
     end
-    @inbounds if !isnothing(init_output_level)
-        Fields.level(output, init_output_level)[] = transform(accumulated_value)
+    @inbounds if !isnothing(init_output_level) &&
+                 owns_output_level(output, init_output_level)
+        output[level_index(axes(output), init_output_level)] =
+            transform(accumulated_value)
     end
     n_steps = direction * (stop_level - next_level) + 1
     @inbounds for i in 1:n_steps
         level = next_level + direction * (i - 1)
         accumulated_value = f(accumulated_value, input[level_index(space, level)])
         output_level = is_c2c_or_f2f ? level : (is_c2f ? level + stagger : level - stagger)
-        Fields.level(output, output_level)[] = transform(accumulated_value)
+        if owns_output_level(output, output_level)
+            output[level_index(axes(output), output_level)] =
+                transform(accumulated_value)
+        end
     end
+    sync_column_output(output)
+    return nothing
 end

@@ -1,4 +1,6 @@
 # Only run a fused foreach_slice kernel when every slice has an inferrable size.
+has_inferred_slice_size(op::O, args::Union{Tuple, NamedTuple}) where {O} =
+    unrolled_all(Base.Fix1(has_inferred_slice_size, op), values(args))
 has_inferred_slice_size(op::O, arg) where {O} =
     Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
         slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
@@ -99,31 +101,48 @@ function slice_subscope_at_level(
     args...,
 ) where {N, O, F}
     medium = ThisSubBlock{N, shmem_level_bytes(Val(:medium), Val(N))}()
-    bytes = slices_required_shared_memory(medium, op, f, args...)
-    (isnothing(bytes) || bytes <= DataLayouts.total_buffer_limit(medium)) && return medium
+    req = slices_required_shared_memory(medium, op, f, args...)
+    isnothing(req) && return medium
+    (bytes, uses) = req
+    bytes <= 0 && !uses && return ThisSubBlock{N, 0}()
+    bytes <= DataLayouts.total_buffer_limit(medium) && return medium
     max = ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}()
     bytes <= DataLayouts.total_buffer_limit(max) && return max
     return DataLayouts.ThisThread()
 end
 
-# Bytes of shared memory that f needs on every slice (or nothing if they are unknown), found
-# by inference alone (like has_inferred_slice_size), since they only depend on the types of
-# the slices; a result that inference cannot fold is an error, not a fallback. The slices
-# are reassigned after they are taken: slicing a host array rebuilds its layout with the
-# host's scope (see DataLayouts.rebuild), which would undo the reassignment.
-slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
-    val_value(
-        Utilities.return_type(Tuple{typeof(args)}) do args
+# Bytes of shared memory that f needs on every slice (or nothing if they are
+# unknown), and whether f allocates any shared buffers at all, found by
+# inference alone (like has_inferred_slice_size), since they only depend on the
+# types of the slices; a result that inference cannot fold is an error, not a
+# fallback. Functions without a required_shared_memory method return nothing
+# without invoking return_type, and f is passed as an argument to the closure
+# so a non-singleton callable does not capture runtime state. The slices are
+# reassigned after they are taken: slicing a host array rebuilds its layout
+# with the host's scope (see DataLayouts.rebuild), which would undo the
+# reassignment.
+function slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F}
+    DataLayouts.has_required_shared_memory(f) || return nothing
+    return val_value(
+        Utilities.return_type(Tuple{F, typeof(args)}) do f, args
             index = first(DataLayouts.each_slice_index(op, first(args)))
             slices = DataLayouts.slice_every_arg(op, index, args...)
             scoped_slices = unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)
-            Val(DataLayouts.required_shared_memory(f, scoped_slices...))
+            bytes = DataLayouts.required_shared_memory(f, scoped_slices...)
+            uses = DataLayouts.uses_shared_memory(f, scoped_slices...)
+            Val((bytes, uses))
         end,
     )
+end
 val_value(::Type{Val{x}}) where {x} = x
 
-# Every region of a sub-block slice loop is given the bytes of its level.
-subblock_shmem(::ThisSubBlock{N, B}) where {N, B} = DynamicShmem(N * B, N)
+# Every region of a sub-block slice loop is given the bytes of its level, unless
+# B == 0 (at :auto when inference proves that f allocates no shared buffers, such
+# as spectral operators on 4x4 slabs or branch-free stencils on <= 32 levels
+# that exchange values in warp registers), in which case reserving 0 bytes of
+# dynamic shared memory preserves the full L1 data cache per multiprocessor.
+subblock_shmem(::ThisSubBlock{N, B}) where {N, B} =
+    B == 0 ? NO_DYNAMIC_SHMEM : DynamicShmem(N * B, N)
 
 # A buffer that exceeds the level fails to compile (see check_shmem_level); the marker is the
 # name of the undefined function that the check calls, read from the invalid IR error's

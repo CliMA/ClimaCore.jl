@@ -426,7 +426,9 @@ Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 Base.similar(field::Field, ::Type{T}) where {T} =
     Field(similar(field_values(field), T), axes(field))
 
-# fields on different spaces
+# The target space's coordinate data is reassigned to field's scope before
+# allocating, so similar(col_field, face_space) inside foreach_column allocates
+# in per-thread registers.
 function Base.similar(field::Field, space_to::AbstractSpace)
     similar(field, space_to, eltype(field))
 end
@@ -435,7 +437,16 @@ function Base.similar(
     space_to::AbstractSpace,
     ::Type{Eltype},
 ) where {Eltype}
-    Field(Eltype, space_to)
+    return Field(
+        similar(
+            DataLayouts.reassign(
+                Spaces.coordinates_data(space_to),
+                DataLayouts.DataScope(field),
+            ),
+            Eltype,
+        ),
+        space_to,
+    )
 end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))

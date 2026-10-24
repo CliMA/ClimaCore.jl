@@ -646,15 +646,55 @@ num_caching_operators(bc::StencilBroadcasted) =
         same_pass isa Val{true} ? num_caching_operators(arg) : 0
     end)
 
-# On GPUs, every operator in a pass allocates a shared buffer per cached argument, placed
-# after the buffers before it (see stencil_args), and an argument that does not fit after
-# them is recomputed instead. So a finite difference expression always fits in its scope,
-# except for Fields in registers (see caches_values), which fail to compile when they do not.
-buffer_bytes(::StencilOperatorBroadcasted) = 0
+# On GPUs, every operator in a pass allocates a shared buffer per cached
+# argument, placed after the buffers before it (see stencil_args), and a lazy
+# argument that does not fit after them is recomputed instead. Register-resident
+# Fields must be cached in shared memory (see caches_values), so their buffer
+# bytes are reported here to select a shared memory level that holds them.
+buffer_bytes(bc::StencilOperatorBroadcasted) =
+    has_private_buffers(bc) ? 0 :
+    unrolled_sum(unrolled_map(bc.args, arg_reads(bc)) do arg, reads
+        reads_neighbor(reads) ? register_neighbor_bytes(arg, reads) : 0
+    end)
+register_neighbor_bytes(arg, reads) =
+    passes_through(arg) ? register_neighbor_bytes(arg.args[1], reads) :
+    arg isa Field && DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
+    DataLayouts.aligned_buffer_bytes(neighbor_cached_bytes(arg, reads)) :
+    arg isa LazyField ?
+    unrolled_sum(
+        unrolled_map(register_neighbor_bytes, arg.args, nested_reads(reads, arg)),
+    ) : 0
+
+# Whether an operator or any expression in its arguments allocates a shared
+# buffer, as opposed to reading from global memory or warp registers.
+uses_shared_buffers(bc::StencilOperatorBroadcasted) =
+    !has_private_buffers(bc) && (
+        unrolled_any(
+            identity,
+            unrolled_map(bc.args, arg_reads(bc)) do arg, reads
+                reads_neighbor(reads) && has_shared_neighbor_buffer(arg, reads)
+            end,
+        ) || unrolled_any(uses_shared_buffers, bc.args)
+    )
+has_shared_neighbor_buffer(arg, reads) =
+    !caches_at_neighbors(arg) ? false :
+    passes_through(arg) ? has_shared_neighbor_buffer(arg.args[1], reads) :
+    caches_values(arg) && neighbor_cached_bytes(arg, reads) > 0 ? true :
+    arg isa LazyField ?
+    unrolled_any(
+        identity,
+        unrolled_map(
+            has_shared_neighbor_buffer,
+            arg.args,
+            nested_reads(reads, arg),
+        ),
+    ) : false
 
 @drop_recursion_limits has_stencils, recomputable, is_cached_arg, caches_at_neighbors,
-nested_reads, operator_arg, fused_stencil, pointwise_stencil, pointwise_arg,
-num_caching_operators
+caches_values, caches_args, passes_through, arg_reads, nested_reads, operator_arg,
+fused_stencil, pointwise_stencil, pass_reads, pointwise_arg, in_pass,
+num_caching_operators, buffer_bytes, register_neighbor_bytes, uses_shared_buffers,
+has_shared_neighbor_buffer
 
 # Value of an argument or boundary value at idx, with newindex to handle
 # horizontal and point spaces. Implemented as a generated function for
@@ -681,15 +721,29 @@ end
 @inline column_value(arg::Tuple{Any}, _, _) = add_auto_broadcasters(arg[1])
 @inline column_value(arg, _, _) = add_auto_broadcasters(arg)
 
-# Value of a boundary condition at idx; a column-wide value is read at its end nearest idx.
+# Value of a boundary condition at idx; a column-wide value is read at its end
+# nearest idx, and a horizontal boundary Field is sliced to space's column when
+# an operator with 2D boundary values is applied inside foreach_column.
 Base.@propagate_inbounds boundary_value(val, space, idx) = column_value(val, space, idx)
-Base.@propagate_inbounds boundary_value(val::MaybeLazyField, space, idx) =
-    val[Broadcast.newindex(val, idx == left_idx(space) ? 1 : num_values(val))]
+Base.@propagate_inbounds function boundary_value(val::MaybeLazyField, space, idx)
+    col_val =
+        Spaces.grid(space) isa Grids.ColumnGrid &&
+        Spaces.has_horizontal(Fields.shared_space(val)) ?
+        column(val, Spaces.grid(space).indices...) : val
+    return col_val[Broadcast.newindex(
+        col_val,
+        idx == left_idx(space) ? 1 : num_values(col_val),
+    )]
+end
 # Similarly, a stencil expression is evaluated at its own point nearest idx.
 Base.@propagate_inbounds function boundary_value(val::StencilBroadcasted, space, idx)
-    val_space = Fields.shared_space(val)
+    col_val =
+        Spaces.grid(space) isa Grids.ColumnGrid &&
+        Spaces.has_horizontal(Fields.shared_space(val)) ?
+        column(val, Spaces.grid(space).indices...) : val
+    val_space = Fields.shared_space(col_val)
     val_idx = idx == left_idx(space) ? left_idx(val_space) : right_idx(val_space)
-    return column_value(val, val_space, val_idx)
+    return column_value(col_val, val_space, val_idx)
 end
 num_values(val) = iszero(ndims(val)) ? 1 : size(val)[1]
 
@@ -780,12 +834,23 @@ end
             offset + DataLayouts.aligned_buffer_bytes(neighbor_cached_bytes(arg, reads)) <=
             limit
     end
-# An operator that caches arguments is applied on its own before its result is cached, with
-# its pass's buffers after the offset and retired by then, so that the two are never live at
-# once; the result of one that caches nothing is written straight into its buffer.
+# An operator that caches arguments is applied on its own before its result is
+# cached, with its pass's buffers after the offset and retired by then, so that
+# the two are never live at once; the result of one that caches nothing is
+# written straight into its buffer. A pointwise expression over such operators
+# applies each one in the pass before caching.
 @inline applied_arg(arg, _) = arg
-@inline applied_arg(bc::StencilOperatorBroadcasted, offset) =
-    caches_args(bc) ? apply_stencil(bc, offset) : bc
+@inline applied_arg(bc::StencilBroadcasted, offset) =
+    caches_args(bc) ? apply_stencil(bc, offset) :
+    num_caching_operators(bc) == 0 ? bc :
+    Broadcast.Broadcasted(
+        bc.style,
+        bc.f,
+        unrolled_map(bc.args, in_pass(bc)) do arg, same_pass
+            same_pass isa Val{true} ? applied_arg(arg, offset) : arg
+        end,
+        bc.axes,
+    )
 
 # A cached expression is evaluated by a pass that starts after its own buffer, so that the
 # buffer cannot be overwritten even if the pass caches arguments.
@@ -2777,11 +2842,13 @@ dirichlet_helper_function(::DirichletOperator{UpwindBiasedProductC2F}) =
 Base.Broadcast.broadcasted(op::DirichletOperator{Op}, args...) where {Op} =
     dirichlet_broadcasted(dirichlet_helper_function(op), Op, args...; op.bcs...)
 
-# These recurse per operator, alternating center and face spaces, which limits would widen.
+# These recurse per operator, alternating center and face spaces, which limits
+# would widen.
 @drop_recursion_limits column_value, stencil_value, stencil_interior, stencil_left_boundary,
 stencil_right_boundary, stencil_arg, stencil_args, stencil_arg_after, neighbor_arg,
-applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil!,
-shared_buffer_bytes
+applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil,
+apply_stencil!, inline_apply_operators, apply_pointwise_operators, apply_operators,
+shared_buffer_bytes, largest_application_bytes
 
 # Constant propagation on these never improves inference; it re-infers the whole expression.
 @drop_constprop apply_operators, inline_apply_operators,

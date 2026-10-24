@@ -37,7 +37,7 @@ function column_reduce_device!(
         transform,
         toggle_placeholder_grid(output, space),
         toggle_placeholder_grid(input, space),
-        init,
+        toggle_placeholder_grid(init, space),
         space,
         mask,
         cart_inds,
@@ -73,7 +73,7 @@ function column_accumulate_device!(
         transform,
         toggle_placeholder_grid(output, space),
         toggle_placeholder_grid(input, space),
-        init,
+        toggle_placeholder_grid(init, space),
         space,
         mask,
         cart_inds,
@@ -88,7 +88,7 @@ function bycolumn_kernel!(
     transform::T,
     output′,
     input′,
-    init,
+    init′,
     space,
     mask,
     cart_inds,
@@ -96,6 +96,7 @@ function bycolumn_kernel!(
 ) where {S, F, T}
     output = toggle_placeholder_grid(output′, space)
     input = toggle_placeholder_grid(input′, space)
+    init = toggle_placeholder_grid(init′, space)
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space, reverse)
     else
@@ -110,7 +111,7 @@ function bycolumn_kernel!(
                 transform,
                 column(output, i, j, h),
                 column(input, i, j, h),
-                init,
+                Operators.column_init(init, i, j, h),
                 column(space, i, j, h),
                 reverse,
             )

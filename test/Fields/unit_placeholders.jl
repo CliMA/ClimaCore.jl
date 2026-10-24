@@ -66,4 +66,28 @@ toggle(x, space) = Grids.toggle_placeholder_grid(x, space)
     stripped_bc = toggle(bc, center_space)
     @test !occursin("ExtrudedFiniteDifferenceGrid", string(typeof(stripped_bc)))
     @test toggle(stripped_bc, center_space) === bc
+
+    # toggle_compact_args compacts duplicate grids across multiple arguments,
+    # inside a single Broadcasted, when a 2D horizontal field precedes 3D
+    # extruded fields, and inside Tuple and NamedTuple argument bundles.
+    (compact_bc,) = Grids.toggle_compact_args(bc)
+    @test Spaces.grid(compact_bc.axes) === Spaces.grid(center_space)
+    @test !occursin("ExtrudedFiniteDifferenceGrid", string(typeof(compact_bc.args)))
+    @test Grids.toggle_compact_args(compact_bc) === (bc,)
+
+    mixed_args = (horizontal_field, ᶜfield, ᶠfield)
+    compact_mixed = Grids.toggle_compact_args(mixed_args...)
+    @test compact_mixed[1] === horizontal_field
+    @test compact_mixed[2] === ᶜfield
+    @test Spaces.grid(axes(compact_mixed[3])) === PlaceholderGrid()
+    @test Grids.toggle_compact_args(compact_mixed...) === mixed_args
+
+    bundled_args = ((; sfc = horizontal_field, c = ᶜfield, f = ᶠfield), (ᶜfield, bc))
+    compact_bundled = Grids.toggle_compact_args(bundled_args...)
+    @test compact_bundled[1].sfc === horizontal_field
+    @test compact_bundled[1].c === ᶜfield
+    @test Spaces.grid(axes(compact_bundled[1].f)) === PlaceholderGrid()
+    @test Spaces.grid(axes(compact_bundled[2][1])) === PlaceholderGrid()
+    @test Spaces.grid(compact_bundled[2][2].axes) === PlaceholderGrid()
+    @test Grids.toggle_compact_args(compact_bundled...) === bundled_args
 end

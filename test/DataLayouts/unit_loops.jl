@@ -436,6 +436,9 @@ DataLayouts.static_num_threads(::FakeGroup{N}) where {N} = N
 # Rank of the thread currently "running", stepped through by one CPU thread.
 const FAKE_RANK = Ref(1)
 DataLayouts.thread_rank(::FakeGroup) = FAKE_RANK[]
+DataLayouts.synchronize(::FakeGroup) = nothing
+DataLayouts.scoped_static_array(::FakeGroup, ::Type{T}, dims) where {T} =
+    StaticArrays.MArray{Tuple{dims...}, T}(undef)
 
 # The 32-bit index helpers of GPU kernels must agree with Base on every index.
 @testset "32-bit index helpers agree with Base" begin
@@ -556,6 +559,43 @@ end
         @test DataLayouts.DataScope(frozen_point) == FakeGroup{16}()
         @test frozen_point[] == (v, 4v)
     end
+
+    # Base.similar on a subscope-reassigned slice delegates to register_similar,
+    # and DataLayouts.level on a register-backed column broadcasts the owning
+    # thread's value to a RegisterPointView-backed DataF that keeps the scope.
+    scoped_col = DataLayouts.reassign(column, FakeGroup{16}())
+    sim_col = similar(scoped_col)
+    @test DataLayouts.parent_type(sim_col) <: DataLayouts.RegisterArray
+    sim_col_f32 = similar(scoped_col, Float32)
+    @test DataLayouts.parent_type(sim_col_f32) <: DataLayouts.RegisterArray
+    @test eltype(sim_col_f32) == Float32
+    FAKE_RANK[] = 3
+    sim_col[3] = (30.0, -30.0)
+    lvl3 = DataLayouts.level(sim_col, 3)
+    @test lvl3 isa DataLayouts.DataF
+    @test parent(lvl3) isa DataLayouts.RegisterPointView
+    @test DataLayouts.DataScope(Base.Broadcast.broadcastable(lvl3)) == FakeGroup{16}()
+    @test lvl3[] == (30.0, -30.0)
+    FAKE_RANK[] = 1
+end
+
+@testset "Tuple and NamedTuple bundles in foreach_slice and column_accumulate!" begin
+    device = ClimaComms.device()
+    a = test_data(device, Float64, 1, 8)
+    b = test_data(device, Float64, 1, 8)
+    out1 = similar(a)
+    out2 = similar(a)
+    DataLayouts.foreach_column((; a, b), (out1, out2)) do in_nt, (o1, o2)
+        @. o1 = in_nt.a + in_nt.b
+        DataLayouts.column_accumulate!(+, o2, in_nt.a)
+    end
+    @test Array(parent(out1)) ≈ Array(parent(a)) .+ Array(parent(b))
+    @test Array(parent(out2)) ≈ cumsum(Array(parent(a)); dims = 1)
+
+    DataLayouts.foreach_point((; a, b), out1) do in_nt, o1
+        o1[] = in_nt.a[] - in_nt.b[]
+    end
+    @test Array(parent(out1)) ≈ Array(parent(a)) .- Array(parent(b))
 end
 
 # A launch unit holding only part of a subscope silently skips some points; see

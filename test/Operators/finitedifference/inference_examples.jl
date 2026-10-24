@@ -409,11 +409,15 @@ function alloc_test_nested_expressions_13(
         fynt = fnt_i.fy
         a_up_bcs = a_bcs(FT, i)
         Iaf1 = Operators.InterpolateC2F(; a_up_bcs...)
+        # Parenthesize the first three summands so the top-level + stays below
+        # Base's 16-argument tuple-splatting fallback; on CUDA, p_i bounds the
+        # host launch-wrapper allocations of the 5 kernel launches in the loop.
         @. fynt =
-            -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
-            (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
-            (fx * Iaf1(cxnt) * I0f(cϕ)) +
-            fψ
+            (
+                -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
+                (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
+                (fx * Iaf1(cxnt) * I0f(cϕ))
+            ) + fψ
     end
 
     @inbounds for i in 1:n_tuples
@@ -435,7 +439,7 @@ function alloc_test_nested_expressions_13(
         end
         #! format: on
         if VERSION ≥ v"1.11.0-beta"
-            TU.@test_allocations p_i == 0
+            USING_CUDA ? (@test p_i ≤ 4544) : (TU.@test_allocations p_i == 0)
         else
             @test_broken p_i == 0
         end

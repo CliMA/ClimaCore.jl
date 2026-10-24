@@ -212,11 +212,27 @@ end
     bc.axes,
 )
 
-# Duplicate grid pointers in Fields and LazyFields are toggled off before
-# launching a kernel, then toggled back on when the kernel starts executing.
-# Note that this could be optimized further by dropping grid pointers from arg1.
-Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
-    (arg1, unrolled_map(arg -> Grids.toggle_placeholder_grid(arg, axes(arg1)), args)...)
+# Duplicate grid pointers in Fields and LazyFields (including inside Tuple and
+# NamedTuple argument bundles) are toggled off before launching a kernel, then
+# toggled back on when the kernel starts executing. When the first argument with
+# the reference grid is an instantiated Broadcasted, its axes keep the reference
+# grid while all Fields and nested broadcasts in its f and args are compacted.
+@inline Grids.arg_full_grid(arg::MaybeLazyField) =
+    axes(arg) isa Spaces.AbstractSpace &&
+    !(axes(arg) isa Union{Spaces.PointSpace, Spaces.SpectralElementSpaceSlab}) ?
+    (Grids.full_grid(Spaces.grid(axes(arg))),) : ()
+@inline Grids.has_reference_grid(arg::MaybeLazyField, grid) =
+    axes(arg) isa Spaces.AbstractSpace &&
+    !(axes(arg) isa Union{Spaces.PointSpace, Spaces.SpectralElementSpaceSlab}) &&
+    Grids.full_grid(Spaces.grid(axes(arg))) isa typeof(grid)
+@inline Grids.toggle_first_compact_arg(bc::LazyField, grid) =
+    bc.axes isa Spaces.AbstractSpace ?
+    Broadcast.Broadcasted(
+        bc.style,
+        Grids.toggle_placeholder_grid(bc.f, grid),
+        Grids.toggle_placeholder_grid(bc.args, grid),
+        bc.axes,
+    ) : bc
 
 # Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
 # broadcast expression from slices of their arguments, skipping the
@@ -281,10 +297,20 @@ Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
 Base.eachindex(arg::MaybeLazyField, args::MaybeLazyField...) =
     eachindex(field_values(arg), unrolled_map(field_values, args)...)
 
-# Reassign materialized results to the broadcast's scope, since the space is
-# shared by all available threads, but the arguments can have narrower scopes.
+# The space's coordinate data is reassigned to the broadcast's scope before
+# allocating, since the space is shared by all available threads while the
+# broadcast's arguments can belong to a narrower subscope.
 Base.similar(bc::LazyField, ::Type{T}) where {T} =
-    DataLayouts.reassign(Field(T, axes(bc)), DataLayouts.DataScope(bc))
+    Field(
+        similar(
+            DataLayouts.reassign(
+                Spaces.coordinates_data(axes(bc)),
+                DataLayouts.DataScope(bc),
+            ),
+            T,
+        ),
+        axes(bc),
+    )
 
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view

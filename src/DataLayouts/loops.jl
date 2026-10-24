@@ -62,8 +62,10 @@ end
 # non-inferrable size is treated as unbounded, stopping slice_subscope's descent
 # at the largest scope. A view slice contains one point by definition (point
 # slices of fused broadcasts have inconsistent inferred_size across args).
-@inline num_slice_points(::typeof(view), arg) = 1
+@inline num_slice_points(::typeof(view), _) = 1
 @inline function num_slice_points(op::O, arg) where {O}
+    arg isa Union{Tuple, NamedTuple} &&
+        return unrolled_maximum(Base.Fix1(num_slice_points, op), values(arg))
     slice = @inbounds op(arg, Tuple(first(each_slice_index(op, arg)))...)
     return has_inferred_size(slice) ? prod(inferred_size(slice)) : typemax(Int)
 end
@@ -143,15 +145,21 @@ with_shared_memory(scope, _) = scope
 
 """
     required_shared_memory(f, slices...)
+    has_required_shared_memory(f)
+    uses_shared_memory(f, slices...)
 
 Bytes of the shared memory of the slices' [`DataScope`](@ref) that the buffers of
 `f(slices...)` need (see `total_buffer_limit`), found from the types of the slices alone,
-or `nothing` when they cannot be known. Slice loops at the `:auto` level of `shmem` (see
-[`foreach_slice`](@ref)) use this to choose the level of a loop; `nothing` by default,
-since the buffers of an arbitrary function cannot be known, and extended for
-`Operators.apply_operators!` (the function of a broadcast).
+or `nothing` when they cannot be known. `has_required_shared_memory(f)` indicates whether
+`f` specializes `required_shared_memory`, and `uses_shared_memory(f, slices...)` indicates
+whether `f(slices...)` allocates any shared buffers at all. Slice loops at the `:auto`
+level of `shmem` (see [`foreach_slice`](@ref)) use these to choose the level and launch
+shared memory of a loop; extended for `Operators.apply_operators!` (the function of a
+broadcast).
 """
 required_shared_memory(f::F, slices...) where {F} = nothing
+has_required_shared_memory(_) = false
+uses_shared_memory(_, slices...) = true
 
 """
     foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto))
@@ -170,7 +178,9 @@ largest available [`DataScope`](@ref) that can access every argument, and a
 [`DataMask`](@ref) may be used to skip a particular subset of slices. On CUDA
 devices, `foreach_slice` supports at most `2^31 - 1` slices and 31 arguments
 after `f`, since Julia does not infer calls that splat more than 32 values,
-which would leave dynamic calls in the kernel.
+which would leave dynamic calls in the kernel; `Tuple` and `NamedTuple`
+bundles of sliceable arguments may be passed to group arguments within this
+limit.
 
 Statements in `f` execute in order at the slice's scope: same-shaped pointwise
 broadcasts assign every point to the same thread in each statement, and
@@ -191,7 +201,8 @@ buffers of the operators in `f` (see `Operators.apply_operator`), per thread of 
   - `Val(:none)`: no shared memory, with each slice evaluated by one thread.
   - `Val(:auto)` (the default): `Val(:medium)`, unless the buffers of `f` are known from
     the types of the slices (see [`required_shared_memory`](@ref), as for a broadcast) and
-    need more, in which case `Val(:max)` if it holds them and `Val(:none)` otherwise.
+    need `Val(0)` when no shared buffers are allocated, `Val(:max)` when `:medium` does not
+    hold them, or `Val(:none)` beyond `:max`.
 
 Every kernel is launched with the shared memory of its level, which the L1 cache of a GPU
 cannot use. A buffer that does not fit is recomputed where it is read if it can be (see the
@@ -371,14 +382,28 @@ Base.@propagate_inbounds slice_index(indices::CartesianIndices, i) =
 @generated slice_every_arg(op::O, index, args::Vararg{Any, N}) where {O, N} = quote
     Base.@_propagate_inbounds_meta
     return Base.Cartesian.@ntuple $N n -> $(
-        O === typeof(view) ? :(view(getfield(args, n), index)) :
+        O === typeof(view) ? :(point_view(getfield(args, n), index)) :
         :(slice_arg(op, getfield(args, n), Tuple(index)...))
     )
 end
 
+Base.@propagate_inbounds point_view(arg, index) = view(arg, index)
+Base.@propagate_inbounds point_view(args::Tuple, index) =
+    slice_every_arg(view, index, args...)
+Base.@propagate_inbounds point_view(args::NamedTuple{names}, index) where {names} =
+    NamedTuple{names}(slice_every_arg(view, index, values(args)...))
+
 # Slices at a slice loop's own (valid) indices, so that types can skip their own checks
 # (see Fields.slice_arg): Julia 1.10 keeps checks that @inbounds makes dead in the IR.
 Base.@propagate_inbounds slice_arg(op::O, arg, indices...) where {O} = op(arg, indices...)
+Base.@propagate_inbounds slice_arg(op::O, args::Tuple, indices...) where {O} =
+    slice_every_arg(op, CartesianIndex(indices...), args...)
+Base.@propagate_inbounds slice_arg(
+    op::O,
+    args::NamedTuple{names},
+    indices...,
+) where {O, names} =
+    NamedTuple{names}(slice_every_arg(op, CartesianIndex(indices...), values(args)...))
 
 """
     update_points!(f, op, data, slice_op)
@@ -416,7 +441,7 @@ end
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
     (mask, enumerate, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
-        slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
+        slices = @inbounds slice_every_arg(op, index, args...)
         enumerate isa Val{true} ? f(index, slices...) : f(slices...)
     end
 end
@@ -544,7 +569,96 @@ right-associative, and `init` seeds the fold when it is given.
         fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
     end
 
-# TODO: Extend this to column_accumulate!
+"""
+    column_accumulate!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
+
+Use [`foreach_column`](@ref) to accumulate the levels of each column of `arg`
+with `op`, storing the prefix results in the corresponding levels of `dest`.
+Setting `flip` to `Val(true)` accumulates from top to bottom instead of from
+bottom to top, and `init` seeds the scan when it is given.
+"""
+@inline column_accumulate!(
+    op::O,
+    dest,
+    arg;
+    mask = NoMask(),
+    flip = Val(false),
+    init...,
+) where {O} =
+    foreach_column(dest, arg; mask) do dest_column, arg_column
+        column_accumulate_slice!(op, dest_column, arg_column, flip; init...)
+    end
+
+@inline function column_accumulate_slice!(
+    op::O,
+    dest_column,
+    arg_column,
+    flip = Val(false);
+    init...,
+) where {O}
+    Nv = nlevels(dest_column)
+    Nv == nlevels(arg_column) ||
+        throw(DimensionMismatch("column_accumulate! requires equal column lengths"))
+    Nv == 0 && return dest_column
+    scope = DataScope(dest_column, arg_column)
+    N = static_num_threads(scope)
+    # On a multi-thread subscope, the input is buffered in shared memory when it
+    # is in per-thread registers, aliases dest_column, or is a lazy broadcast
+    # that fits in the subscope's shared memory, so every thread can read all
+    # levels of the column without racing against writes to dest_column.
+    needs_buffer =
+        !isnothing(N) &&
+        N > 1 &&
+        (
+            in_registers_or_aliases(dest_column, arg_column) || (
+                !(arg_column isa DataLayout) &&
+                aligned_buffer_bytes(Nv * sizeof(eltype(arg_column))) <=
+                total_buffer_limit(scope)
+            )
+        )
+    src =
+        needs_buffer ?
+        begin
+            buf = copyto!(
+                buffer_similar(reassign(dest_column, scope), eltype(arg_column)),
+                arg_column,
+            )
+            synchronize(scope)
+            buf
+        end : arg_column
+    start_v, stop_v, step_v = flip isa Val{true} ? (Nv, 1, -1) : (1, Nv, 1)
+    @inbounds if isempty(init)
+        acc = src[CartesianIndex(start_v, 1, 1, 1)]
+        owns_column_level(scope, start_v) &&
+            (dest_column[CartesianIndex(start_v, 1, 1, 1)] = acc)
+        next_v = start_v + step_v
+    else
+        acc = values(init).init
+        next_v = start_v
+    end
+    n_steps = step_v * (stop_v - next_v) + 1
+    @inbounds for k in 1:n_steps
+        v = next_v + step_v * (k - 1)
+        acc = op(acc, src[CartesianIndex(v, 1, 1, 1)])
+        owns_column_level(scope, v) && (dest_column[CartesianIndex(v, 1, 1, 1)] = acc)
+    end
+    !isnothing(N) && N > 1 && !stored_in_registers(dest_column) && synchronize(scope)
+    return dest_column
+end
+
+@inline function owns_column_level(scope, v)
+    N = static_num_threads(scope)
+    (isnothing(N) || N == 1) && return true
+    rank = thread_rank(scope)
+    return rem((v - 1) % typeof(rank), N % typeof(rank)) + one(rank) == rank
+end
+
+@inline in_registers_or_aliases(dest, arg) = false
+@inline in_registers_or_aliases(dest::DataLayout, arg::DataLayout) =
+    stored_in_registers(arg) ||
+    (!stored_in_registers(dest) && parent(dest) === parent(arg))
+@inline in_registers_or_aliases(dest::DataLayout, bc::LazyDataLayout) =
+    unrolled_any(arg -> in_registers_or_aliases(dest, arg), bc.args)
 
 # Convert the value before the fill! loop. Even though setindex! converts at
 # every point, the compiler does not hoist the conversion, and filling a Float64

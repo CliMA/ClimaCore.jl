@@ -170,6 +170,7 @@ dimensions that cannot be inferred from the type.
 Return the length of the `V` axis in a [`DataLayout`](@ref).
 """
 @inline nlevels(data) = vijh_params(data).Nv
+@inline nlevels(args::Union{Tuple, NamedTuple}) = unrolled_maximum(nlevels, values(args))
 
 """
     nquadpoints(D)
@@ -209,6 +210,10 @@ Assign a new [`DataScope`](@ref) to a [`DataLayout`](@ref), or determine the
 result type of performing such an assignment for a layout of type `D`.
 """
 @inline reassign(data, scope) = reassign(typeof(data), scope)(parent(data))
+@inline reassign(args::Tuple, scope) =
+    unrolled_map(Base.Fix2(reassign, scope), args)
+@inline reassign(args::NamedTuple{names}, scope) where {names} =
+    NamedTuple{names}(reassign(values(args), scope))
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
 
@@ -320,10 +325,11 @@ end
 
 Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
     similar_layout(D, eltype(D), maybe_dims...)
-Base.similar(data::DataLayout, maybe_dims::Dims...) =
-    similar_layout(data, eltype(data), maybe_dims...)
-Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
-    similar_layout(data, T, maybe_dims...)
+Base.similar(data::DataLayout) = register_similar(data, eltype(data))
+Base.similar(data::DataLayout, ::Type{T}) where {T} = register_similar(data, T)
+Base.similar(data::DataLayout, dims::Dims) = similar_layout(data, eltype(data), dims)
+Base.similar(data::DataLayout, ::Type{T}, dims::Dims) where {T} =
+    similar_layout(data, T, dims)
 
 """
     replace_basetype(data::DataLayout, ::Type{B})
@@ -647,6 +653,6 @@ include("registers.jl")
 # enough to flip cases near the sm_60 register brink.
 @drop_constprop _foreach_slice, foreach_slice_with_shared_memory, unfused_slice_loop,
 foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
-Base.fill!, Base.copyto!
+column_accumulate!, Base.fill!, Base.copyto!
 
 end # module

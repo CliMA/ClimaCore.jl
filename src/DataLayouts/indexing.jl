@@ -89,12 +89,19 @@ iterator of Cartesian indices, whose scalar offsets permit SIMD optimization (a
 `view` at a linear index wraps its parent in a 1-dimensional `ReshapedArray`, which
 blocks SIMD in pointwise loops).
 """
-@inline each_slice_index(::typeof(view), arg) = CartesianIndices(size(arg))
-@inline each_slice_index(::typeof(level), arg) = CartesianIndices((nlevels(arg),))
-@inline each_slice_index(::typeof(slab), arg) =
+@inline _each_slice_index(::typeof(view), arg) = CartesianIndices(size(arg))
+@inline _each_slice_index(::typeof(level), arg) = CartesianIndices((nlevels(arg),))
+@inline _each_slice_index(::typeof(slab), arg) =
     CartesianIndices((nlevels(arg), nelems(arg)))
-@inline each_slice_index(::typeof(column), arg) =
+@inline _each_slice_index(::typeof(column), arg) =
     CartesianIndices((vijh_params(arg).Ni, vijh_params(arg).Nj, nelems(arg)))
+@inline each_slice_index(op::O, arg) where {O} = _each_slice_index(op, arg)
+@inline function each_slice_index(op::O, args::Union{Tuple, NamedTuple}) where {O}
+    vals = values(args)
+    unrolled_allequal(Base.Fix1(each_slice_index, op), vals) ||
+        throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
+    return each_slice_index(op, first(vals))
+end
 
 # Preserve linear indices into broadcast arguments: Base's newindex fallback
 # reinterprets an integer as a CartesianIndex along the first dimension, which
@@ -339,7 +346,7 @@ end
 # slices of materialized data.
 @propagate_inbounds function level(arg::IndexableData, v)
     (; Nv, Ni, Nj, Nh) = vijh_params(arg)
-    Ni == Nj == Nh == 1 && return view(arg, CartesianIndex(v, 1, 1, 1))
+    Ni == Nj == Nh == 1 && return column_level_view(arg, v)
     Nv == 1 || return level_view(arg, v)
     @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
     return arg
