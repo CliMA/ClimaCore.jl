@@ -38,8 +38,10 @@ Base.@propagate_inbounds function safe_mapreduce(
 end
 
 # Recursively split a non-empty collection in half until each block is small
-# enough to reduce with a single vectorized sequential loop.
-Base.@propagate_inbounds function mapreduce_pairwise(
+# enough to reduce with a single vectorized sequential loop. This is not
+# @propagate_inbounds, which implies @inline, so that the loop and any f inlined
+# into it are optimized once here, rather than again in every inlined caller.
+function mapreduce_pairwise(
     f::F,
     op::O,
     itr,

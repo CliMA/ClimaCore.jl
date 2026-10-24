@@ -20,7 +20,7 @@ function slice_operator end
 Broadcast.BroadcastStyle(style::OperatorStyle, ::Fields.FieldStyle) = style
 
 # Combine the operator style with all argument styles to construct broadcasts.
-function Broadcast.broadcasted(op::AbstractOperator, args...)
+@inline function Broadcast.broadcasted(op::AbstractOperator, args...)
     args′ = unrolled_map(Broadcast.broadcastable, args)
     style = Broadcast.result_style(OperatorStyle(op), Broadcast.combine_styles(args′...))
     return Broadcast.broadcasted(style, op, args′...)
@@ -30,7 +30,7 @@ end
     return Broadcast.Broadcasted(style, op, args, axes)
 end
 
-function Broadcast.broadcasted(style::OperatorStyle, op::AbstractOperator, args...)
+@inline function Broadcast.broadcasted(style::OperatorStyle, op::AbstractOperator, args...)
     FT = Spaces.undertype(return_space(op, args...))
     args′ = unrolled_map(args) do arg
         is_auto_broadcastable(eltype(arg)) ?
@@ -77,6 +77,7 @@ end
 # so each argument must be checked against its own space (see also check_arg_spaces).
 @inline function Broadcast._axes(bc::OperatorBroadcasted, ::Nothing)
     unrolled_foreach(bc.args) do arg
+        @inline
         Fields.check_broadcast_space(Fields.shared_space(arg), arg, Val(false))
     end
     return Fields.shared_space(bc)
@@ -245,7 +246,7 @@ function copyto_by_slices!(dest, bc)
     mask =
         DataLayouts.is_valid_slice_mask(space_mask, op) ? space_mask : DataLayouts.NoMask()
     # Replicate _foreach_slice's entry: every layer around a slice loop is inferred with it.
-    unrolled_allequal(Base.Fix1(DataLayouts.each_slice_index, op), (dest, bc)) ||
+    DataLayouts.each_slice_index(op, dest) === DataLayouts.each_slice_index(op, bc) ||
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
     scope = DataLayouts.DataScope(dest, bc)
     if DataLayouts.needs_loop_setup(scope)
@@ -325,7 +326,7 @@ without full inlining.
 @inline constant_field(arg) =
     has_private_buffers(arg) || DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
     Field(
-        DataLayouts.rebuild(Fields.field_values(arg), StaticArrays.SArray),
+        DataLayouts.unchecked_rebuild(Fields.field_values(arg), StaticArrays.SArray),
         Fields.shared_space(arg),
     ) :
     arg

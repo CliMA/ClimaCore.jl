@@ -93,8 +93,8 @@ include("field_matrix_with_solver.jl")
 
 # Extend the recursion limit removal in Operators to the methods defined above.
 @drop_recursion_limits Operators.stencil_value, Operators.stencil_interior,
-multiply_matrix_row, matrix_row_value, projected_value
-@drop_constprop Operators.stencil_value, multiply_matrix_row, matrix_row_value
+matrix_row_value, projected_value
+@drop_constprop Operators.stencil_value, matrix_row_value
 
 # Evaluate multiplications in left-associative order. This should technically be
 # right-associative, but flipping the order worsens performance in GPU kernels,
