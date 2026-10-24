@@ -233,15 +233,14 @@ unstable when `Aₙₙ` has entries with large disparities in magnitude, but avo
 this would require swapping the rows of `Aₙₙ` (i.e., replacing `Dₙ` with a
 partial pivoting matrix).
 
-On a GPU, tridiagonal systems are solved with the parallel cyclic reduction (PCR)
-method, which makes better use of GPU parallelism and shared memory. Since this
-solver launches one thread per row of the matrix, it is only used for systems with
-at most 512 rows, to stay within CUDA thread block limits. Above that size, the
-code falls back to the Gaussian elimination method used on the CPU, with degraded
-performance.
-
-PCR recursively decomposes a tridiagonal system into two systems of half the size,
-until the systems have size 1 and can be solved directly.
+On a GPU, where the points of each column are divided among multiple threads,
+tridiagonal systems are instead solved with the parallel cyclic reduction (PCR)
+method. PCR recursively decomposes each tridiagonal system into two systems of
+half the size, until it is left with only scalar equations. The rows of each
+column are exchanged through either shared memory or warp shuffles, depending on
+whether the column fits in a warp. Pentadiagonal systems would require a more
+complex implementation of PCR, so they are solved by performing Gaussian
+elimination in one thread per column.
 """
 struct BlockDiagonalSolve <: FieldMatrixSolverAlgorithm end
 
@@ -265,48 +264,41 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-cheap_inv(_) = false
-cheap_inv(::ScalingFieldMatrixEntry) = true
-cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
+# Scalars and diagonal matrices can be inverted pointwise, so they do not
+# benefit from using a fused solver that loops over columns. On CPUs, every
+# matrix is solved in its own loop over columns, which is faster than one loop.
+avoid_fusing_solver(::ScalingFieldMatrixEntry) = true
+avoid_fusing_solver(A::ColumnwiseBandMatrixField) =
+    eltype(A) <: DiagonalMatrixRow ||
+    DataLayouts.DataScope(A) isa DataLayouts.ThisThreadPool
 
-function run_field_matrix_solver!(
-    ::BlockDiagonalSolve,
-    cache,
-    x,
-    A,
-    b,
-)
-    names = matrix_row_keys(keys(A))
-    # The following is a performance optimization.
-    # Using
-    # `foreach(name -> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
-    # is perfectly fine, but may launch many gpu kernels. So,
-    # We may want to call `multiple_field_solve!`, which fuses
-    # these kernels into one. However, `multiple_field_solve!`
-    # launches threads horizontally, and loops vertically (which
-    # is slow) to perform the solve. In some circumstances,
-    # when a vertical loop is not needed (e.g., ScalingFieldMatrixEntry)
-    # launching several kernels may be cheaper than launching one
-    # slower kernel, so we first check for types that may lead to fast
-    # kernels.
+# Solve every column directly, since a nested loop over one column could split
+# the threads of the outer column, and only some of them would reach barriers.
+# Recursion over the arguments compiles in GPU kernels where unrolled_foreach
+# over partitions of them leaves dynamic calls.
+solve_columns!() = nothing
+solve_columns!(cache, x, A, b, args...) =
+    (single_column_solve!(cache, x, A, b); solve_columns!(args...))
 
-    case1 = length(names) == 1
-    case2 = all(name -> cheap_inv(A[name, name]), names.values)
-    case3 = any(name -> cheap_inv(A[name, name]), names.values)
-
-    # Direct all TridiagonalMatrixRow cases to `single_field_solve` path so
-    # they can be redirected to a specialised solver
-    # TODO: Group multiple Tridiagonals to the special 'multiple_field' solver
-    case4 = any(name -> eltype(A[name, name]) <: TridiagonalMatrixRow, names.values)
-
-    # TODO: remove case3 and implement _single_field_solve_diag_matrix_row!
-    #       in multiple_field_solve!
-    if case1 || case2 || case3 || case4
-        foreach(names) do name
+function run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b)
+    foreach(matrix_row_keys(keys(A))) do name
+        avoid_fusing_solver(A[name, name]) &&
             single_field_solve!(cache[name], x[name], A[name, name], b[name])
-        end
-    else
-        multiple_field_solve!(cache, x, A, b)
+    end
+    args = unrolled_flatmap(matrix_row_keys(keys(A)).values) do name
+        avoid_fusing_solver(A[name, name]) ? () :
+        (cache[name], x[name], A[name, name], b[name])
+    end
+    isempty(args) && return nothing
+    # The mask comes from a solution that is fused, and the loop slices the data
+    # of every argument, since the solves need no spaces.
+    slice_op = DataLayouts.column
+    mask = Spaces.get_mask(axes(args[2]))
+    data_args = unrolled_map(Fields.field_values, args)
+    # GPU kernels support at most 31 arguments after the loop body (see
+    # foreach_slice), so every loop solves at most 7 band matrices.
+    unrolled_foreach(unrolled_partition(data_args, Val(28))) do loop_args
+        DataLayouts._foreach_slice(slice_op, solve_columns!, mask, Val(false), loop_args...)
     end
     return nothing
 end

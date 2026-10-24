@@ -4,6 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `column_reduce!`, `column_accumulate!`, and
+  the `MatrixFields` single and block diagonal solvers are evaluated through
+  `DataLayouts.foreach_column`, like finite difference operators, so the
+  threads that process a column share its work on GPUs. Associative operators
+  like `+`, `*`, and `max` are reduced and accumulated with warp shuffles and
+  shared memory (through the new `DataLayouts.scan_points` and
+  `DataLayouts.fold_points`), and any other operator is applied in order;
+  operator inputs are evaluated by all threads of each column. Tri-diagonal
+  systems are solved by parallel cyclic reduction on GPUs with any number of
+  levels, through warp shuffles when a column fits in a warp, and other band
+  matrices by Gaussian elimination. The band matrix solves of a
+  `BlockDiagonalSolve` share one loop over columns.
+- ![][badge-🚀performance] Unmasked reductions over a single column, such as
+  `column_reduce!` on CPUs, use linear indices, which vectorize, and reductions
+  read their values with inlined code, which speeds up `max` and `min`.
 - ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
   whenever every argument supports them, except over layouts whose sizes are
   all static, with several axes longer than 1 and an axis whose length is not a

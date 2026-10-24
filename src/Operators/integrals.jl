@@ -80,27 +80,18 @@ end
 
 ################################################################################
 
-# Column input with every operator evaluated by the one thread that processes the column.
-column_input(input) = apply_operators(DataLayouts.reassign(input, DataLayouts.ThisThread()))
-
 # A column field (e.g., Spaces.column(field, i, j, h)) keeps the space of its own column in
 # every column of a loop over other fields, so an operator expression with one is
 # instantiated, and each of its broadcasts is sliced with the space it has outside of the
 # loop (see Fields.shared_space). Stored spaces make other inputs slower in every column.
-loop_input(input, space) =
-    input isa StencilBroadcasted && !(space isa Spaces.FiniteDifferenceSpace) &&
+loop_input(input) =
+    input isa StencilBroadcasted && !(axes(input) isa Spaces.FiniteDifferenceSpace) &&
     has_column_fields(input) ? Broadcast.instantiate(input) : input
+
 has_column_fields(arg) = false
 has_column_fields(field::Fields.Field) = axes(field) isa Spaces.FiniteDifferenceSpace
 has_column_fields(bc::Broadcasted) = unrolled_any(has_column_fields, bc.args)
 @drop_recursion_limits has_column_fields
-
-"""
-    UnspecifiedInit()
-
-Analogue of `Base._InitialValue` for `column_reduce!` and `column_accumulate!`.
-"""
-struct UnspecifiedInit end
 
 """
     column_reduce!(f, output, input; [init], [transform], [reverse])
@@ -114,7 +105,9 @@ passed to the `transform` function before being stored in `output`. If `init` is
 specified, it is used as the initial value of the iteration; otherwise, the
 value at the starting boundary of each column in `input` is used as the initial
 value. By default, reduction starts at the bottom boundary and proceeds upward.
-When `reverse = true`, it starts at the top boundary and proceeds downward.
+When `reverse = true`, it starts at the top boundary and proceeds downward. If `f`
+is an associative operator like `+`, `*`, or `max`, all threads that process a
+column share the work of reducing it, which can change the result by roundoff.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the default reduction in each column can be summarized as follows:
@@ -140,76 +133,21 @@ function column_reduce!(
     f::F,
     output::Fields.Field,
     input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};
-    init = UnspecifiedInit(),
+    init = DataLayouts.NoInit(),
     transform::T = identity,
     reverse::Bool = false,
 ) where {F, T}
-    device = ClimaComms.device(output)
-    space = axes(input)
-    input′ = loop_input(input, space)
-    column_reduce_device!(device, f, transform, output, input′, init, space, reverse)
-end
-
-function column_reduce_device!(
-    ::ClimaComms.AbstractCPUDevice,
-    f::F,
-    transform::T,
-    output,
-    input,
-    init,
-    space,
-    reverse,
-) where {F, T}
-    mask = Spaces.get_mask(space)
-    if space isa Spaces.FiniteDifferenceSpace
-        @assert mask isa DataLayouts.NoMask
-        single_column_reduce!(f, transform, output, input, init, space, reverse)
-    else
-        Fields.bycolumn(space) do colidx
-            I = Fields.universal_index(colidx)
-            if DataLayouts.should_compute(mask, I)
-                single_column_reduce!(
-                    f,
-                    transform,
-                    output[colidx],
-                    input[colidx],
-                    init,
-                    space[colidx],
-                    reverse,
-                )
-            end
-        end
+    # The output point is set by the first thread of each column (see owns_point).
+    function _column_reduce!(output_point, input_column)
+        values = Broadcast.instantiate(Fields.field_values(apply_operators(input_column)))
+        result = DataLayouts.fold_points(f, values, reverse, init)
+        DataLayouts.owns_point(DataLayouts.DataScope(output_point), 1) &&
+            (@inbounds output_point[] = transform(result))
+        return nothing
     end
-end
-
-function single_column_reduce!(
-    f::F,
-    transform::T,
-    _output,
-    _input,
-    init,
-    space,
-    reverse,
-) where {F, T}
-    input = column_input(_input)
-    first_level = left_idx(space)
-    last_level = right_idx(space)
-    start_level, stop_level, direction =
-        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
-    @inbounds if init == UnspecifiedInit()
-        reduced_value = input[level_index(space, start_level)]
-        next_level = start_level + direction
-    else
-        reduced_value = init
-        next_level = start_level
-    end
-    n_steps = direction * (stop_level - next_level) + 1
-    @inbounds for i in 1:n_steps
-        level = next_level + direction * (i - 1)
-        reduced_value = f(reduced_value, input[level_index(space, level)])
-    end
-    Fields.field_values(_output)[] = transform(reduced_value)
-    return nothing
+    input′ = loop_input(input)
+    mask = Spaces.get_mask(axes(input))
+    DataLayouts._foreach_slice(column, _column_reduce!, mask, Val(false), output, input′)
 end
 
 """
@@ -224,7 +162,9 @@ iteration is passed to the `transform` function before being stored in `output`.
 The `init` value is optional for center-to-center, face-to-face, and
 face-to-center accumulation, but it is required for center-to-face accumulation.
 When `reverse = true`, accumulation starts at the top boundary and proceeds
-downward, with the corresponding staggered boundary offsets reversed.
+downward, with the corresponding staggered boundary offsets reversed. As in
+[`column_reduce!`](@ref), the threads that process a column share the work of
+accumulating it when `f` is an associative operator.
 
 With `first_level` and `last_level` denoting the indices of the boundary levels
 of `input`, the default accumulation in each column can be summarized as follows:
@@ -276,90 +216,44 @@ function column_accumulate!(
     f::F,
     output::Fields.Field,
     input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};
-    init = UnspecifiedInit(),
+    init = DataLayouts.NoInit(),
     transform::T = identity,
     reverse::Bool = false,
 ) where {F, T}
-    device = ClimaComms.device(output)
-    space = axes(input)
-    init == UnspecifiedInit() &&
-        Spaces.staggering(space) == Spaces.CellCenter() &&
-        Spaces.staggering(axes(output)) == Spaces.CellFace() &&
+    is_c2f =
+        Spaces.staggering(axes(input)) == Spaces.CellCenter() &&
+        Spaces.staggering(axes(output)) == Spaces.CellFace()
+    is_f2c =
+        Spaces.staggering(axes(input)) == Spaces.CellFace() &&
+        Spaces.staggering(axes(output)) == Spaces.CellCenter()
+    init == DataLayouts.NoInit() && is_c2f &&
         error("init must be specified for center-to-face accumulation")
-    input′ = loop_input(input, space)
-    column_accumulate_device!(device, f, transform, output, input′, init, space, reverse)
-end
-
-function column_accumulate_device!(
-    ::ClimaComms.AbstractCPUDevice,
-    f::F,
-    transform::T,
-    output,
-    input,
-    init,
-    space,
-    reverse,
-) where {F, T}
-    mask = Spaces.get_mask(space)
-    if space isa Spaces.FiniteDifferenceSpace
-        @assert mask isa DataLayouts.NoMask
-        single_column_accumulate!(f, transform, output, input, init, space, reverse)
-    else
-        Fields.bycolumn(space) do colidx
-            I = Fields.universal_index(colidx)
-            if DataLayouts.should_compute(mask, I)
-                single_column_accumulate!(
-                    f,
-                    transform,
-                    output[colidx],
-                    input[colidx],
-                    init,
-                    space[colidx],
-                    reverse,
-                )
-            end
+    # The result for each input level is stored at the same output level, except
+    # in upward accumulations across staggered levels, which store it one level
+    # higher (center-to-face) or one level lower (face-to-center).
+    offset = reverse ? 0 : (is_c2f ? 1 : (is_f2c ? -1 : 0))
+    function _column_accumulate!(output_column, input_column)
+        scope = DataLayouts.DataScope(output_column, input_column)
+        init_index = reverse ? length(output_column) : 1
+        init isa DataLayouts.NoInit || !is_c2f ||
+            !DataLayouts.owns_point(scope, init_index) ||
+            (@inbounds output_column[init_index] = transform(init))
+        values = Broadcast.instantiate(Fields.field_values(apply_operators(input_column)))
+        DataLayouts.scan_points(f, values, reverse, init) do index, value
+            @inline
+            1 <= index + offset <= length(output_column) &&
+                (@inbounds output_column[index + offset] = transform(value))
+            nothing
         end
     end
-end
-
-function single_column_accumulate!(
-    f::F,
-    transform::T,
-    output,
-    _input,
-    init,
-    space,
-    reverse,
-) where {F, T}
-    input = column_input(_input)
-    first_level = left_idx(space)
-    last_level = right_idx(space)
-    is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
-    is_c2f = !is_c2c_or_f2f && Spaces.staggering(space) == Spaces.CellCenter()
-    is_f2c = !is_c2c_or_f2f && !is_c2f
-    # With `reverse = true`, start at the top boundary, step downward, and
-    # reverse the center/face half-level offset used by staggered accumulation.
-    start_level, stop_level, direction =
-        reverse ? (last_level, first_level, -1) : (first_level, last_level, 1)
-    stagger = reverse ? -half : half
-    @inbounds if init == UnspecifiedInit()
-        @assert !is_c2f
-        accumulated_value = input[level_index(space, start_level)]
-        next_level = start_level + direction
-        init_output_level = is_c2c_or_f2f ? start_level : nothing
-    else
-        accumulated_value = is_f2c ? f(init, input[level_index(space, start_level)]) : init
-        next_level = is_f2c ? start_level + direction : start_level
-        init_output_level = is_c2f ? start_level - stagger : nothing
-    end
-    @inbounds if !isnothing(init_output_level)
-        Fields.level(output, init_output_level)[] = transform(accumulated_value)
-    end
-    n_steps = direction * (stop_level - next_level) + 1
-    @inbounds for i in 1:n_steps
-        level = next_level + direction * (i - 1)
-        accumulated_value = f(accumulated_value, input[level_index(space, level)])
-        output_level = is_c2c_or_f2f ? level : (is_c2f ? level + stagger : level - stagger)
-        Fields.level(output, output_level)[] = transform(accumulated_value)
-    end
+    input′ = loop_input(input)
+    mask = Spaces.get_mask(axes(input))
+    DataLayouts._foreach_slice(
+        column,
+        _column_accumulate!,
+        mask,
+        Val(false),
+        output,
+        input′,
+    )
 end

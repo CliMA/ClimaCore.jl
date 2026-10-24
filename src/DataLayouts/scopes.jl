@@ -325,7 +325,9 @@ end
 Base.@nospecializeinfer @noinline function launch_pool_threads(@nospecialize(f), n::Int)
     tasks = Vector{Task}(undef, n)
     for rank in Base.OneTo(n)
-        @inbounds tasks[rank] = Threads.@spawn :default begin
+        # Inlining the spawn folds its pool lookup, which otherwise has an error path with
+        # runtime dispatch (reported by JET) whenever inference skips constant propagation.
+        @inbounds tasks[rank] = @inline Threads.@spawn :default begin
             task_local_storage(:climacore_pool_threads, ($rank, $n))
             f()
         end
