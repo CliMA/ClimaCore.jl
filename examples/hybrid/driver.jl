@@ -59,6 +59,30 @@ const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../common_spaces.jl")
 
+# The Galerkin form of the horizontal space.
+const discretization_name = get(ENV, "DISCRETIZATION", "CG")
+const discretization = if discretization_name == "CG"
+    Grids.CG()
+elseif discretization_name == "DG"
+    Grids.DG()
+else
+    error("DISCRETIZATION must be \"CG\" or \"DG\", got \
+           $(repr(discretization_name))")
+end
+
+# The momentum form, fixed by the initial state's variables: `vector_invariant`
+# (`uₕ`, `w`) or `flux` (`ρuₕ`, `ρw`; DG only).
+const momentum_form_name = get(
+    ENV,
+    "MOMENTUM_FORM",
+    discretization isa Grids.DG ? "flux" : "vector_invariant",
+)
+momentum_form_name in ("flux", "vector_invariant") ||
+    error("MOMENTUM_FORM must be \"flux\" or \"vector_invariant\", got \
+           $(repr(momentum_form_name))")
+discretization isa Grids.CG && momentum_form_name == "flux" &&
+    error("MOMENTUM_FORM=flux needs DISCRETIZATION=DG")
+
 if get(ENV, "Z_STRETCH", "false") == "true"
     z_stretch_scale = FT(7e3)
     z_stretch = Meshes.ExponentialStretching(z_stretch_scale)
@@ -77,6 +101,11 @@ include(joinpath(test_dir, "$test_file_name.jl"))
 
 if z_stretch_string == "stretched"
     test_file_name = "$(z_stretch_string)_$(test_file_name)"
+end
+if discretization isa Grids.DG
+    test_file_name = "$(test_file_name)_dg"
+    momentum_form_name == "vector_invariant" &&
+        (test_file_name = "$(test_file_name)_vi")
 end
 
 if haskey(ENV, "RESTART_FILE")
@@ -102,7 +131,8 @@ else
         horizontal_mesh,
         npoly,
         comms_ctx,
-        VIJH,
+        VIJH;
+        discretization,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
@@ -191,6 +221,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
+@info "with $discretization_name discretization, $momentum_form_name momentum"
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = CTS.solve!(integrator)
@@ -205,7 +236,8 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         global_h_space = make_horizontal_space(
             horizontal_mesh,
             npoly,
-            ClimaComms.SingletonCommsContext(),
+            ClimaComms.SingletonCommsContext();
+            discretization,
         )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
