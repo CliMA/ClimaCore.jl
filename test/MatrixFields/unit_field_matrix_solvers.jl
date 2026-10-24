@@ -37,7 +37,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
                    $time_ratio_rounded)"
         else
             if alg isa MatrixFields.StationaryIterativeSolve && alg.correlated_solves
-                for _ in 1:30
+                for _ in 1:40
                     ClimaComms.@cuda_sync comms_device ldiv!(x, A′, b)
                 end
             else
@@ -151,17 +151,12 @@ end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
-    # Note: StationaryIterativeSolve updates x in place with an expression that reads x
-    # at neighboring levels, which converges faster when levels are updated one after
-    # another (as on CPUs) than when they are updated concurrently (as on GPUs), so
-    # n_iters often has to be increased when USING_CUDA is true.
-
     for alg in (
         MatrixFields.BlockDiagonalSolve(),
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = 28),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -238,9 +233,7 @@ end
     for (P_name, alg) in (
         (
             "no (identity matrix)",
-            MatrixFields.StationaryIterativeSolve(;
-                n_iters = USING_CUDA ? 10 : 7,
-            ),
+            MatrixFields.StationaryIterativeSolve(; n_iters = 14),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3777
         (
             "Richardson (damped identity matrix)",
@@ -248,14 +241,14 @@ end
                 P_alg = MatrixFields.CustomPreconditioner(
                     scaled_identity_matrix(FT(1.12)),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 9,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2294
         (
             "Jacobi (diagonal)",
             MatrixFields.StationaryIterativeSolve(;
                 P_alg = MatrixFields.MainDiagonalPreconditioner(),
-                n_iters = USING_CUDA ? 8 : 6,
+                n_iters = 12,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3241
         (
@@ -265,7 +258,7 @@ end
                     scaled_identity_matrix(FT(1.08)),
                     MatrixFields.MainDiagonalPreconditioner(),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 9,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2249
         (

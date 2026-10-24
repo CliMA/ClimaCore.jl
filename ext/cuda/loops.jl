@@ -1,10 +1,36 @@
 has_inferred_slice_size(op::O, arg) where {O} =
     Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
-        slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
+        index = first(DataLayouts.each_slice_index(op, arg))
+        slice = DataLayouts.slice_arg(op, arg, Tuple(index)...)
         Val(DataLayouts.has_inferred_size(slice))
     end
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
+
+# A fused loop's kernel needs inferrable slices, and its arguments must fit in the parameter
+# memory that CUDA.jl allows: 4 KiB, or 32 KiB for PTX 8.1+ on Volta and newer devices.
+# The size is inferred, so the device is only queried for arguments larger than 4 KiB.
+function DataLayouts.fits_slice_loop(
+    ::ThisHost,
+    op::O,
+    f::F,
+    mask::M,
+    args...,
+) where {O, F, M}
+    unrolled_all(Base.Fix1(has_inferred_slice_size, op), args) || return false
+    T = Core.Compiler.return_type(kernel_arguments, Tuple{F, M, map(typeof, args)...})
+    isconcretetype(T) || return false
+    # The margin covers the KernelState argument and alignment padding.
+    return sizeof(T) + 64 <= 4096 || sizeof(T) + 64 <= max_kernel_parameter_bytes()
+end
+# The arguments of a fused loop's kernel, including the mask that its function captures.
+kernel_arguments(f, mask, args...) =
+    CUDA.cudaconvert((f, mask, Grids.toggle_compact_args(args...)...))
+function max_kernel_parameter_bytes()
+    compiler = isdefined(CUDA, :compiler_config) ? CUDA : CUDA.CUDACore # moved in CUDA 6
+    ptx = compiler.compiler_config(CUDA.device()).params.ptx
+    return CUDA.capability(CUDA.device()) >= v"7.0" && ptx >= v"8.1" ? 32764 : 4096
+end
 
 # Only run a fused foreach_slice kernel when every slice has an inferrable size.
 # Also, avoid launching fused loops on MPI ranks that do not own any elements.
