@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🚀performance] The CUDA extension stores operator buffers in dynamic
+  shared memory, with co-live buffers at offsets known at compile time and every
+  statement of a `DataLayouts.foreach_slice` body inlined, which makes fused
+  finite difference bodies many times faster. The slice loops take a `shmem`
+  keyword (`Val(:auto)`, `Val(:none)`, `Val(:medium)`, `Val(:max)`, or bytes per
+  thread) that sets each slice's shared memory; buffers that do not fit are
+  recomputed or reported. `Restrict` can read register-resident arguments.
+
 v1.0.5
 -------
 

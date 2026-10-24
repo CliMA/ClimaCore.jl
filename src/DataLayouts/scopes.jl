@@ -136,23 +136,6 @@ can be assigned.
 """
 static_num_threads(scope) = nothing
 
-# Number of threads that a device launch must give each of its launch units (a
-# thread block on a GPU) when a loop assigns every slice to a subscope of the
-# launch's scope: max_threads rounded down to a whole multiple of
-# num_threads(subscope), and never fewer than one whole subscope.
-#
-# WHOLE SUBSCOPES INVARIANT: a slice loop gives the thread of rank r the
-# strided subset r:num_threads(subscope):Np of a slice's points, with the
-# stride read from the subscope's *type*: in a partial subscope, points
-# assigned to a missing rank are silently skipped, and the point-to-register
-# correspondence of a register_similar destination breaks. Every launch unit
-# must therefore hold a whole number of subscopes, and max_threads must be at
-# least num_threads(subscope), which holds on supported devices.
-@inline function subscope_launch_threads(subscope, max_threads)
-    subscope_threads = Int(num_threads(subscope))
-    return max(fld(Int(max_threads), subscope_threads), 1) * subscope_threads
-end
-
 """
     num_partitions(scope)
 
@@ -237,18 +220,35 @@ scoped_array(scope, ::Type{T}, dims; buffer = false) where {T} =
 @generated invalid_allocation_string(scope) = "Cannot allocate array for $scope"
 
 """
-    scoped_static_array(scope, T, dims)
+    scoped_static_array(scope, T, dims, [Val(offset)])
 
 Return a statically sized array with element type `T` and size `dims`, whose values
 can be modified by every thread in a [`DataScope`](@ref). If a `DataScope` does not
 provide its own method, this falls back to calling [`scoped_array`](@ref).
 
-Two allocations with equal byte sizes may be assigned to the same
-memory (this is what happens for block-level allocations on GPUs, which are
-stored in shared memory), so their lifetimes must not overlap unless they are
-guaranteed to hold identical values.
+A scope whose allocations share memory (as with the dynamic shared memory of GPU blocks)
+places the array at byte `offset` of that memory, which is 0 by default, so two arrays
+that are live at the same time must be given non-overlapping offsets; see the buffer reuse
+invariant in `Operators.apply_operator`. Every array in such memory occupies
+[`aligned_buffer_bytes`](@ref) of it, so an offset after another array is the aligned
+byte size of that array. Other scopes ignore the offset.
 """
 scoped_static_array(scope, ::Type{T}, dims) where {T} = scoped_array(scope, T, dims)
+scoped_static_array(scope, ::Type{T}, dims, ::Val) where {T} =
+    scoped_static_array(scope, T, dims)
+
+# Byte alignment of the arrays of a scope whose allocations share memory (see
+# scoped_static_array); the single definition that host-side byte accounting and device-side
+# allocation both use, so that the offsets computed on the host match the device's layout.
+const BUFFER_ALIGNMENT = 32
+
+"""
+    aligned_buffer_bytes(bytes)
+
+Bytes that an array of `bytes` bytes from [`scoped_static_array`](@ref) occupies in memory
+that allocations share: `bytes` rounded up to a multiple of `BUFFER_ALIGNMENT`.
+"""
+@inline aligned_buffer_bytes(bytes) = cld(bytes, BUFFER_ALIGNMENT) * BUFFER_ALIGNMENT
 
 """
     strided_access(scope)
@@ -472,6 +472,17 @@ lengths differ from each other by at most 1, which guarantees that every subset
 of the scope gets a nonempty chunk whenever there are at least as many indices
 as subsets. In contrast, always assigning `cld(length(indices), n_subsets)`
 indices to each subset can lead to one or more empty subsets.
+
+# Whole subscopes invariant
+
+A slice loop gives the thread of rank `r` the strided subset `r:num_threads(subscope):Np`
+of a slice's points, with the stride read from the subscope's *type*. In a partial
+subscope, one whose launch unit (a thread block on a GPU) holds only some of its threads,
+the points assigned to a missing rank are silently skipped, and the point-to-register
+correspondence of a [`register_similar`](@ref) destination breaks. Every launch unit must
+therefore hold a whole number of subscopes, which a device launch enforces by sizing its
+units in whole subscopes (the granularity of a slice loop's launch configuration in the
+CUDA extension).
 """
 Base.@propagate_inbounds function subscope_indices(subscope, scope, indices)
     subscope == scope && return indices

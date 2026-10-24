@@ -107,12 +107,55 @@ end
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
-@inline slice_loop_flags(; mask = NoMask(), enumerate = Val(false)) =
-    (mask, enumerate)
+@inline function slice_loop_flags(;
+    mask = NoMask(),
+    enumerate = Val(false),
+    shmem = Val(:auto),
+)
+    validate_shmem_level(shmem)
+    return (mask, enumerate, shmem)
+end
+
+# The named levels of shared memory, whose bytes per thread the device sets (see
+# with_shared_memory), from the least to the most, and every level that foreach_slice
+# accepts, checked at every entry point on every device (scopes without shared memory ignore
+# the level), so that a misspelled level is not first found on a GPU. The check is on a type
+# parameter, so it folds away for a valid level.
+const SHMEM_LEVELS = (:medium, :max)
+const SHMEM_LEVEL_NAMES = (:auto, :none, SHMEM_LEVELS...)
+@inline validate_shmem_level(level::Val{L}) where {L} =
+    (L isa Integer && L >= 0) || unrolled_any(==(L), SHMEM_LEVEL_NAMES) ? nothing :
+    throw(ArgumentError(invalid_shmem_level_string(level)))
+validate_shmem_level(level) = throw(ArgumentError(invalid_shmem_level_string(level)))
+function invalid_shmem_level_string(level)
+    return "shmem must be Val(:auto), Val(:none), Val(:medium), Val(:max), or Val(n) for n \
+            bytes per thread, got $(repr(level))"
+end
 
 """
-    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false))
-    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false))
+    with_shared_memory(scope, level)
+
+Return a [`DataScope`](@ref) like `scope` whose slice loops give each slice the level of
+shared memory `level` (see `shmem` in [`foreach_slice`](@ref)), or `scope` itself when
+`level` is `nothing` or the scope has no shared memory (as on CPUs).
+"""
+with_shared_memory(scope, _) = scope
+
+"""
+    required_shared_memory(f, slices...)
+
+Bytes of the shared memory of the slices' [`DataScope`](@ref) that the buffers of
+`f(slices...)` need (see `total_buffer_limit`), found from the types of the slices alone,
+or `nothing` when they cannot be known. Slice loops at the `:auto` level of `shmem` (see
+[`foreach_slice`](@ref)) use this to choose the level of a loop; `nothing` by default,
+since the buffers of an arbitrary function cannot be known, and extended for
+`Operators.apply_operators!` (the function of a broadcast).
+"""
+required_shared_memory(f::F, slices...) where {F} = nothing
+
+"""
+    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto))
+    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto))
 
 Apply `f` to slices of every [`DataLayout`](@ref) or similarly indexable argument,
 as a generalization of `eachslice`/`mapslices`. The slice operator `op` can be any
@@ -136,13 +179,35 @@ buffers, so each statement may read the results of the statements before it.
 
 By default, `f` is called as `f(slices...)`. Setting `enumerate` to `Val(true)`
 makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
+
+On GPUs, `shmem` sets how much of a block's shared memory each slice can use for the
+buffers of the operators in `f` (see `Operators.apply_operator`), per thread of the slice:
+
+  - `Val(:max)`: the most that a kernel can be launched with (163 KB per block on an A100,
+    divided among the threads of a slice), at the cost of occupancy.
+  - `Val(:medium)`: the most that keeps shared memory from limiting the occupancy of a
+    kernel (66 bytes per thread for slices of 64 threads on an A100).
+  - `Val(n)`: `n` bytes.
+  - `Val(:none)`: no shared memory, with each slice evaluated by one thread.
+  - `Val(:auto)` (the default): `Val(:medium)`, unless the buffers of `f` are known from
+    the types of the slices (see [`required_shared_memory`](@ref), as for a broadcast) and
+    need more, in which case `Val(:max)` if it holds them and `Val(:none)` otherwise.
+
+Every kernel is launched with the shared memory of its level, which the L1 cache of a GPU
+cannot use. A buffer that does not fit is recomputed where it is read if it can be (see the
+buffer reuse invariant in `Operators.apply_operator`), and otherwise makes `foreach_slice`
+throw an error that names the bytes it needs. The level is ignored on CPUs.
 """
 @inline function foreach_slice(op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
-    return _foreach_slice(op, f, mask, enumerate, args...)
+    (mask, enumerate, shmem) = slice_loop_flags(; kwargs...)
+    return foreach_slice_with_shared_memory(shmem, op, f, mask, enumerate, args...)
 end
 
-@inline function _foreach_slice(
+@inline _foreach_slice(op::O, f::F, mask, enumerate, args...) where {O, F} =
+    foreach_slice_with_shared_memory(nothing, op, f, mask, enumerate, args...)
+
+@inline function foreach_slice_with_shared_memory(
+    shmem,
     op::O,
     f::F,
     mask,
@@ -151,7 +216,7 @@ end
 ) where {O, F}
     unrolled_allequal(Base.Fix1(each_slice_index, op), args) ||
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
-    scope = DataScope(args...)
+    scope = with_shared_memory(DataScope(args...), shmem)
     # Go straight onto the loop barrier for scopes without setup: every
     # forwarding layer adds a method instance per loop, inferred with the whole
     # loop inlined into it.
@@ -175,13 +240,13 @@ for (name, op, ref) in (
     # loop inlined into it, whether or not it is @inline.
     @eval begin
         """
-            $($name)(f, args...; mask = NoMask(), enumerate = Val(false))
+            $($name)(f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto))
 
         Run [`foreach_slice`](@ref) with $($ref) as the slice operator.
         """
         @inline function $name(f::F, args...; kwargs...) where {F}
-            (mask, enumerate) = slice_loop_flags(; kwargs...)
-            return _foreach_slice($op, f, mask, enumerate, args...)
+            (mask, enumerate, shmem) = slice_loop_flags(; kwargs...)
+            return foreach_slice_with_shared_memory(shmem, $op, f, mask, enumerate, args...)
         end
     end
 end
@@ -241,8 +306,8 @@ end
 @inline function foreach_slice(
     scope::DataScope, op::O, f::F, args...; kwargs...,
 ) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
-    return _foreach_slice(scope, op, f, mask, enumerate, args...)
+    (mask, enumerate, shmem) = slice_loop_flags(; kwargs...)
+    return _foreach_slice(with_shared_memory(scope, shmem), op, f, mask, enumerate, args...)
 end
 
 # The loop body lives behind a function barrier so that the subscope is a
@@ -349,7 +414,7 @@ end
 # Alternative to scoped_slice_loop that generates ordinary, unfused for loops,
 # with every slice processed by the full scope instead of a slice_subscope.
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
+    (mask, enumerate, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
         slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
         enumerate isa Val{true} ? f(index, slices...) : f(slices...)

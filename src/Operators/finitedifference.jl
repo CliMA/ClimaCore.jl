@@ -544,65 +544,98 @@ Whether a pointwise broadcast of `f` can be [`recomputable`](@ref): `true` by de
 """
 recomputable_node(_) = true
 
-# Whether an argument read at neighboring points is cached when buffers are shared. If its
-# buffer would need too much shared memory (e.g., on very tall columns), its values are
-# recomputed at every read instead, unless it reads registers, which only hold the values at
-# the points of their own threads.
+# Whether an argument read at neighboring points is cached when buffers are shared. A Field
+# in registers always is, since registers only hold the values at the points of their own
+# threads. A lazy expression, or an operator evaluated where it is read, is cached if its
+# buffer fits (and fits after the buffers before it; see neighbor_arg), and is otherwise
+# recomputed at every read (e.g., on very tall columns), while the Fields in registers that
+# it reads are cached on their own (see caches_at_neighbors).
 caches_values(arg) =
     is_cached(arg) &&
     !recomputable(arg) &&
-    (reads_registers(arg) || fits_inlined_buffers(arg, single_field_buffer_bytes))
-reads_registers(_) = false
-reads_registers(field::Field) = DataLayouts.stored_in_registers(Fields.field_values(field))
-reads_registers(bc::Broadcast.Broadcasted) = unrolled_any(reads_registers, bc.args)
-@drop_recursion_limits reads_registers
+    (arg isa Field || fits_buffers(arg, single_field_buffer_bytes))
 is_cached_arg(arg) = passes_through(arg) ? is_cached_arg(arg.args[1]) : caches_values(arg)
+
+# Whether reading an argument at neighboring points caches any values: its own, or those of
+# the arguments of an expression that is recomputed, which are read at neighboring points too.
+caches_at_neighbors(arg) =
+    is_cached_arg(arg) ||
+    arg isa LazyField && unrolled_any(caches_at_neighbors, arg.args)
 
 caches_args(bc) =
     !has_private_buffers(bc) &&
     unrolled_any(identity, unrolled_map(bc.args, arg_reads(bc)) do arg, reads
-        reads_neighbor(reads) && is_cached_arg(arg)
+        reads_neighbor(reads) && caches_at_neighbors(arg)
     end)
+
+# How each argument of an expression is read where the expression is read with reads: at
+# neighboring points if the expression is, without branching if neither the expression nor
+# its reader branches (pointwise expressions never do).
+nested_reads(::Val{false}, bc) = arg_reads(bc)
+nested_reads(reads, bc) =
+    unrolled_map(arg_reads(bc)) do arg_reads
+        reads isa Val{:branch_free} && (
+            arg_reads isa Val{:branch_free} || !(bc isa StencilOperatorBroadcasted)
+        ) ? Val(:branch_free) : Val(true)
+    end
+
+# Bytes of the buffer that caches an argument read with reads (see cached_values).
+neighbor_cached_bytes(arg, reads) =
+    caches_in_registers(
+        DataLayouts.DataScope(arg),
+        arg,
+        Val(reads isa Val{:branch_free}),
+    ) ? 0 : single_field_buffer_bytes(arg)
 
 # Whether an operator is evaluated where its result is read, not over a column: with private
 # buffers, if its arguments have no stencils (recomputed per read); otherwise, if it caches
-# no arguments, so that cached arguments of different applications are never live at once.
+# no arguments (one that does is applied on its own before the pass that reads it, so that
+# its cached arguments are retired before the pass allocates any buffers).
 is_fused(bc) =
     has_private_buffers(bc) ?
     fuses_into_stencils(bc.f) || !unrolled_any(has_stencils, bc.args) : !caches_args(bc)
 
-fused_stencil(bc) =
-    Broadcast.Broadcasted(bc.style, bc.f, unrolled_map(operator_arg, bc.args), bc.axes)
+fused_stencil(bc, reads = Val(false)) = Broadcast.Broadcasted(
+    bc.style,
+    bc.f,
+    unrolled_map(operator_arg, bc.args, nested_reads(reads, bc)),
+    bc.axes,
+)
 
-operator_arg(bc::StencilBroadcasted) =
-    rebroadcasted(bc, unrolled_map(operator_arg, bc.args))
-operator_arg(bc::StencilOperatorBroadcasted) =
-    is_fused(bc) ? fused_stencil(bc) : apply_operators(bc)
+# An operator argument that is read with reads (see arg_reads). An operator read at
+# neighboring points stays lazy even when it caches arguments, so that the pass reading it
+# decides whether to cache its result after the buffers before it or to recompute it (see
+# neighbor_arg), with its own cached arguments placed after that result.
+operator_arg(bc::StencilBroadcasted, reads = Val(false)) =
+    rebroadcasted(bc, unrolled_map(operator_arg, bc.args, nested_reads(reads, bc)))
+operator_arg(bc::StencilOperatorBroadcasted, reads = Val(false)) =
+    is_fused(bc) || reads_neighbor(reads) ? fused_stencil(bc, reads) : apply_operators(bc)
 
 # A pointwise expression over stencil operators is evaluated in one pass, which
 # also evaluates the operators that it reads at the same point, as long as at most
-# one of them caches its arguments. An operator is instead applied separately (see
-# operator_arg) if it caches arguments when other operators do too, or if it needs
-# more than half of the buffer limit of its scope; when the operators that cache
-# arguments do not fit together, each of them is compiled separately.
-pointwise_stencil(bc) = pointwise_stencil(
-    bc,
-    fits_inlined_buffers(bc) ? Val(num_caching_operators(bc) <= 1) : Val(:separately),
-)
+# one of them caches its arguments. An operator is instead applied on its own (see
+# operator_arg) if it caches arguments when other operators do too.
+pointwise_stencil(bc) = pointwise_stencil(bc, Val(num_caching_operators(bc) <= 1))
 pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
-    unrolled_map(bc.args, in_pass(bc)) do arg, same_pass
-        same_pass isa Val{true} ? pointwise_arg(arg, fuse_caching) : operator_arg(arg)
+    unrolled_map(bc.args, pass_reads(bc)) do arg, reads
+        reads isa Val{:same_pass} ? pointwise_arg(arg, fuse_caching) :
+        operator_arg(arg, reads)
     end,
     bc.axes,
 )
+# How each argument is read (see arg_reads), or Val(:same_pass) if it is evaluated in the
+# pass that reads it (two tuples, since unrolled_map widens over more).
+pass_reads(bc) =
+    unrolled_map(in_pass(bc), arg_reads(bc)) do same_pass, reads
+        same_pass isa Val{true} ? Val(:same_pass) : reads
+    end
 pointwise_arg(arg, _) = operator_arg(arg)
 pointwise_arg(bc::StencilBroadcasted, fuse_caching) = pointwise_stencil(bc, fuse_caching)
 pointwise_arg(bc::StencilOperatorBroadcasted, fuse_caching) =
-    fuse_caching isa Val{:separately} && caches_args(bc) ? apply_separately(bc) :
-    fits_inlined_buffers(bc) && (fuse_caching isa Val{true} || !caches_args(bc)) ?
-    pointwise_stencil(bc, fuse_caching) : apply_operators(bc)
+    fuse_caching isa Val{true} || !caches_args(bc) ? pointwise_stencil(bc, fuse_caching) :
+    apply_operators(bc)
 in_pass(bc) = unrolled_map(Returns(Val(true)), bc.args)
 in_pass(bc::StencilOperatorBroadcasted) =
     has_private_buffers(bc) ? unrolled_map(Returns(Val(false)), bc.args) :
@@ -613,25 +646,15 @@ num_caching_operators(bc::StencilBroadcasted) =
         same_pass isa Val{true} ? num_caching_operators(arg) : 0
     end)
 
-# On GPUs, every operator in an inlined body allocates a shared buffer per cached argument.
-inlined_buffer_bytes(bc::StencilOperatorBroadcasted) = published_bytes(bc, Val(false))
-published_bytes(arg, reads) =
-    reads_neighbor(reads) && passes_through(arg) ? published_bytes(arg.args[1], reads) :
-    (
-        reads_neighbor(reads) && caches_values(arg) &&
-        !caches_in_registers(
-            DataLayouts.DataScope(arg),
-            arg,
-            Val(reads isa Val{:branch_free}),
-        ) ?
-        single_field_buffer_bytes(arg) : 0
-    ) + nested_bytes(arg)
-nested_bytes(_) = 0
-nested_bytes(bc::StencilBroadcasted) =
-    unrolled_sum(unrolled_map(published_bytes, bc.args, arg_reads(bc)))
+# On GPUs, every operator in a pass allocates a shared buffer per cached argument, placed
+# after the buffers before it (see stencil_args), and an argument that does not fit after
+# them is recomputed instead. So a finite difference expression always fits in its scope,
+# except for Fields in registers (see caches_values), which fail to compile when they do not.
+buffer_bytes(::StencilOperatorBroadcasted) = 0
 
-@drop_recursion_limits has_stencils, recomputable, is_cached_arg, operator_arg,
-pointwise_stencil, pointwise_arg, num_caching_operators, published_bytes, nested_bytes
+@drop_recursion_limits has_stencils, recomputable, is_cached_arg, caches_at_neighbors,
+nested_reads, operator_arg, fused_stencil, pointwise_stencil, pointwise_arg,
+num_caching_operators
 
 # Value of an argument or boundary value at idx, with newindex to handle
 # horizontal and point spaces. Implemented as a generated function for
@@ -691,8 +714,6 @@ apply_pointwise_operators(::StencilStyle, bc) = apply_stencil(pointwise_stencil(
 # Unlike apply_operator, an application keeps its stored axes (see Fields.shared_space).
 @inline inline_apply_operators(bc::StencilOperatorBroadcasted) =
     apply_stencil(fused_stencil(bc))
-@noinline noinline_apply_operators(bc::StencilOperatorBroadcasted) =
-    apply_stencil(fused_stencil(bc))
 apply_operators!(dest, bc::StencilBroadcasted) =
     apply_stencil!(dest, pointwise_stencil(bc), Val(true))
 
@@ -702,50 +723,101 @@ apply_operators!(dest, bc::StencilBroadcasted) =
 end
 
 # With shared buffers, each argument that an operator reads at neighboring points is cached
-# (see cached_arg), and a cached expression caches no arguments itself (see is_fused).
-@inline stencil_arg(arg, _) = arg
-@inline stencil_arg(arg::MaybeLazyField, reads) =
+# (see cached_arg), unless it is recomputed at every read. All of the arguments that a pass
+# caches are live at once, so each one is placed in a buffer after those of the arguments
+# before it, starting at the byte offset of the pass.
+@inline stencil_arg(arg, reads, offset = Val(0)) = arg
+@inline stencil_arg(arg::MaybeLazyField, reads, offset = Val(0)) =
     has_private_buffers(arg) ? arg :
-    reads_neighbor(reads) ? neighbor_arg(arg, Val(reads isa Val{:branch_free})) :
+    reads_neighbor(reads) ? neighbor_arg(arg, reads, offset) :
     arg isa StencilBroadcasted ?
     Broadcast.Broadcasted(
         arg.style,
         arg.f,
-        unrolled_map(stencil_arg, arg.args, arg_reads(arg)),
+        stencil_args(arg.args, arg_reads(arg), offset),
         arg.axes,
     ) : arg
-@inline neighbor_arg(arg, branch_free) =
-    !is_cached_arg(arg) ? arg :
+# Unrolled with the offset accumulated over the arguments (each one is prepared at the offset
+# after the buffers of the ones before it), so that inference does not recurse over them. The
+# step is a named function, since it is part of the recursion through nested expressions
+# (see stencil_arg) whose inference limits are dropped below; a closure cannot be listed.
+@inline stencil_args(args::Tuple, reads::Tuple, offset::Val) = unrolled_map(
+    last,
+    unrolled_accumulate(
+        stencil_arg_after,
+        unrolled_map(tuple, args, reads);
+        init = (offset, nothing),
+    ),
+)
+@inline function stencil_arg_after((offset, _), (arg, reads))
+    arg′ = stencil_arg(arg, reads, offset)
+    return (add_bytes(offset, shared_buffer_bytes(arg′)), arg′)
+end
+# A lazy expression whose buffer does not fit after the ones before it is recomputed at every
+# read, and so are the expressions that it reads, except for the Fields in registers, which
+# are cached even if they do not fit (see DataLayouts.scoped_static_array).
+@inline neighbor_arg(arg, reads, offset = Val(0)) =
+    !caches_at_neighbors(arg) ? arg :
     passes_through(arg) ?
     Broadcast.Broadcasted(
         StencilStyle(),
         arg.f,
-        (neighbor_arg(arg.args[1], branch_free),),
+        (neighbor_arg(arg.args[1], reads, offset),),
         arg.axes,
-    ) : cached_arg(arg, branch_free)
+    ) :
+    caches_values(arg) && (arg isa Field || fits_after(arg, reads, offset)) ?
+    cached_arg(applied_arg(arg, offset), Val(reads isa Val{:branch_free}), offset) :
+    arg isa LazyField ?
+    Broadcast.Broadcasted(
+        arg.style,
+        arg.f,
+        stencil_args(arg.args, nested_reads(reads, arg), offset),
+        arg.axes,
+    ) : arg
+@inline fits_after(arg, reads, ::Val{offset}) where {offset} =
+    let limit = DataLayouts.total_buffer_limit(DataLayouts.DataScope(arg))
+        limit == typemax(Int) ||
+            offset + DataLayouts.aligned_buffer_bytes(neighbor_cached_bytes(arg, reads)) <=
+            limit
+    end
+# An operator that caches arguments is applied on its own before its result is cached, with
+# its pass's buffers after the offset and retired by then, so that the two are never live at
+# once; the result of one that caches nothing is written straight into its buffer.
+@inline applied_arg(arg, _) = arg
+@inline applied_arg(bc::StencilOperatorBroadcasted, offset) =
+    caches_args(bc) ? apply_stencil(bc, offset) : bc
 
-@inline materialize_buffer(bc::StencilBroadcasted) = constant_field(
-    apply_stencil!(buffer_similar(destination_template(bc), eltype(bc)), bc, Val(false)),
-)
-@inline register_values(bc::StencilBroadcasted) = constant_field(
-    apply_stencil!(register_similar(destination_template(bc), eltype(bc)), bc, Val(false)),
+# A cached expression is evaluated by a pass that starts after its own buffer, so that the
+# buffer cannot be overwritten even if the pass caches arguments.
+@inline function materialize_buffer(
+    bc::StencilBroadcasted,
+    ::Val{offset} = Val(0),
+) where {offset}
+    buffer = buffer_similar(destination_template(bc), eltype(bc), Val(offset))
+    pass_offset = add_bytes(Val(offset), shared_buffer_bytes(buffer))
+    return constant_field(apply_stencil!(buffer, bc, Val(false), pass_offset))
+end
+@inline register_values(bc::StencilBroadcasted, offset = Val(0)) = constant_field(
+    apply_stencil!(
+        register_similar(destination_template(bc), eltype(bc)),
+        bc,
+        Val(false),
+        offset,
+    ),
 )
 
 # Evaluate a stencil expression over a column into dest, each point on its own thread (in
 # rounds of the whole scope where cached reads need every thread; see update_points!). The
-# first synchronization publishes the values the pass reads, and the last one protects them
-# until all threads have read them (a cached argument's reader synchronizes instead). If
-# operator results are in scope registers (see register_similar), a pass that caches no
-# arguments skips both, since every earlier pass that read buffers ended synchronized (see
-# is_fused).
-@inline function apply_stencil!(dest, bc, finish)
+# first synchronization publishes the cached values the pass reads (a cached argument's
+# reader synchronizes instead), and the last one publishes dest when it is a buffer that a
+# later pass may read at other threads' points. Neither retires a buffer: the allocation
+# that next overlaps one synchronizes (see the buffer reuse invariant in apply_operator),
+# so a pass that caches no arguments into a result in registers has no barriers.
+@inline function apply_stencil!(dest, bc, finish, offset = Val(0))
     scope = DataLayouts.DataScope(bc)
     space = Fields.shared_space(bc)
-    stencil_bc = stencil_arg(bc, Val(false))
-    syncs =
-        num_caching_operators(bc) > 0 ||
-        !DataLayouts.has_scope_registers(Fields.field_values(destination_template(bc)))
-    syncs && DataLayouts.synchronize(scope)
+    stencil_bc = stencil_arg(bc, Val(false), offset)
+    num_caching_operators(bc) > 0 && DataLayouts.synchronize(scope)
     dest_data = Fields.field_values(dest)
     if has_private_buffers(bc)
         # One thread owns the column (as on CPUs): entering update_points!'s loop directly
@@ -764,7 +836,9 @@ end
             @inbounds column_value(stencil_bc, space, vertical_index(space, index))
         end
     end
-    syncs && finish isa Val{true} && DataLayouts.synchronize(scope)
+    finish isa Val{true} &&
+        !DataLayouts.stored_in_registers(dest_data) &&
+        DataLayouts.synchronize(scope)
     return dest
 end
 
@@ -778,8 +852,13 @@ end
     @inbounds point[] = column_value(stencil_bc, space, vertical_index(space, index))
     return nothing
 end
-@inline apply_stencil(bc) = constant_field(
-    apply_stencil!(register_similar(destination_template(bc), eltype(bc)), bc, Val(true)),
+@inline apply_stencil(bc, offset = Val(0)) = constant_field(
+    apply_stencil!(
+        register_similar(destination_template(bc), eltype(bc)),
+        bc,
+        Val(true),
+        offset,
+    ),
 )
 
 function assert_no_bcs(op, kwargs)
@@ -2700,10 +2779,11 @@ Base.Broadcast.broadcasted(op::DirichletOperator{Op}, args...) where {Op} =
 
 # These recurse per operator, alternating center and face spaces, which limits would widen.
 @drop_recursion_limits column_value, stencil_value, stencil_interior, stencil_left_boundary,
-stencil_right_boundary, stencil_arg, neighbor_arg, cached_arg, materialize_buffer,
-register_values, apply_stencil!
+stencil_right_boundary, stencil_arg, stencil_args, stencil_arg_after, neighbor_arg,
+applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil!,
+shared_buffer_bytes
 
 # Constant propagation on these never improves inference; it re-infers the whole expression.
-@drop_constprop apply_operators, inline_apply_operators, noinline_apply_operators,
+@drop_constprop apply_operators, inline_apply_operators,
 apply_operators!, operator_arg, pointwise_arg, apply_operator, apply_stencil,
 apply_stencil!, materialize_buffer, column_value, stencil_value
