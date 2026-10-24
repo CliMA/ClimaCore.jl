@@ -246,18 +246,11 @@ end
     # Extrapolate, the boundary face copies the closest center; with SetValue,
     # the matrix's boundary rows are zero (the value is imposed outside the
     # matrix, by a SetBoundaryOperator); with no boundary condition, they are
-    # NaN in the in-range entries (the out-of-range entries are clipped by the
-    # multiply), flagging the missing boundary condition.
+    # the interior rows with their out-of-range entries clipped.
     interp_interior = [f in (1, n + 1) ? [0, 0] : [0.5, 0.5] for f in 1:(n + 1)]
-    @test isequal(
-        matrix_rows(InterpolateC2F(), center_space),
-        stack(
-            [
-                f == 1 ? [0, NaN] :
-                f == n + 1 ? [NaN, 0] : [0.5, 0.5] for f in 1:(n + 1)
-            ];
-            dims = 1,
-        ),
+    @test matrix_rows(InterpolateC2F(), center_space) == stack(
+        [f == 1 ? [0, 0.5] : f == n + 1 ? [0.5, 0] : [0.5, 0.5] for f in 1:(n + 1)];
+        dims = 1,
     )
     @test matrix_rows(
         InterpolateC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
@@ -294,6 +287,74 @@ end
         [f == 1 ? [0, 2] : f == n + 1 ? [-2, 0] : [-1, 1] for f in 1:(n + 1)];
         dims = 1,
     )
+
+    # Without boundary conditions, the boundary rows of the C2F operator
+    # matrices are their interior rows with the out-of-range entries clipped.
+    @test matrix_rows(GradientC2F(), center_space) == stack(
+        [f == 1 ? [0, 1] : f == n + 1 ? [-1, 0] : [-1, 1] for f in 1:(n + 1)];
+        dims = 1,
+    )
+    @test matrix_rows(DivergenceC2F(), center_space) ≈ stack(
+        [
+            [
+                f == 1 ? zero(FT) : -(ᶜJ[f - 1] / ᶠJ[f]),
+                f == n + 1 ? zero(FT) : ᶜJ[f] / ᶠJ[f],
+            ] for f in 1:(n + 1)
+        ];
+        dims = 1,
+    )
+    ᶜones = ones(center_space)
+    curl_op_matrix = MatrixFields.operator_matrix(CurlC2F())
+    curl_rows = level_by_entry(
+        materialize(@lazy @. curl_op_matrix() * DiagonalMatrixRow(ᶜones)),
+    )
+    # Each row holds two 2×2 tensors, ±εⁱʲ / J (with εⁱʲ = [0 -1; 1 0]).
+    ε_entries = [0, 1, -1, 0]
+    @test curl_rows ≈ stack(
+        [
+            [
+                f == 1 ? zeros(4) : -ε_entries ./ ᶠJ[f];
+                f == n + 1 ? zeros(4) : ε_entries ./ ᶠJ[f]
+            ] for f in 1:(n + 1)
+        ];
+        dims = 1,
+    )
+    # WeightedInterpolateC2F has no interior row at the boundary, since it is
+    # normalized by the weight beyond the boundary face, so its boundary rows
+    # stay NaN.
+    winterp_op_matrix = MatrixFields.operator_matrix(WeightedInterpolateC2F())
+    winterp_rows = level_by_entry(
+        materialize(@lazy @. winterp_op_matrix(ᶜones)),
+    )
+    @test all(isnan, winterp_rows[[1, n + 1], :])
+    @test winterp_rows[2:n, :] ≈ fill(0.5, n - 1, 2)
+
+    # The automatic conversion of a C2F operator without boundary conditions
+    # still gives NaN at the boundary faces, flagging the missing boundary
+    # condition.
+    ᶜz = Fields.coordinate_field(center_space).z
+    ᶠgradz = vec(Array(parent(materialize(@lazy @. GradientC2F()(ᶜz)))))
+    @test isnan(ᶠgradz[1]) && isnan(ᶠgradz[n + 1])
+    @test !any(isnan, ᶠgradz[2:n])
+
+    # Composing explicit operator matrices (issue #2684): the boundary rows of
+    # a DivergenceF2C with SetDivergence are zero, so the product of its matrix
+    # with the matrix of a GradientC2F without boundary conditions has zero
+    # boundary rows, rather than the NaNs from 0 * NaN.
+    div_op_matrix = MatrixFields.operator_matrix(
+        DivergenceF2C(;
+            bottom = SetDivergence(FT(0)),
+            top = SetDivergence(FT(0)),
+        ),
+    )
+    grad_op_matrix = MatrixFields.operator_matrix(GradientC2F())
+    div_grad_rows = level_by_entry(
+        materialize(
+            @lazy @. div_op_matrix() * grad_op_matrix() * DiagonalMatrixRow(ᶜones)
+        ),
+    )
+    @test !any(isnan, div_grad_rows)
+    @test all(iszero, div_grad_rows[[1, n], :])
 
     # DivergenceF2C: D(v)[i] = (J v³[i+1/2] - J v³[i-1/2]) / J[i], with the
     # fixed input's coefficient zeroed under SetValue.
