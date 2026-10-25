@@ -170,8 +170,8 @@ mean_op = Operators.LumpedRestriction(Quadratures.GL{1}())
 const CUDA_EXT = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
 
 # A slice loop over an argument that is already one slice keeps the scope it is
-# given; splitting it into smaller subscopes would change how its points are assigned to
-# threads and registers (see DataLayouts.slice_exceeds_subscope).
+# given; splitting it into smaller subscopes would change how its points map to
+# threads and registers (see DataLayouts.slice_subscope).
 @testset "slice loops over one slice keep their scope" begin
     slice_subscope = ClimaCore.DataLayouts.slice_subscope
     slab = ClimaCore.DataLayouts.slab
@@ -180,6 +180,8 @@ const CUDA_EXT = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
     @test subscope == CUDA_EXT.ThisSubBlock{32}() # Nq * Nq = 25 points per slab
     index = Tuple(first(ClimaCore.DataLayouts.each_slice_index(slab, data)))
     @test slice_subscope(subscope, slab, slab(data, index...)) == subscope
+    @test slice_subscope(CUDA_EXT.ThisSubBlock{64}(), slab, slab(data, index...)) ==
+          CUDA_EXT.ThisSubBlock{64}()
 end
 
 # Operators.fits_buffers decides the shared memory of a broadcast's slice loop from the

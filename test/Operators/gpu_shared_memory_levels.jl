@@ -412,4 +412,33 @@ error_message(f) =
             @test Array(parent(og)) ≈ parent(oc)
         end
     end
+
+    # At power-of-two Nv (e.g., Nv = 32), a foreach_column with a 33-level face
+    # field runs in ThisSubBlock{64}; inner 32-level center broadcasts keep
+    # ThisSubBlock{64} so face register temporaries read at level 33 use the
+    # 64-thread register stride.
+    for Nv in (31, 32)
+        (c_gpu, c_cpu) = map((GPU.z, CPU.z)) do z
+            s = TU.CenterExtrudedFiniteDifferenceSpace(
+                FT;
+                zelem = Nv,
+                helem = 2,
+                Nq = 4,
+                context = ClimaComms.context(z),
+            )
+            zc = Fields.coordinate_field(s).z
+            zf = Fields.coordinate_field(Spaces.face_space(s)).z
+            (; x = sin.(zc), y = cos.(zc), zf, o = similar(zc))
+        end
+        function pow2_column_body!(o, x, y, zf)
+            ᶠreg = @. ᶠinterp(x) + zf
+            ᶜreg1 = @. x + y
+            ᶜreg2 = @. x - y
+            @. o = ᶜinterp(ᶠreg * ᶠinterp(ᶜreg1) + ᶠinterp(ᶜreg2))
+            return nothing
+        end
+        DataLayouts.foreach_column(pow2_column_body!, c_cpu.o, c_cpu.x, c_cpu.y, c_cpu.zf)
+        DataLayouts.foreach_column(pow2_column_body!, c_gpu.o, c_gpu.x, c_gpu.y, c_gpu.zf)
+        @test Array(parent(c_gpu.o)) ≈ parent(c_cpu.o)
+    end
 end

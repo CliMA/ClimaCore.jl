@@ -85,7 +85,14 @@ the number of points per thread.
 slice a scope with a statically known number of threads.
 """
 @inline function slice_subscope(scope, op::O, args...) where {O}
-    partition(scope) == ThisThread() && return ThisThread()
+    (partition(scope) == ThisThread() || op === view) && return ThisThread()
+    # Re-slicing an argument that is already a single slice keeps the outer
+    # slice's scope so register strides and shared buffer regions match outer
+    # temporaries, even when a center column has one fewer point than a face
+    # column at a power-of-two Nv.
+    !isnothing(static_num_threads(scope)) &&
+        isone(length(each_slice_index(op, first(args)))) &&
+        return scope
     max_slice_points = unrolled_maximum(Base.Fix1(num_slice_points, op), args)
     return points_subscope(scope, max_slice_points)
 end
@@ -95,17 +102,10 @@ end
 # argument at each scope level, which allocates once per kernel launch on hosts.
 @inline function points_subscope(scope, max_slice_points::Int)
     subscope = partition(scope)
-    subscope == ThisThread() && return subscope
-    max_slice_points > num_threads(partition(subscope)) &&
-        return slice_exceeds_subscope(scope, subscope, max_slice_points) ? scope : subscope
+    (subscope == ThisThread() || max_slice_points > num_threads(partition(subscope))) &&
+        return subscope
     return points_subscope(subscope, max_slice_points)
 end
-
-# Whether every subset of scope is too small for a slice (re-slicing in a slice loop): a
-# subset's stride would not match outer register arrays, and shared buffers would double.
-@inline slice_exceeds_subscope(scope, subscope, max_slice_points) =
-    !isnothing(static_num_threads(scope)) &&
-    something(static_num_threads(subscope), typemax(Int)) < max_slice_points
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
