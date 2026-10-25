@@ -524,7 +524,7 @@ recomputable(::LazyField, _) = false
 recomputable(bc::Fields.PointwiseBroadcasted, ::Val{depth}) where {depth} =
     depth > 0 &&
     recomputable_node(bc.f) &&
-    unrolled_all(arg -> recomputable(arg, Val(depth - 1)), bc.args)
+    unrolled_all(Base.Fix2(recomputable, Val(depth - 1)), bc.args)
 recomputable(bc::StencilOperatorBroadcasted, _) = recomputable_operator(bc.f)
 const MAX_RECOMPUTED_DEPTH = 2
 
@@ -553,7 +553,7 @@ recomputable_node(_) = true
 caches_values(arg) =
     is_cached(arg) &&
     !recomputable(arg) &&
-    (arg isa Field || fits_buffers(arg, single_field_buffer_bytes))
+    (arg isa Field || fits_buffers(arg, cached_bytes))
 is_cached_arg(arg) = passes_through(arg) ? is_cached_arg(arg.args[1]) : caches_values(arg)
 
 # Whether reading an argument at neighboring points caches any values: its own, or those of
@@ -564,9 +564,8 @@ caches_at_neighbors(arg) =
 
 caches_args(bc) =
     !has_private_buffers(bc) &&
-    unrolled_any(identity, unrolled_map(bc.args, arg_reads(bc)) do arg, reads
-        reads_neighbor(reads) && caches_at_neighbors(arg)
-    end)
+    unrolled_any(identity, unrolled_map(caches_neighbor_arg, bc.args, arg_reads(bc)))
+caches_neighbor_arg(arg, reads) = reads_neighbor(reads) && caches_at_neighbors(arg)
 
 # How each argument of an expression is read where the expression is read with reads: at
 # neighboring points if the expression is, without branching if neither the expression nor
@@ -612,24 +611,36 @@ operator_arg(bc::StencilOperatorBroadcasted, reads = Val(false)) =
     is_fused(bc) || reads_neighbor(reads) ? fused_stencil(bc, reads) : apply_operators(bc)
 
 # A pointwise expression over stencil operators is evaluated in one pass, which
-# also evaluates the operators that it reads at the same point, as long as at most
-# one of them caches its arguments. An operator is instead applied on its own (see
-# operator_arg) if it caches arguments when other operators do too.
-pointwise_stencil(bc) = pointwise_stencil(bc, Val(num_caching_operators(bc) <= 1))
+# also evaluates the operators that it reads at the same point when their
+# co-live cached buffers fit in the scope's buffer limit and none of them have
+# nested stencils of their own. An operator is instead applied on its own (see
+# operator_arg) when fusing all caching operators into the pass would compound
+# multi-level stencils or exceed the buffer limit.
+pointwise_stencil(bc) = pointwise_stencil(
+    bc,
+    Val(
+        num_caching_operators(bc) <= 1 ||
+            (!has_nested_pass_stencils(bc) && fits_buffers(bc, pass_cached_bytes)),
+    ),
+)
+has_nested_pass_stencils(_) = false
+has_nested_pass_stencils(bc::Fields.PointwiseBroadcasted) =
+    unrolled_any(has_nested_pass_stencils, bc.args)
+has_nested_pass_stencils(bc::StencilOperatorBroadcasted) =
+    unrolled_any(has_stencils, bc.args)
 pointwise_stencil(bc, fuse_caching) = Broadcast.Broadcasted(
     bc.style,
     bc.f,
-    unrolled_map(bc.args, pass_reads(bc)) do arg, reads
-        reads isa Val{:same_pass} ? pointwise_arg(arg, fuse_caching) :
-        operator_arg(arg, reads)
-    end,
+    unrolled_map(pointwise_stencil_arg, bc.args, pass_reads(bc, fuse_caching)),
     bc.axes,
 )
-# How each argument is read (see arg_reads), or Val(:same_pass) if it is evaluated in the
-# pass that reads it (two tuples, since unrolled_map widens over more).
-pass_reads(bc) =
+pointwise_stencil_arg(arg, (same_pass, reads, fuse_caching)) =
+    same_pass isa Val{true} ? pointwise_arg(arg, fuse_caching) : operator_arg(arg, reads)
+# Pair each argument's in_pass and arg_reads with fuse_caching (unrolled_map
+# unrolls at most two tuples without widening).
+pass_reads(bc, fuse_caching) =
     unrolled_map(in_pass(bc), arg_reads(bc)) do same_pass, reads
-        same_pass isa Val{true} ? Val(:same_pass) : reads
+        (same_pass, reads, fuse_caching)
     end
 pointwise_arg(arg, _) = operator_arg(arg)
 pointwise_arg(bc::StencilBroadcasted, fuse_caching) = pointwise_stencil(bc, fuse_caching)
@@ -642,9 +653,27 @@ in_pass(bc::StencilOperatorBroadcasted) =
     unrolled_map(reads -> Val(reads isa Val{false}), arg_reads(bc))
 num_caching_operators(_) = 0
 num_caching_operators(bc::StencilBroadcasted) =
-    Int(caches_args(bc)) + unrolled_sum(unrolled_map(bc.args, in_pass(bc)) do arg, same_pass
-        same_pass isa Val{true} ? num_caching_operators(arg) : 0
-    end)
+    Int(caches_args(bc)) +
+    unrolled_sum(unrolled_map(pass_caching_operators, bc.args, in_pass(bc)))
+pass_caching_operators(arg, same_pass) =
+    same_pass isa Val{true} ? num_caching_operators(arg) : 0
+pass_cached_bytes(_) = 0
+pass_cached_bytes(bc::StencilBroadcasted) =
+    (
+        bc isa StencilOperatorBroadcasted && !has_private_buffers(bc) ?
+        unrolled_sum(unrolled_map(neighbor_pass_bytes, bc.args, arg_reads(bc))) : 0
+    ) + unrolled_sum(unrolled_map(same_pass_cached_bytes, bc.args, in_pass(bc)))
+same_pass_cached_bytes(arg, same_pass) =
+    same_pass isa Val{true} ? pass_cached_bytes(arg) : 0
+neighbor_pass_bytes(arg, reads) =
+    !reads_neighbor(reads) ? 0 :
+    passes_through(arg) ? neighbor_pass_bytes(arg.args[1], reads) :
+    caches_values(arg) ?
+    DataLayouts.aligned_buffer_bytes(neighbor_cached_bytes(arg, reads)) :
+    arg isa LazyField ?
+    unrolled_sum(
+        unrolled_map(neighbor_pass_bytes, arg.args, nested_reads(reads, arg)),
+    ) : 0
 
 # On GPUs, every operator in a pass allocates a shared buffer per cached
 # argument, placed after the buffers before it (see stencil_args), and a lazy
@@ -653,9 +682,9 @@ num_caching_operators(bc::StencilBroadcasted) =
 # bytes are reported here to select a shared memory level that holds them.
 buffer_bytes(bc::StencilOperatorBroadcasted) =
     has_private_buffers(bc) ? 0 :
-    unrolled_sum(unrolled_map(bc.args, arg_reads(bc)) do arg, reads
-        reads_neighbor(reads) ? register_neighbor_bytes(arg, reads) : 0
-    end)
+    unrolled_sum(unrolled_map(neighbor_arg_buffer_bytes, bc.args, arg_reads(bc)))
+neighbor_arg_buffer_bytes(arg, reads) =
+    reads_neighbor(reads) ? register_neighbor_bytes(arg, reads) : 0
 register_neighbor_bytes(arg, reads) =
     passes_through(arg) ? register_neighbor_bytes(arg.args[1], reads) :
     arg isa Field && DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
@@ -671,15 +700,14 @@ uses_shared_buffers(bc::StencilOperatorBroadcasted) =
     !has_private_buffers(bc) && (
         unrolled_any(
             identity,
-            unrolled_map(bc.args, arg_reads(bc)) do arg, reads
-                reads_neighbor(reads) && has_shared_neighbor_buffer(arg, reads)
-            end,
+            unrolled_map(uses_shared_neighbor_buffer, bc.args, arg_reads(bc)),
         ) || unrolled_any(uses_shared_buffers, bc.args)
     )
+uses_shared_neighbor_buffer(arg, reads) =
+    reads_neighbor(reads) && has_shared_neighbor_buffer(arg, reads)
 has_shared_neighbor_buffer(arg, reads) =
-    !caches_at_neighbors(arg) ? false :
     passes_through(arg) ? has_shared_neighbor_buffer(arg.args[1], reads) :
-    caches_values(arg) && neighbor_cached_bytes(arg, reads) > 0 ? true :
+    caches_values(arg) ? neighbor_cached_bytes(arg, reads) > 0 :
     arg isa LazyField ?
     unrolled_any(
         identity,
@@ -691,10 +719,12 @@ has_shared_neighbor_buffer(arg, reads) =
     ) : false
 
 @drop_recursion_limits has_stencils, recomputable, is_cached_arg, caches_at_neighbors,
-caches_values, caches_args, passes_through, arg_reads, nested_reads, operator_arg,
-fused_stencil, pointwise_stencil, pass_reads, pointwise_arg, in_pass,
-num_caching_operators, buffer_bytes, register_neighbor_bytes, uses_shared_buffers,
-has_shared_neighbor_buffer
+caches_values, caches_args, caches_neighbor_arg, passes_through, arg_reads, nested_reads,
+operator_arg, fused_stencil, pointwise_stencil, has_nested_pass_stencils,
+pointwise_stencil_arg, pass_reads, pointwise_arg, in_pass, num_caching_operators,
+pass_caching_operators, pass_cached_bytes, same_pass_cached_bytes, neighbor_pass_bytes,
+buffer_bytes, neighbor_arg_buffer_bytes, register_neighbor_bytes, uses_shared_buffers,
+uses_shared_neighbor_buffer, has_shared_neighbor_buffer
 
 # Value of an argument or boundary value at idx, with newindex to handle
 # horizontal and point spaces. Implemented as a generated function for
@@ -2846,7 +2876,7 @@ Base.Broadcast.broadcasted(op::DirichletOperator{Op}, args...) where {Op} =
 # would widen.
 @drop_recursion_limits column_value, stencil_value, stencil_interior, stencil_left_boundary,
 stencil_right_boundary, stencil_arg, stencil_args, stencil_arg_after, neighbor_arg,
-applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil,
+fits_after, applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil,
 apply_stencil!, inline_apply_operators, apply_pointwise_operators, apply_operators,
 shared_buffer_bytes, largest_application_bytes
 
