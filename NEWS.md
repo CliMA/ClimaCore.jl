@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] `ClimaComms.context` and `ClimaComms.device` no longer
+  throw a `TypeError` for every nonempty `FieldVector`. They return the context
+  and device of the first `Field` at any nesting depth that is not a
+  `PointField`, or else of the first `PointField`, and throw an error for a
+  `FieldVector` without a `Field`.
+
 v1.0.5
 -------
 
