@@ -618,34 +618,3 @@ Return the linear index of the current thread across all blocks:
 """
 @inline thread_index() =
     (CUDA.blockIdx().x - UInt32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
-
-"""
-    kernel_indexes(tidx, n)
-
-Return the `CartesianIndex` corresponding to the linear thread index `tidx` in data of
-size `n`, a tuple of lengths along each dimension.
-"""
-Base.@propagate_inbounds kernel_indexes(tidx, n::Tuple) =
-    CartesianIndices(map(x -> Base.OneTo(x), n))[tidx]
-
-"""
-    valid_range(tidx, n::Int)
-
-Return whether the thread index `tidx` is in the valid range `1:n`, where `n` is the
-total number of items to process.
-
-# Examples
-
-```julia
-function kernel!(data, n)
-    @inbounds begin
-        tidx = thread_index()
-        if valid_range(tidx, n)
-            I = kernel_indexes(tidx, n)
-            do_work!(data[I])
-        end
-    end
-end
-```
-"""
-@inline valid_range(tidx, n) = 1 ≤ tidx ≤ n

@@ -154,8 +154,7 @@ end
     array::RegisterArray{T, N, Sz, F, Stride},
 ) where {T, N, Sz, F, Stride} =
     RegisterArray{Sz, F, Stride}(StaticArrays.SArray(array.array))
-# Point views (like boundary levels of columns) are frozen with their parents, and they also
-# keep the scopes of their layouts.
+# Point views (like boundary levels of columns) are frozen with their parents.
 @inline function StaticArrays.SArray(
     view::RegisterPointView{T, Nf, N, F},
 ) where {T, Nf, N, F}
@@ -224,6 +223,6 @@ end
 ) where {T, B, F, Stride}
     (; Nf, Np) = register_array_params(array_size, Val(F))
     storage = StaticArrays.MArray{Tuple{cld(Np, Stride) * Nf}, B}(undef)
-    # The register array has the layout's canonical size; skip the parent check.
-    return @inbounds rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
+    # The register array has the layout's canonical size and a valid base type.
+    return unchecked_rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
 end

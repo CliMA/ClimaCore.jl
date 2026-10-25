@@ -107,28 +107,6 @@ include("cache.jl")
 include("safe_mapreduce.jl")
 
 """
-    cart_ind(n::NTuple, i::Integer)
-
-Return the `CartesianIndex` `CartesianIndices(map(Base.OneTo, n))[i]` for an array
-of size `n` and linear index `i`.
-"""
-Base.@propagate_inbounds cart_ind(n::NTuple, i::Integer) =
-    @inbounds CartesianIndices(map(x -> Base.OneTo(x), n))[i]
-
-"""
-    linear_ind(n::NTuple, ci::CartesianIndex)
-    linear_ind(n::NTuple, t::NTuple)
-
-Return the linear index `LinearIndices(map(Base.OneTo, n))[ci]` for an array of
-size `n` and Cartesian index `ci`. The method for a tuple `t` wraps it in a
-`CartesianIndex` first.
-"""
-Base.@propagate_inbounds linear_ind(n::NTuple, ci::CartesianIndex) =
-    @inbounds LinearIndices(map(x -> Base.OneTo(x), n))[ci]
-Base.@propagate_inbounds linear_ind(n::NTuple, loc::NTuple) =
-    linear_ind(n, CartesianIndex(loc))
-
-"""
     stable_view(array, indices...)
 
 Return a view of `array` like `view(array, indices...)`, with two modifications
@@ -182,6 +160,57 @@ check, whose code Julia 1.10 keeps in the optimized IR of callers even under `@i
     Base._maybe_reshape_parent(array, Base.index_ndims(converted...)),
     converted...,
 )
+
+"""
+    linear_index_and_stride(I, array, index, Val(F))
+
+Return a dense array that holds the entries of `array`, along with the linear
+index into it of an entry of `array` and the distance between the linear indices
+of consecutive entries along dimension `F`. The entry is at index 1 along `F` and
+at the Cartesian `index` along the other dimensions; when `F` is `nothing`,
+`index` has a coordinate along every dimension and the distance is 1. The `array`
+can be dense or a view that indexes every dimension of a dense parent with a unit
+range. Integer arithmetic is in type `I`, such as `UInt32` in GPU kernels, where a
+64-bit integer operation takes several instructions.
+"""
+@inline function linear_index_and_stride(::Type{I}, array, index, ::Val{F}) where {I, F}
+    full_index =
+        isnothing(F) ? index :
+        (
+            ntuple(d -> index[d], Val(F - 1))...,
+            1,
+            ntuple(d -> index[F - 1 + d], Val(length(index) - F + 1))...,
+        )
+    (dense_array, dense_index) =
+        dense_array_and_index(array, unrolled_map(i -> i % I, full_index))
+    sizes = unrolled_map(n -> n % I, size(dense_array))
+    stride = isnothing(F) ? one(I) : axis_stride(sizes, Val(F))
+    return (dense_array, (linear_offset(dense_index, sizes) + one(I), stride))
+end
+
+const UnitRangeSubArray{A} = SubArray{
+    <:Any,
+    <:Any,
+    A,
+    <:Tuple{Vararg{Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}}},
+}
+dense_array_and_index(array::DenseArray, index) = (array, index)
+dense_array_and_index(array::UnitRangeSubArray, index) = dense_array_and_index(
+    parent(array),
+    unrolled_map(parent_coordinate, index, array.indices),
+)
+
+@inline parent_coordinate(i, ::Base.Slice) = i
+@inline parent_coordinate(i, range) = i + (first(range) - 1) % typeof(i)
+
+linear_offset(index::Tuple{Any}, _) = first(index) - one(first(index))
+linear_offset(index, sizes) =
+    first(index) - one(first(index)) +
+    first(sizes) * linear_offset(Base.tail(index), Base.tail(sizes))
+
+axis_stride(sizes, ::Val{1}) = one(first(sizes))
+axis_stride(sizes, ::Val{F}) where {F} =
+    first(sizes) * axis_stride(Base.tail(sizes), Val(F - 1))
 
 """
     unionall_type(T)

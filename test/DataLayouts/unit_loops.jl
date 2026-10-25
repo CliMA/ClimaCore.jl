@@ -83,16 +83,14 @@ end
     device = ClimaComms.device()
 
     # Layouts with several components use Cartesian indexing, whose indices are
-    # stored in a CartesianIndices object. Every single-threaded reduction
-    # should be identical to a strict pairwise reduction over positions (Base's
-    # mapreduce falls back to a sequential fold for CartesianIndices, whose
-    # roundoff error grows linearly with the number of points, while the
-    # roundoff error of a pairwise reduction only grows logarithmically). The
-    # reference is written out by hand because the @simd blocks in Base's
-    # mapreduce and in safe_mapreduce reassociate values at contiguous
-    # positions whenever bounds checking is disabled. Multithreaded and GPU
-    # reductions partition the points across threads, so they are only
-    # approximately pairwise.
+    # stored in a CartesianIndices object. Single-threaded reductions split the
+    # points like a strict pairwise reduction over positions (Base's mapreduce
+    # falls back to a sequential fold for CartesianIndices, whose roundoff error
+    # grows linearly with the number of points, while the roundoff error of a
+    # pairwise reduction only grows logarithmically), but the @simd loops in
+    # safe_mapreduce reassociate the values in each block, so they only match the
+    # reference to a few ulps. Multithreaded and GPU reductions partition the
+    # points across threads, and they require a looser error bound.
     (Ni, Nj, Nh) = (4, 4, 5)
     array = Float32.(rand(64, Ni, Nj, 2, Nh)) ./ 3
     T = Tuple{Float32, Float32}
@@ -100,7 +98,7 @@ end
     first_values = vec(Array(parent(data))[:, :, :, 1, :])
     pairwise_sum = strict_pairwise_sum(first_values, 1, length(first_values))
     if device isa ClimaComms.CPUSingleThreaded
-        @test sum(value -> value[1], data) == pairwise_sum
+        @test sum(value -> value[1], data) ≈ pairwise_sum rtol = 4 * eps(Float32)
     else
         @test sum(value -> value[1], data) ≈ pairwise_sum
     end
@@ -125,19 +123,26 @@ end
 # A multi-element tuple is indexed along the first (level) dimension, as in Base,
 # and an IJHMask leaves inactive columns untouched, as for any other broadcast.
 @testset "multi-element tuple broadcasts with a mask" begin
-    device = ClimaComms.CPUSingleThreaded()
+    device = ClimaComms.device()
     data = test_data(device, Float64, 1, 3)
     fill!(parent(data), 0)
     mask = DataLayouts.IJHMask(data)
-    DataLayouts.is_active(mask)[1, 1, 1, 1] = false
+    is_active_copy = Array(parent(DataLayouts.is_active(mask)))
+    is_active_copy[1, 1, 1, 1, 1] = false
+    copyto!(parent(DataLayouts.is_active(mask)), is_active_copy)
     DataLayouts.set_mask_maps!(mask)
     bc = Base.broadcasted(identity, (1.0, 2.0, 3.0))
     copyto!(data, bc, mask)
-    @test parent(data)[:, 1, 1, 1, 1] == zeros(3)
-    @test parent(data)[:, 2, 1, 1, 1] == [1.0, 2.0, 3.0]
-    @test parent(data)[:, 4, 4, 1, 5] == [1.0, 2.0, 3.0]
-    copyto!(data, bc)
-    @test parent(data)[:, 1, 1, 1, 1] == [1.0, 2.0, 3.0]
+    parent_copy = Array(parent(data))
+    @test parent_copy[:, 1, 1, 1, 1] == zeros(3)
+    @test parent_copy[:, 2, 1, 1, 1] == [1.0, 2.0, 3.0]
+    @test parent_copy[:, 4, 4, 1, 5] == [1.0, 2.0, 3.0]
+    ArrayType = ClimaComms.array_type(device){Float64}
+    for data in (data, DataLayouts.VIJHF{Float64, 3, 2, 2, 1}(ArrayType))
+        data .= (1.0, 2.0, 3.0)
+        parent_copy = Array(parent(data))
+        @test all(v -> all(==(v), selectdim(parent_copy, 1, v)), 1:3)
+    end
 end
 
 parent_broadcasted(data::DataLayouts.DataLayout) = parent(data)
@@ -534,8 +539,9 @@ end
         registers[v] = (v, -v)
         registers.:2[v] = 4v
         @test registers[v] == (v, 4v)
-        frozen_point = DataLayouts.rebuild(view(registers, v), StaticArrays.SArray)
-        @test DataLayouts.DataScope(frozen_point) == FakeGroup{16}()
+        frozen_point =
+            DataLayouts.unchecked_rebuild(view(registers, v), StaticArrays.SArray)
+        @test parent(parent(frozen_point)).array isa StaticArrays.SArray
         @test frozen_point[] == (v, 4v)
     end
 end

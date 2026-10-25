@@ -46,8 +46,8 @@ function compute_element_bounds_kernel!(limiter, ρq, ρ)
     (Nv, Ni, Nj, Nh) = size(ρ)
     n = (Nv, Nh)
     tidx = thread_index()
-    @inbounds if valid_range(tidx, prod(n))
-        (v, h) = kernel_indexes(tidx, n).I
+    @inbounds if 1 <= tidx <= prod(n)
+        (v, h) = DataLayouts.cartesian_index_from_linear(n, tidx).I
         (; q_bounds) = limiter
         local q_min, q_max
         slab_ρq = slab(ρq, v, h)
@@ -104,8 +104,8 @@ function compute_neighbor_bounds_local_kernel!(
     (Nv, _, _, Nh) = size(q_bounds_nbr)
     n = (Nv, Nh)
     tidx = thread_index()
-    @inbounds if valid_range(tidx, prod(n))
-        (v, h) = kernel_indexes(tidx, n).I
+    @inbounds if 1 <= tidx <= prod(n)
+        (v, h) = DataLayouts.cartesian_index_from_linear(n, tidx).I
         q_bounds = Base.broadcastable(limiter.q_bounds)
         slab_q_bounds = slab(q_bounds, v, h)
         q_min = slab_q_bounds[1]
@@ -152,8 +152,8 @@ function apply_limiter_kernel!(limiter::QuasiMonotoneLimiter, ρq_data, ρ_data,
     (Nv, _, _, Nh) = size(ρq_data)
     n = (Nv, Nh)
     tidx = thread_index()
-    @inbounds if valid_range(tidx, prod(n))
-        (v, h) = kernel_indexes(tidx, n).I
+    @inbounds if 1 <= tidx <= prod(n)
+        (v, h) = DataLayouts.cartesian_index_from_linear(n, tidx).I
         # Convergence statistics are discarded on GPUs (no warning on failure).
         apply_limit_slab!(
             slab(ρq_data, v, h),
@@ -202,11 +202,11 @@ function apply_positivity_limiter_kernel!(
     (Nv, _, _, Nh) = size(first(dstates))
     n = (Nv, Nh)
     tidx = thread_index()
-    @inbounds if valid_range(tidx, prod(n))
-        (v, h) = kernel_indexes(tidx, n).I
+    @inbounds if 1 <= tidx <= prod(n)
+        (v, h) = DataLayouts.cartesian_index_from_linear(n, tidx).I
         apply_positivity_slab!(
             lim,
-            map(d -> slab(d, v, h), dstates),
+            map(d -> @inbounds(slab(d, v, h)), dstates),
             daux === nothing ? nothing : slab(daux, v, h),
             slab(dWJ, v, h),
         )

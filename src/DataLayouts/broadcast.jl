@@ -26,13 +26,9 @@ Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = s
 Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
 # Enable automatic nested broadcasting over supported types of iterators.
-# The wrappers keep the entries per value, so the parent check can be skipped; it is only
-# kept on CPUs, whose point loops need it to vectorize (see check_parent).
-@inline function Broadcast.broadcastable(data::DataLayout)
-    T = add_auto_broadcasters(eltype(data))
-    return parent(data) isa Union{Array, SubArray{<:Any, <:Any, <:Array}} ?
-           reinterpret(T, data) : @inbounds reinterpret(T, data)
-end
+# The wrappers keep the entries per value, so the parent check can be skipped.
+@inline Broadcast.broadcastable(data::DataLayout) =
+    unchecked_rebuild(data, parent(data), add_auto_broadcasters(eltype(data)))
 @inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
@@ -157,7 +153,7 @@ the arguments of a broadcast expression.
 # Extrude singleton axes like Broadcast.combine_axes when combining vijh_params.
 @inline vijh_params(bc::LazyDataLayout) =
     unrolled_reduce(unrolled_map(vijh_params, layout_args(bc))) do params1, params2
-        unrolled_map(params1, params2) do N1, N2
+        map(params1, params2) do N1, N2
             isnothing(N1) || isnothing(N2) ? nothing :
             N1 == N2 || isone(N2) ? N1 :
             isone(N1) ? N2 : Broadcast.throwdm((Base.OneTo(N1),), (Base.OneTo(N2),))
