@@ -1367,6 +1367,14 @@ steps:
           env:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
 
+      - label: ":rocket: Downstream: trigger ClimaCoupler CI"
+        trigger: "climacoupler-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+
   - wait
 
   - label: ":chart_with_downwards_trend: build history"
