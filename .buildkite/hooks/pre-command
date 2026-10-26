@@ -2,6 +2,6 @@
 set -euo pipefail
 
 # Steps after init compile into a node-local depot ahead of the shared one.
-if [[ "${BUILDKITE_STEP_KEY:-}" != "init_cpu_env" ]]; then
+if [[ "${BUILDKITE_STEP_KEY:-}" != init_* ]]; then
     export JULIA_DEPOT_PATH="$TMPDIR/depot:$JULIA_DEPOT_PATH"
 fi
