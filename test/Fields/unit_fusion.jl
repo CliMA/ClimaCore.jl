@@ -41,7 +41,7 @@ function test_fused_loop(foreach_slice, space, subspace)
     foreach_slice(fused_loop!, dest, src1, src2)
     @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
 
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
+    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : (Base,)
     @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
 end
 

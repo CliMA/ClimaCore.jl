@@ -128,7 +128,7 @@ const comms_device = ClimaComms.device()
 # comms_device = ClimaComms.CPUSingleThreaded()
 @show comms_device
 const USING_CUDA = comms_device isa ClimaComms.CUDADevice
-cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
+cuda_module(ext) = USING_CUDA ? ext.CUDA.CUDACore : ext
 const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
 const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
 const CUDA_FRAMES =
