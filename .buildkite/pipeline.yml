@@ -1339,6 +1339,8 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/invalidations.jl"
   - group: "Downstream tests"
+    depends_on: ~ # downstream builds should not depend on any steps in this
+                  # pipeline
     steps:
       # Downstream test: run ClimaAtmos CI against this ClimaCore commit.
       # ClimaAtmos's pipeline sees UPSTREAM_PACKAGES and
