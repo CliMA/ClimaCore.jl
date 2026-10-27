@@ -279,12 +279,34 @@ end
     )
 
     # GradientC2F with SetValue: G(x)[1/2] = 2 (x[1] - x₀) e³, so the linear
-    # part of a boundary row is twice the closest center's coefficient.
+    # part of a boundary row is twice the closest center's coefficient. The
+    # prescribed value only contributes a constant, so the matrix is
+    # independent of it.
+    grad_c2f_rows = stack(
+        [f == 1 ? [0, 2] : f == n + 1 ? [-2, 0] : [-1, 1] for f in 1:(n + 1)];
+        dims = 1,
+    )
     @test matrix_rows(
         GradientC2F(; bottom = SetValue(FT(0)), top = SetValue(FT(0))),
         center_space,
-    ) ≈ stack(
-        [f == 1 ? [0, 2] : f == n + 1 ? [-2, 0] : [-1, 1] for f in 1:(n + 1)];
+    ) ≈ grad_c2f_rows
+    @test matrix_rows(
+        GradientC2F(; bottom = SetValue(FT(3)), top = SetValue(FT(-2))),
+        center_space,
+    ) ≈ grad_c2f_rows
+
+    # DivergenceC2F with SetValue: D(v)[1/2] = 2 (J v³[1] - J v³₀) / J[1/2],
+    # again keeping only the linear part.
+    div_c2f_bcs = (;
+        bottom = SetValue(zero(Geometry.UVWVector{FT})),
+        top = SetValue(zero(Geometry.UVWVector{FT})),
+    )
+    @test matrix_rows(DivergenceC2F(; div_c2f_bcs...), center_space) ≈ stack(
+        [
+            f == 1 ? [zero(FT), 2 * ᶜJ[1] / ᶠJ[1]] :
+            f == n + 1 ? [-2 * ᶜJ[n] / ᶠJ[n + 1], zero(FT)] :
+            [-(ᶜJ[f - 1] / ᶠJ[f]), ᶜJ[f] / ᶠJ[f]] for f in 1:(n + 1)
+        ];
         dims = 1,
     )
 
