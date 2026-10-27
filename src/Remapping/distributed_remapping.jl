@@ -1126,25 +1126,20 @@ function _collect_interpolated_values!(
 )
     cuda_synchronize(ClimaComms.device(remapper.comms_ctx))   # Sync streams before MPI calls
     if only_one_field
-        ClimaComms.reduce!(
-            remapper.comms_ctx,
-            view(remapper._interpolated_values, remapper.colons..., 1),
-            dest,
-            +,
-        )
+        sendbuf = view(remapper._interpolated_values, remapper.colons..., 1)
+        recvbuf = isnothing(dest) ? similar(sendbuf) : dest
     else
         num_fields = 1 + index_field_end - index_field_begin
-        ClimaComms.reduce!(
-            remapper.comms_ctx,
-            view(
-                remapper._interpolated_values,
-                remapper.colons...,
-                1:num_fields,
-            ),
-            view(dest, remapper.colons..., index_field_begin:index_field_end),
-            +,
-        )
+        sendbuf =
+            view(remapper._interpolated_values, remapper.colons..., 1:num_fields)
+        recvbuf =
+            isnothing(dest) ? similar(sendbuf) :
+            view(dest, remapper.colons..., index_field_begin:index_field_end)
     end
+    # Non-root ranks have `dest == nothing`, so they pass `similar(sendbuf)` instead.
+    # Cray MPICH's GPU-aware MPI_Reduce fails on the root with "Message truncated" if any
+    # non-root rank passes a NULL receive buffer with a GPU send buffer.
+    ClimaComms.reduce!(remapper.comms_ctx, sendbuf, recvbuf, +)
     return nothing
 end
 
