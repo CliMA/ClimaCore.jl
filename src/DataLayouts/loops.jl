@@ -107,12 +107,92 @@ end
 
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
-@inline slice_loop_flags(; mask = NoMask(), enumerate = Val(false)) =
-    (mask, enumerate)
+@inline function slice_loop_flags(;
+    mask = NoMask(),
+    enumerate = Val(false),
+    shmem = Val(:auto),
+    maxregs = Val(:auto),
+)
+    validate_shmem_level(shmem)
+    validate_register_cap(maxregs)
+    return (mask, enumerate, shmem, maxregs)
+end
+
+# The named levels of shared memory, whose bytes per thread the device sets (see
+# with_shared_memory), from the least to the most.
+const SHMEM_LEVELS = (:medium, :large, :max)
+
+# Every level that foreach_slice accepts, checked at every entry point on every device
+# (scopes without shared memory ignore the level), so that a misspelled level is not first
+# found on a GPU. The check dispatches on the level's type, so it folds away for a valid level.
+@inline validate_shmem_level(
+    ::Union{Val{:auto}, Val{:none}, Val{:medium}, Val{:large}, Val{:max}},
+) = nothing
+@inline validate_shmem_level(level::Val{n}) where {n} =
+    n isa Integer && n >= 0 ? nothing :
+    throw(ArgumentError(invalid_shmem_level_string(level)))
+validate_shmem_level(level) = throw(ArgumentError(invalid_shmem_level_string(level)))
+function invalid_shmem_level_string(level)
+    return "shmem must be Val(:auto), Val(:none), Val(:medium), Val(:large), Val(:max), or \
+            Val(n) for n bytes per thread, got $(repr(level))"
+end
+
+# Every register cap that foreach_slice accepts (see maxregs), checked like the shmem level.
+@inline validate_register_cap(cap::Val{R}) where {R} =
+    (R isa Integer && R > 0) || R === :auto || R === :none ? nothing :
+    throw(ArgumentError(invalid_register_cap_string(cap)))
+validate_register_cap(cap) = throw(ArgumentError(invalid_register_cap_string(cap)))
+function invalid_register_cap_string(cap)
+    return "maxregs must be Val(:auto), Val(:none), or Val(n) for n registers per thread, \
+            got $(repr(cap))"
+end
 
 """
-    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false))
-    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false))
+    with_shared_memory(scope, level)
+
+Return a [`DataScope`](@ref) like `scope` whose slice loops give each slice the level of
+shared memory `level` (see `shmem` in [`foreach_slice`](@ref)), or `scope` itself when
+`level` is `nothing` or the scope has no shared memory (as on CPUs).
+"""
+with_shared_memory(scope, _) = scope
+
+"""
+    with_register_cap(scope, cap)
+
+Return a [`DataScope`](@ref) like `scope` whose slice loops compile their kernels with the
+register cap `cap` (see `maxregs` in [`foreach_slice`](@ref)), or `scope` itself when `cap`
+is `nothing` or the scope has no register cap (as on CPUs).
+"""
+with_register_cap(scope, _) = scope
+
+"""
+    required_shared_memory(f, slices...)
+
+Bytes of the shared memory of the slices' [`DataScope`](@ref) that the buffers of
+`f(slices...)` need (see `total_buffer_limit`), found from the types of the slices alone,
+or `nothing` when they cannot be known. Slice loops at the `:auto` level of `shmem` (see
+[`foreach_slice`](@ref)) use this to choose the level of a loop; `nothing` by default,
+since the buffers of an arbitrary function cannot be known, and extended for
+`Operators.apply_operators!` (the function of a broadcast).
+"""
+required_shared_memory(f::F, slices...) where {F} = nothing
+
+"""
+    uses_shared_memory(f, slices...)
+
+Whether `f(slices...)` allocates any buffer in the shared memory of the slices'
+[`DataScope`](@ref) (see `scoped_static_array`), found from the types of the slices alone;
+only read when [`required_shared_memory`](@ref) is known. Slice loops at the `:auto` level
+of `shmem` (see [`foreach_slice`](@ref)) give a loop that allocates none no shared memory;
+`true` by default, and extended for `Operators.apply_operators!` (the function of a
+broadcast), whose buffers can fit in no bytes when the values that its operators cache stay
+in registers.
+"""
+uses_shared_memory(f::F, slices...) where {F} = true
+
+"""
+    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
+    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
 
 Apply `f` to slices of every [`DataLayout`](@ref) or similarly indexable argument,
 as a generalization of `eachslice`/`mapslices`. The slice operator `op` can be any
@@ -136,13 +216,64 @@ buffers, so each statement may read the results of the statements before it.
 
 By default, `f` is called as `f(slices...)`. Setting `enumerate` to `Val(true)`
 makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
+
+On GPUs, `shmem` sets how much of a block's shared memory each slice can use for the
+buffers of the operators in `f` (see `Operators.apply_operator`), per thread of the slice.
+This keyword is experimental, and may change in future:
+
+  - `Val(:max)`: the most that a kernel can be launched with (163 KB per block on an A100,
+    divided among the threads of a slice), at the cost of occupancy.
+  - `Val(:large)`: the most that keeps shared memory from limiting the occupancy of a
+    kernel below half (148 bytes per thread for slices of 64 threads on an A100).
+  - `Val(:medium)`: the most that keeps shared memory from limiting the occupancy of a
+    kernel (66 bytes per thread for slices of 64 threads on an A100).
+  - `Val(n)`: `n` bytes.
+  - `Val(:none)`: no shared memory, with each slice evaluated by one thread.
+  - `Val(:auto)` (the default): the first level that holds the buffers of `f`. When they
+    are known from the types of the slices (see [`required_shared_memory`](@ref), as for a
+    broadcast), this is `Val(0)` if `f` allocates none (see [`uses_shared_memory`](@ref)),
+    otherwise the first of `Val(:medium)`, `Val(:large)`, and `Val(:max)` that holds them,
+    and `Val(:none)` beyond `Val(:max)`. When they are not known (as for a loop body), the
+    loop is launched at `Val(:medium)` if its slices are wider than a warp, and with no
+    shared memory otherwise (slices of at most a warp cache values in registers).
+
+Every kernel is launched with the shared memory of its level, which the L1 cache of a GPU
+cannot use. A level is the most shared memory that a slice is given: a buffer that does
+not fit is recomputed where it is read if it can be (see the buffer reuse invariant in
+`Operators.apply_operator`), and otherwise the loop is compiled again at the next level
+(`Val(:medium)`, `Val(:large)`, `Val(:max)`, then `Val(:none)`), with a warning that names
+the bytes it needs the first time, which is remembered for the loop's later launches. The
+level is ignored on CPUs.
+
+On GPUs, `similar` or `zero` of a slice inside `f` allocates a buffer at the start of the
+slice's shared memory (see `scoped_static_array`), as does every statement that caches
+values, which retires the buffer: it is only valid until then, so values that outlive the
+next statement belong in a `Field` of the loop, or in a temporary `@.` broadcast, which
+stays in registers.
+
+On GPUs, `maxregs` caps the registers per thread of the kernel of a loop, so that more of
+its blocks can be resident on a multiprocessor. This keyword is experimental, and may
+change in future:
+
+  - `Val(:auto)` (the default) and `Val(:none)`: no cap, leaving the count to the compiler.
+  - `Val(n)`: `n` registers per thread, for every kind of slice.
+
+Values that do not fit under the cap are spilled to local memory, so a cap suits some loop
+bodies and not others: a fused body of several finite difference statements over columns
+can run faster under a cap that keeps more of its blocks resident, while a pointwise
+expression that needs many registers runs slower under any cap. The cap is ignored on CPUs.
 """
 @inline function foreach_slice(op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
-    return _foreach_slice(op, f, mask, enumerate, args...)
+    (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
+    return foreach_slice_with_options(shmem, maxregs, op, f, mask, enumerate, args...)
 end
 
-@inline function _foreach_slice(
+@inline _foreach_slice(op::O, f::F, mask, enumerate, args...) where {O, F} =
+    foreach_slice_with_options(nothing, nothing, op, f, mask, enumerate, args...)
+
+@inline function foreach_slice_with_options(
+    shmem,
+    maxregs,
     op::O,
     f::F,
     mask,
@@ -151,7 +282,7 @@ end
 ) where {O, F}
     unrolled_allequal(Base.Fix1(each_slice_index, op), args) ||
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
-    scope = DataScope(args...)
+    scope = with_register_cap(with_shared_memory(DataScope(args...), shmem), maxregs)
     # Go straight onto the loop barrier for scopes without setup: every
     # forwarding layer adds a method instance per loop, inferred with the whole
     # loop inlined into it.
@@ -175,13 +306,16 @@ for (name, op, ref) in (
     # loop inlined into it, whether or not it is @inline.
     @eval begin
         """
-            $($name)(f, args...; mask = NoMask(), enumerate = Val(false))
+            $($name)(f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
 
-        Run [`foreach_slice`](@ref) with $($ref) as the slice operator.
+        Run [`foreach_slice`](@ref) with $($ref) as the slice operator. The `shmem` and
+        `maxregs` keywords are experimental, and may change in future.
         """
         @inline function $name(f::F, args...; kwargs...) where {F}
-            (mask, enumerate) = slice_loop_flags(; kwargs...)
-            return _foreach_slice($op, f, mask, enumerate, args...)
+            (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
+            return foreach_slice_with_options(
+                shmem, maxregs, $op, f, mask, enumerate, args...,
+            )
         end
     end
 end
@@ -241,7 +375,8 @@ end
 @inline function foreach_slice(
     scope::DataScope, op::O, f::F, args...; kwargs...,
 ) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
+    (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
+    scope = with_register_cap(with_shared_memory(scope, shmem), maxregs)
     return _foreach_slice(scope, op, f, mask, enumerate, args...)
 end
 
@@ -348,7 +483,7 @@ end
 # Alternative to scoped_slice_loop that generates ordinary, unfused for loops,
 # with every slice processed by the full scope instead of a slice_subscope.
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate) = slice_loop_flags(; kwargs...)
+    (mask, enumerate, _, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
         slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
         enumerate isa Val{true} ? f(index, slices...) : f(slices...)
@@ -375,7 +510,7 @@ where a mask can leave whole blocks without active points.
     # to divide up, without resolving the pool or claiming any of its threads.
     (isone(default_pool_size()) || length(arg) <= default_pool_size()) &&
         return reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
-    T = return_type(op, NTuple{2, eltype(arg)})
+    T = thread_fold_type(op, arg; kwargs...)
     if pool_thread_info() != (0, 0)
         # A reduction nested in another loop gets a fresh results array, since the task's
         # reduction buffer may still be read by an outer reduction that is applying op.
@@ -465,6 +600,15 @@ end
         return value(@inbounds all_indices[firstindex(all_indices)])
     return safe_mapreduce(value, op, indices; init...)
 end
+
+# Type of the fold of op over a thread's points of arg (see reduce_points(::ThisThread)
+# above), which an init value of a wider type than the points widens (e.g., a Float64 init
+# over Float32 points), found by inference on arg at a thread's scope: the results of the
+# threads of a multi-thread reduction are stored with this type, so that none is converted.
+@inline thread_fold_type(op::O, arg; kwargs...) where {O} =
+    return_type(Tuple{typeof(values(kwargs))}) do kwargs
+        reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
+    end
 
 """
     column_reduce!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
