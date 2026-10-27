@@ -79,6 +79,35 @@ function strict_pairwise_sum(values, ifirst, ilast)
     return value
 end
 
+# The level is checked at every entry point, on every device, so that a misspelled level
+# does not pass on CPUs and fail on the first GPU run.
+@testset "shared memory levels are checked on every device" begin
+    device = ClimaComms.device()
+    data = test_data(device, Float64, 1, 4)
+    body!(c) = (fill!(c, 1); nothing)
+    for level in (:auto, :none, :medium, :large, :max, 0, 100)
+        @test isnothing(DataLayouts.foreach_column(body!, data; shmem = Val(level)))
+        @test isnothing(DataLayouts.foreach_point(body!, data; shmem = Val(level)))
+    end
+    for level in (Val(:high), Val(:Auto), Val(-1), Val(1.5), :max, 100, nothing)
+        @test_throws ArgumentError DataLayouts.foreach_column(body!, data; shmem = level)
+        @test_throws ArgumentError DataLayouts.foreach_slice(
+            DataLayouts.DataScope(data), DataLayouts.column, body!, data; shmem = level,
+        )
+    end
+    # The register cap is checked the same way.
+    for cap in (:auto, :none, 32, 255)
+        @test isnothing(DataLayouts.foreach_column(body!, data; maxregs = Val(cap)))
+        @test isnothing(DataLayouts.foreach_point(body!, data; maxregs = Val(cap)))
+    end
+    for cap in (Val(:device), Val(:Auto), Val(0), Val(-8), Val(1.5), :auto, 64, nothing)
+        @test_throws ArgumentError DataLayouts.foreach_column(body!, data; maxregs = cap)
+        @test_throws ArgumentError DataLayouts.foreach_slice(
+            DataLayouts.DataScope(data), DataLayouts.column, body!, data; maxregs = cap,
+        )
+    end
+end
+
 @testset "reduction accuracy and masks" begin
     device = ClimaComms.device()
 
@@ -107,6 +136,14 @@ end
     data = test_data(device, Float64, 1, 4)
     mask = DataLayouts.IJHMask(data)
     @test DataLayouts.reduce_points(+, data; mask, init = 0.0) == sum(Array(parent(data)))
+
+    # An init value of a wider type than the points widens the fold on every device (the
+    # warp results of a GPU block are stored with the widened type, which sizes the block's
+    # shared memory).
+    data32 = test_data(device, Float32, 1, 64)
+    values32 = Array(parent(data32))
+    @test DataLayouts.reduce_points(+, data32; init = 0.0) === sum(Float64, values32)
+    @test DataLayouts.reduce_points(max, data32; init = -Inf) === maximum(Float64, values32)
 end
 
 @testset "0-dimensional data in broadcast expressions [$FT]" for FT in (Float32, Float64)
@@ -547,7 +584,7 @@ end
 end
 
 # A launch unit holding only part of a subscope silently skips some points; see
-# the whole subscopes invariant in DataLayouts.subscope_launch_threads.
+# the whole subscopes invariant in DataLayouts.subscope_indices.
 # visited_points returns the points of an Np-point slice that a subscope of N
 # threads reaches when only its first `present` threads were launched.
 function visited_points(::FakeGroup{N}, present, Np) where {N}
@@ -565,29 +602,15 @@ function visited_points(::FakeGroup{N}, present, Np) where {N}
     return sort!(points)
 end
 
-# Threads of the last subscope in a launch unit of the given size, which is a
-# whole subscope only when the size is a multiple of the subscope's thread count.
-present_threads(threads, N) = threads % N == 0 ? N : threads % N
-
 @testset "a launch unit holds whole subscopes" begin
-    # Every sub-block width that the GPU scope chain descends through, against
-    # every block size that an occupancy search over whole warps could return.
-    for N in (2, 4, 8, 16, 32, 64, 128, 256), max_threads in 32:32:256
-        max_threads < N && continue
-        threads = DataLayouts.subscope_launch_threads(FakeGroup{N}(), max_threads)
-        @test threads % N == 0
-        @test N <= threads <= max_threads
-
+    # Every sub-block width that the GPU scope chain descends through.
+    for N in (2, 4, 8, 16, 32, 64, 128, 256)
         # With whole subscopes, every point of a slice is visited exactly once.
         for Np in (max(N - 1, 1), N, N + 1, 3N + 1)
-            @test visited_points(FakeGroup{N}(), present_threads(threads, N), Np) ==
-                  collect(1:Np)
+            @test visited_points(FakeGroup{N}(), N, Np) == collect(1:Np)
         end
 
-        # Rounding the block size to whole warps instead is what loses points.
-        if max_threads % N != 0
-            @test visited_points(FakeGroup{N}(), present_threads(max_threads, N), N) !=
-                  collect(1:N)
-        end
+        # A launch unit holding only part of a subscope is what loses points.
+        @test visited_points(FakeGroup{N}(), N - 1, N) != collect(1:N)
     end
 end
