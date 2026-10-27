@@ -160,6 +160,27 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"
           TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
+          # Runs in its own step below (it matches only that file, so it is safe
+          # for every subsystem).
+          TEST_EXCLUDE_TAG: "operators/integrals.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      # The column integral tests compile about 20 minutes of GPU kernels, which
+      # pushed the operators job past its time limit.
+      - label: "Unit (GPU) - operators integrals"
+        key: unit_curated_suite_gpu_operators_integrals
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/runtests.jl"
+        timeout_in_minutes: 60
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          TEST_SUBSYSTEM: "operators"
+          TEST_TAG: "operators/integrals.jl"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
         agents:
           slurm_gpus: 1
           slurm_mem: 20G

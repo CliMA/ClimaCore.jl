@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.6
+-------
+
 - ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
   whenever every argument supports them, except over layouts whose sizes are
   all static, with several axes longer than 1 and an axis whose length is not a
@@ -30,6 +33,27 @@ main
 - ![][badge-🐛bugfix] GPU kernels support at most 2^31 - 1 elements per array
   (not 2^32 - 1), the same limit as for slices per `DataLayouts.foreach_slice`:
   `LLVM.jl` can sign-extend 32-bit indices, so they should not use the sign bit.
+- ![][badge-🚀performance] The CUDA extension stores operator buffers in dynamic
+  shared memory, with co-live buffers at offsets known at compile time and every
+  statement of a `DataLayouts.foreach_slice` body inlined, which makes fused
+  finite difference bodies many times faster. The slice loops take an
+  experimental `shmem` keyword (`Val(:auto)`, `Val(:none)`, `Val(:medium)`,
+  `Val(:large)`, `Val(:max)`, or bytes per thread) that sets the most shared
+  memory each slice is given; buffers that do not fit are recomputed, or the
+  loop is launched at the next level with a warning. At the default
+  `Val(:auto)` level, a broadcast whose operators cache nothing, or a loop body
+  over slices of at most a warp, is launched without shared memory (leaving
+  the memory of a multiprocessor to its L1 cache), and a loop body whose
+  buffers exceed a level is compiled again at the next one. `similar` of a
+  slice inside a loop body allocates a shared buffer that the next statement
+  caching values retires. `Operators.apply_operators!` takes an optional
+  `finish` argument that skips the barrier publishing its result, for fused
+  loops that synchronize once per statement. `Restrict` can read
+  register-resident arguments.
+  The slice loops also take an experimental `maxregs` keyword (`Val(:auto)`,
+  `Val(:none)`, or registers per thread) that caps the registers of a GPU
+  kernel: no cap by default, and a count of the caller's choosing, which can
+  speed up fused column loop bodies but slows down heavier pointwise bodies.
 
 v1.0.5
 -------
