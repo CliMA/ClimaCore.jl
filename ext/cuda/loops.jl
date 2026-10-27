@@ -22,18 +22,14 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
         check_device_assumptions()
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
-        subscope = slice_subscope_at_level(
-            DataLayouts.slice_subscope(ThisKernel(), op, args...),
-            Val(L),
-            op,
-            f,
-            args...,
-        )
+        kernel_subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
+        subscope = slice_subscope_at_level(kernel_subscope, Val(L), op, f, args...)
         max_slices = length(DataLayouts.each_slice_index(op, first(args)))
         check_index_count(max_slices)
         compact_args = Grids.toggle_compact_args(args...)
         launch_slice_loop(
             subscope,
+            can_exceed_level(kernel_subscope, Val(L), op, f, args...),
             Val(R),
             op,
             f,
@@ -74,8 +70,11 @@ const SHMEM_LEVEL_CACHE_LOCK = ReentrantLock()
 # next level (see next_shmem_level), up to one thread per slice, which allocates no shared
 # memory: a level is the most shared memory that a slice is given, not the least, and the
 # next level is reported (see warn_shmem_level_exceeded) when the kernel is first compiled.
+# A loop whose level holds its buffers (see can_exceed_level) is launched without the next
+# levels, whose launches would otherwise be compiled on the host with every loop's launch.
 function launch_slice_loop(
     subscope::ThisSubBlock,
+    ::Val{true},
     R::Val,
     op::O,
     f::F,
@@ -89,19 +88,38 @@ function launch_slice_loop(
     compiles = @lock SHMEM_LEVEL_CACHE_LOCK get(SHMEM_LEVEL_CACHE, key, nothing)
     next = next_shmem_level(subscope)
     compiles === false && return launch_slice_loop(
-        next, R, op, f, mask, enumerate, compact_args, max_slices,
+        next, Val(true), R, op, f, mask, enumerate, compact_args, max_slices,
     )
     exceeded = launch_subblock_loop(kernel_function, R, compact_args, max_slices)
     isnothing(compiles) &&
         @lock SHMEM_LEVEL_CACHE_LOCK SHMEM_LEVEL_CACHE[key] = isnothing(exceeded)
     isnothing(exceeded) && return nothing
     warn_shmem_level_exceeded(f, subscope, next, exceeded)
-    return launch_slice_loop(next, R, op, f, mask, enumerate, compact_args, max_slices)
+    return launch_slice_loop(
+        next, Val(true), R, op, f, mask, enumerate, compact_args, max_slices,
+    )
+end
+function launch_slice_loop(
+    subscope::ThisSubBlock,
+    ::Val{false},
+    R::Val,
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    compact_args,
+    max_slices,
+) where {O, F}
+    kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
+    exceeded = launch_subblock_loop(kernel_function, R, compact_args, max_slices)
+    isnothing(exceeded) || throw_shmem_level_exceeded(f, subscope, exceeded)
+    return nothing
 end
 # One thread per slice; extra threads run empty loops, so the count of slices isn't a strict
 # limit. The kernel is compiled with the loop's register cap (see register_cap).
 function launch_slice_loop(
     subscope::DataLayouts.ThisThread,
+    _,
     ::Val{R},
     op::O,
     f::F,
@@ -179,6 +197,12 @@ function warn_shmem_level_exceeded(f::F, ::ThisSubBlock{N, B}, next, bytes) wher
     end
     return nothing
 end
+# A loop whose level was chosen to hold its known buffers (see can_exceed_level) that
+# exceeds it has buffers that DataLayouts.required_shared_memory does not account for.
+@noinline throw_shmem_level_exceeded(f::F, ::ThisSubBlock{N, B}, bytes) where {F, N, B} =
+    error("foreach_slice body $(nameof(F)) needs $bytes bytes of shared memory for slices \
+           of $N threads, more than the $(region_bytes(N, B)) bytes of the level chosen \
+           for the buffers that DataLayouts.required_shared_memory reports")
 shmem_level_name(::ThisSubBlock{N, B}) where {N, B} =
     B == shmem_level_bytes(Val(:medium), Val(N)) ? ":medium" :
     B == shmem_level_bytes(Val(:large), Val(N)) ? ":large" : ":max"
@@ -195,8 +219,9 @@ shmem_level_name(::DataLayouts.ThisThread) = ":none"
 # they read without branching in registers (see Operators.caches_in_registers) and rarely
 # allocate any buffer, while the reservation of the :medium level shrinks the L1 cache of
 # the kernel (2-4% slower fused column bodies of 32 faces on an A100). A buffer that exceeds
-# the level (at :auto, of a loop whose buffers are not known, or that allocates some after
-# all) moves the loop to the next level (see launch_slice_loop).
+# the level (a fixed level, or at :auto that of a loop whose buffers are not known, including
+# one given none that allocates some after all) moves the loop to the next level (see
+# launch_slice_loop and can_exceed_level).
 slice_subscope_at_level(subscope, _, op, f, args...) = subscope
 slice_subscope_at_level(::ThisSubBlock, ::Val{:none}, op, f, args...) =
     DataLayouts.ThisThread()
@@ -220,6 +245,22 @@ function slice_subscope_at_level(
     max = ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}()
     bytes <= DataLayouts.total_buffer_limit(max) && return max
     return DataLayouts.ThisThread()
+end
+
+# Whether a loop can exceed the level of shared memory of its slices (see
+# slice_subscope_at_level), so that it is launched at the next levels when it does (see
+# launch_slice_loop): every loop, except at the :auto level a loop whose buffers are known,
+# since its level holds them.
+can_exceed_level(_, _, op, f, args...) = Val(true)
+function can_exceed_level(
+    ::ThisSubBlock{N},
+    ::Val{:auto},
+    op::O,
+    f::F,
+    args...,
+) where {N, O, F}
+    medium = ThisSubBlock{N, shmem_level_bytes(Val(:medium), Val(N))}()
+    return Val(isnothing(slices_required_shared_memory(medium, op, f, args...)))
 end
 
 # The level of shared memory after that of a sub-block (see slice_subscope_at_level):

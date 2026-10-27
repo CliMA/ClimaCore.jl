@@ -242,8 +242,9 @@ cannot use. A level is the most shared memory that a slice is given: a buffer th
 not fit is recomputed where it is read if it can be (see the buffer reuse invariant in
 `Operators.apply_operator`), and otherwise the loop is compiled again at the next level
 (`Val(:medium)`, `Val(:large)`, `Val(:max)`, then `Val(:none)`), with a warning that names
-the bytes it needs the first time, which is remembered for the loop's later launches. The
-level is ignored on CPUs.
+the bytes it needs the first time, which is remembered for the loop's later launches. At
+`Val(:auto)`, a loop whose buffers are known is launched at a level that holds them, and
+is never compiled again. The level is ignored on CPUs.
 
 On GPUs, `similar` or `zero` of a slice inside `f` allocates a buffer at the start of the
 slice's shared memory (see `scoped_static_array`), as does every statement that caches
