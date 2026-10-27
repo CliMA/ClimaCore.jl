@@ -9,60 +9,263 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 # Only run a fused foreach_slice kernel when every slice has an inferrable size.
 # Also, avoid launching fused loops on MPI ranks that do not own any elements.
 @inline DataLayouts._foreach_slice(
-    scope::ThisHost,
+    scope::ThisHost{L, R},
     op::O,
     f::F,
     mask,
     enumerate,
     args...,
-) where {O, F} =
+) where {L, R, O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
     elseif !isempty(DataLayouts.each_slice_index(op, first(args)))
         check_device_assumptions()
-        subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
-        function kernel_function(compact_kernel_args...)
-            kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
-            DataLayouts.scoped_slice_loop(
-                subscope,
-                ThisKernel(),
-                op,
-                f,
-                mask,
-                enumerate,
-                kernel_args...,
-            )
-        end
-
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
-        if subscope isa ThisSubBlock
-            # Each sub-block gets one slice. The block size is capped at the
-            # value that sizes the sub-blocks' shared memory (see
-            # scoped_static_array) and constrained to whole sub-blocks: a
-            # partially populated sub-block skips its missing threads' points
-            # (see the whole subscopes invariant in subscope_launch_threads).
-            max_slices = length(DataLayouts.each_slice_index(op, first(args)))
-            check_index_count(max_slices)
-            subblock_threads = Int(DataLayouts.num_threads(subscope))
-            max_block_threads = DataLayouts.subscope_launch_threads(
-                subscope,
-                max_subblock_launch_threads(subscope),
-            )
-            max_blocks = cld(max_slices, max_block_threads ÷ subblock_threads)
-            config =
-                kernel -> launch_configuration(
-                    kernel, max_block_threads, max_blocks;
-                    granularity = subblock_threads,
-                )
-        else
-            # Extra threads run empty loops, so max_points isn't a strict limit.
-            max_points = maximum(length, args)
-            check_index_count(max_points)
-            config = kernel -> launch_configuration(kernel, max_points; strict = false)
-        end
-        auto_launch!(kernel_function, Grids.toggle_compact_args(args...); config)
+        subscope = slice_subscope_at_level(
+            DataLayouts.slice_subscope(ThisKernel(), op, args...),
+            Val(L),
+            op,
+            f,
+            args...,
+        )
+        max_slices = length(DataLayouts.each_slice_index(op, first(args)))
+        check_index_count(max_slices)
+        compact_args = Grids.toggle_compact_args(args...)
+        launch_slice_loop(
+            subscope,
+            Val(R),
+            op,
+            f,
+            mask,
+            enumerate,
+            compact_args,
+            max_slices,
+        )
     end
+
+# The kernel of a slice loop whose slices are assigned to subscope, a closure whose type names
+# the subscope and the body (see launch_slice_loop and SHMEM_LEVEL_CACHE).
+slice_loop_kernel(subscope, op::O, f::F, mask, enumerate) where {O, F} =
+    function (compact_kernel_args...)
+        kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
+        DataLayouts.scoped_slice_loop(
+            subscope,
+            ThisKernel(),
+            op,
+            f,
+            mask,
+            enumerate,
+            kernel_args...,
+        )
+        return nothing
+    end
+
+# Whether the kernel of a slice loop at a level of shared memory compiles, by the types of
+# the kernel (which names its subscope; see slice_loop_kernel) and of its arguments (see
+# launch_slice_loop, which launches a loop whose kernel does not at the next level): CUDA.jl
+# does not cache a kernel that fails to compile, which would otherwise be compiled again at
+# every launch of the loop.
+const SHMEM_LEVEL_CACHE = Dict{Tuple{DataType, DataType}, Bool}()
+const SHMEM_LEVEL_CACHE_LOCK = ReentrantLock()
+
+# Launch a slice loop with every slice assigned to subscope. A kernel that does not compile
+# because a buffer exceeds the level (see check_shmem_level) is replaced by the kernel at the
+# next level (see next_shmem_level), up to one thread per slice, which allocates no shared
+# memory: a level is the most shared memory that a slice is given, not the least, and the
+# next level is reported (see warn_shmem_level_exceeded) when the kernel is first compiled.
+function launch_slice_loop(
+    subscope::ThisSubBlock,
+    R::Val,
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    compact_args,
+    max_slices,
+) where {O, F}
+    kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
+    key = (typeof(kernel_function), typeof(compact_args))
+    compiles = @lock SHMEM_LEVEL_CACHE_LOCK get(SHMEM_LEVEL_CACHE, key, nothing)
+    next = next_shmem_level(subscope)
+    compiles === false && return launch_slice_loop(
+        next, R, op, f, mask, enumerate, compact_args, max_slices,
+    )
+    exceeded = launch_subblock_loop(kernel_function, R, compact_args, max_slices)
+    isnothing(compiles) &&
+        @lock SHMEM_LEVEL_CACHE_LOCK SHMEM_LEVEL_CACHE[key] = isnothing(exceeded)
+    isnothing(exceeded) && return nothing
+    warn_shmem_level_exceeded(f, subscope, next, exceeded)
+    return launch_slice_loop(next, R, op, f, mask, enumerate, compact_args, max_slices)
+end
+# One thread per slice; extra threads run empty loops, so the count of slices isn't a strict
+# limit. The kernel is compiled with the loop's register cap (see register_cap).
+function launch_slice_loop(
+    subscope::DataLayouts.ThisThread,
+    ::Val{R},
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    compact_args,
+    max_slices,
+) where {R, O, F}
+    kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
+    config = kernel -> launch_configuration(kernel, max_slices; strict = false)
+    auto_launch!(
+        kernel_function,
+        compact_args;
+        config,
+        maxregs = register_cap(Val(R), subscope),
+    )
+    return nothing
+end
+
+# Launch a slice loop whose kernel assigns a slice to each sub-block, and return nothing, or
+# the bytes of a buffer beyond the level (see auto_launch!) if the kernel was not launched. A
+# block holds whole sub-blocks (the granularity; see the whole subscopes invariant in
+# DataLayouts.subscope_indices): one wide sub-block (see max_subblock_launch_threads), or as
+# many narrow ones as launch_configuration fits with their shared memory, the surplus
+# sub-blocks of the last block running empty loops. The kernel is compiled with the loop's
+# register cap (see register_cap).
+function launch_subblock_loop(
+    kernel_function::K,
+    ::Val{R},
+    compact_args,
+    max_slices,
+) where {K, R}
+    subscope = kernel_function.subscope
+    subblock_threads = Int(DataLayouts.num_threads(subscope))
+    max_block_threads = max_subblock_launch_threads(subscope)
+    shmem = subblock_shmem(subscope)
+    config =
+        kernel ->
+            max_block_threads == subblock_threads ?
+            launch_configuration(
+                kernel, subblock_threads, max_slices;
+                granularity = subblock_threads,
+                shmem,
+            ) :
+            launch_configuration(
+                kernel, max_slices * subblock_threads;
+                strict = false,
+                granularity = subblock_threads,
+                shmem,
+            )
+    return auto_launch!(
+        kernel_function,
+        compact_args;
+        config,
+        shmem,
+        maxregs = register_cap(Val(R), subscope),
+    )
+end
+
+# Warn that a loop is launched at the next level of shared memory (see launch_slice_loop),
+# once per kernel (at the launch whose compilation reports the bytes). A loop given no shared
+# memory without its caller choosing so (its known buffers need none, or its slices are
+# narrow sub-blocks whose buffers are not known; see slice_subscope_at_level) that allocates
+# some is a debug message instead.
+function warn_shmem_level_exceeded(f::F, ::ThisSubBlock{N, B}, next, bytes) where {F, N, B}
+    needs = "foreach_slice body $(nameof(F)) needs $bytes bytes of shared memory for slices \
+             of $N threads"
+    at_next = "it is launched at the $(shmem_level_name(next)) level instead"
+    if iszero(B)
+        @debug "$needs, although it was given none; $at_next"
+    else
+        @warn "$needs, more than the $(region_bytes(N, B)) bytes of its shmem level \
+               ($B bytes per thread); $at_next. Pass shmem = Val($(shmem_level_name(next))) \
+               to choose the level."
+    end
+    return nothing
+end
+shmem_level_name(::ThisSubBlock{N, B}) where {N, B} =
+    B == shmem_level_bytes(Val(:medium), Val(N)) ? ":medium" :
+    B == shmem_level_bytes(Val(:large), Val(N)) ? ":large" : ":max"
+shmem_level_name(::DataLayouts.ThisThread) = ":none"
+
+# The subscope of every slice of a loop at a level of shared memory (see ThisHost): one
+# thread at :none, a sub-block whose threads have the level's bytes at a fixed level, and at
+# :auto a sub-block at the first level that holds the buffers of the function's operators
+# when they are known from the slices (see DataLayouts.required_shared_memory): no shared
+# memory when the function allocates none, which leaves the memory of a multiprocessor to
+# its L1 cache, then :medium, :large, and :max, and one thread per slice beyond :max. A loop
+# whose buffers are not known is launched at :medium when its slices are wider than a warp,
+# and without shared memory when they are not: sub-blocks of at most a warp cache the values
+# they read without branching in registers (see Operators.caches_in_registers) and rarely
+# allocate any buffer, while the reservation of the :medium level shrinks the L1 cache of
+# the kernel (2-4% slower fused column bodies of 32 faces on an A100). A buffer that exceeds
+# the level (at :auto, of a loop whose buffers are not known, or that allocates some after
+# all) moves the loop to the next level (see launch_slice_loop).
+slice_subscope_at_level(subscope, _, op, f, args...) = subscope
+slice_subscope_at_level(::ThisSubBlock, ::Val{:none}, op, f, args...) =
+    DataLayouts.ThisThread()
+slice_subscope_at_level(::ThisSubBlock{N}, level::Val, op, f, args...) where {N} =
+    ThisSubBlock{N, shmem_level_bytes(level, Val(N))}()
+function slice_subscope_at_level(
+    ::ThisSubBlock{N},
+    ::Val{:auto},
+    op::O,
+    f::F,
+    args...,
+) where {N, O, F}
+    medium = ThisSubBlock{N, shmem_level_bytes(Val(:medium), Val(N))}()
+    requirement = slices_required_shared_memory(medium, op, f, args...)
+    isnothing(requirement) && return N <= THREADS_PER_WARP ? ThisSubBlock{N, 0}() : medium
+    (bytes, uses) = requirement
+    iszero(bytes) && !uses && return ThisSubBlock{N, 0}()
+    bytes <= DataLayouts.total_buffer_limit(medium) && return medium
+    large = ThisSubBlock{N, shmem_level_bytes(Val(:large), Val(N))}()
+    bytes <= DataLayouts.total_buffer_limit(large) && return large
+    max = ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}()
+    bytes <= DataLayouts.total_buffer_limit(max) && return max
+    return DataLayouts.ThisThread()
+end
+
+# The level of shared memory after that of a sub-block (see slice_subscope_at_level):
+# :medium after none, :large after :medium, :max after :large, and one thread per slice
+# after :max.
+next_shmem_level(::ThisSubBlock{N, B}) where {N, B} =
+    B < shmem_level_bytes(Val(:medium), Val(N)) ?
+    ThisSubBlock{N, shmem_level_bytes(Val(:medium), Val(N))}() :
+    B < shmem_level_bytes(Val(:large), Val(N)) ?
+    ThisSubBlock{N, shmem_level_bytes(Val(:large), Val(N))}() :
+    B < shmem_level_bytes(Val(:max), Val(N)) ?
+    ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}() : DataLayouts.ThisThread()
+
+# Bytes of shared memory that f needs on every slice and whether it allocates any (or nothing
+# if they are unknown), found by inference alone (like has_inferred_slice_size), since they
+# only depend on the types of the slices; a result that inference cannot fold is an error, not
+# a fallback. The body f is an argument of the inferred function rather than captured by it,
+# so that a body that captures values keeps the call foldable. The slices are reassigned after
+# they are taken: slicing a host array rebuilds its layout with the host's scope (see
+# DataLayouts.rebuild), which would undo the reassignment.
+slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
+    val_value(
+        Utilities.return_type(Tuple{F, typeof(args)}) do f, args
+            index = first(DataLayouts.each_slice_index(op, first(args)))
+            slices = DataLayouts.slice_every_arg(op, index, args...)
+            scoped_slices = unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)
+            bytes = DataLayouts.required_shared_memory(f, scoped_slices...)
+            Val(
+                isnothing(bytes) ? nothing :
+                (bytes, DataLayouts.uses_shared_memory(f, scoped_slices...)),
+            )
+        end,
+    )
+val_value(::Type{Val{x}}) where {x} = x
+
+# Every region of a sub-block slice loop is given the bytes of its level (none at the level
+# without shared memory; see slice_subscope_at_level).
+subblock_shmem(::ThisSubBlock{N, B}) where {N, B} = DynamicShmem(N * B, N)
+
+# Dynamic shared memory of a reduction kernel: the warp results of a block reduction,
+# which are retired before the block allocates its flag in the same memory.
+block_reduction_shmem(::Type{T}) where {T} =
+    DynamicShmem(
+        aligned_buffer_bytes(max(MAX_WARPS_PER_BLOCK * sizeof(T), 1)),
+        0,
+    )
 
 # Only save a reduction result to an array from one thread per reduction scope.
 is_first_thread_in(scope) = isone(DataLayouts.thread_rank(scope))
@@ -141,14 +344,18 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
         return nothing
     end
 
-    T = return_type(op, NTuple{2, eltype(arg)})
+    # The warp results of a block are stored with the type of the fold on each thread, which
+    # a wider init widens (see reduce_points(::ThisCooperativeGroup)), so the type sizes the
+    # launch's shared memory.
+    T = DataLayouts.thread_fold_type(op, arg; kernel_kwargs...)
     results = DataLayouts.scoped_array(scope, T, 0; buffer = true)
     finished_blocks = reduction_sync_counter()
     # The launch needs results sized by the block count, so the kernel is compiled before it.
     kernel = CUDA.@cuda always_inline = true launch = false kernel_function(
         results, finished_blocks, arg, UInt32(1),
     )
-    (; threads, blocks) = launch_configuration(kernel, length(arg))
+    shmem = block_reduction_shmem(T)
+    (; threads, blocks) = launch_configuration(kernel, length(arg); shmem)
     results = DataLayouts.scoped_array(scope, T, blocks; buffer = true)
 
     fill!(finished_blocks, UInt32(0))
@@ -157,6 +364,7 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
         (results, finished_blocks, arg, UInt32(blocks));
         threads_s = threads,
         blocks_s = blocks,
+        shmem,
     )
     return CUDA.@allowscalar @inbounds results[1]
 end
@@ -244,3 +452,8 @@ CUDA.shfl_recurse(
     op::O,
     x::T,
 ) where {O, T <: Union{ClimaCore.Geometry.Tensor, Utilities.AutoBroadcaster}} = map(op, x)
+
+# A slice loop launched at a level that its kernel exceeds recurses through the levels after
+# it (see launch_slice_loop), each a sub-block of another type, which the inference recursion
+# limit would widen to an abstract sub-block, dispatching the launches at run time.
+Utilities.@drop_recursion_limits launch_slice_loop

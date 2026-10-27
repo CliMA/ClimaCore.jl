@@ -115,9 +115,10 @@ end
 @inline Operators.caches_in_registers(scope::ThisSubBlock, arg, ::Val{true}) =
     shuffles_in_warp(scope) &&
     owns_one_point_each(Fields.field_values(Operators.destination_template(arg)), scope)
-@inline Operators.cached_values(scope::ThisSubBlock, arg, ::Val{true}) =
+@inline Operators.cached_values(scope::ThisSubBlock, arg, ::Val{true}, offset = Val(0)) =
     Operators.caches_in_registers(scope, arg, Val(true)) ?
-    shuffled_field(Operators.register_values(arg)) : Operators.materialize_buffer(arg)
+    shuffled_field(Operators.register_values(arg, offset)) :
+    Operators.materialize_buffer(arg, offset)
 @inline owns_one_point_each(data, ::ThisSubBlock{N}) where {N} =
     DataLayouts.has_inferred_size(data) && prod(DataLayouts.inferred_size(data)) <= N
 @inline function shuffled_field(field)

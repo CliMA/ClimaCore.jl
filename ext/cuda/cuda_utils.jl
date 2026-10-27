@@ -34,6 +34,10 @@ function uncached_device_attributes()
         get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_MULTIPROCESSOR),
         reserved_shmem_per_block =
         get_attr(CUDA.DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK),
+        # a kernel can use more than max_shmem_per_block after opting in (see
+        # launch_configuration)
+        max_shmem_per_block_optin =
+        get_attr(CUDA.DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN),
 
         # more hardware properties from version 12.9 of the CUDA Runtime Headers
         # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L606-779
@@ -119,7 +123,8 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
 
     if !iszero(shmem_per_block)
         min_shmem_per_block = shmem_per_block + attrs.reserved_shmem_per_block
-        max_shmem_per_block = attrs.max_shmem_per_block + attrs.reserved_shmem_per_block
+        max_shmem_per_block =
+            attrs.max_shmem_per_block_optin + attrs.reserved_shmem_per_block
         allocated_shmem_per_block =
             round_up(min_shmem_per_block, attrs.shmem_per_allocation)
         allocated_shmem_per_block > max_shmem_per_block && return (0, :shared_memory)
@@ -132,6 +137,23 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     return (max_blocks_per_sm * attrs.sm_count, limit)
 end
 
+"""
+    DynamicShmem(region_bytes, region_threads)
+
+Dynamic shared memory of a kernel launch, as a function of its number of threads per block:
+`region_bytes` for every `region_threads` threads, or for the whole block when
+`region_threads` is 0 (see `scoped_static_array`). A `Function`, so that
+`CUDA.launch_configuration` accepts it as its `shmem`.
+"""
+struct DynamicShmem <: Function
+    region_bytes::Int
+    region_threads::Int
+end
+(shmem::DynamicShmem)(threads_per_block) =
+    iszero(shmem.region_threads) ? shmem.region_bytes :
+    shmem.region_bytes * fld(threads_per_block, shmem.region_threads)
+const NO_DYNAMIC_SHMEM = DynamicShmem(0, 0)
+
 # cudaOccMaxPotentialOccupancyBlockSize times the maximum number of waves,
 # optimized for single-stream execution of both small and large workloads
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1865-1965
@@ -140,6 +162,7 @@ function uncached_launch_configuration(
     strict,
     max_waves,
     default_granularity,
+    dynamic_shmem,
     config_args...,
 )
     attrs = device_attributes()
@@ -167,9 +190,9 @@ function uncached_launch_configuration(
 
     # Block sizes are searched in whole multiples of this unit, one warp unless
     # a caller needs a coarser one: a partially populated sub-block skips the
-    # points of the threads it is missing (see subscope_launch_threads). The
-    # unit is clamped to the largest launchable block, so the search always has
-    # a candidate.
+    # points of the threads it is missing (see the whole subscopes invariant in
+    # DataLayouts.subscope_indices). The unit is clamped to the largest launchable
+    # block, so the search always has a candidate.
     granularity = max(something(default_granularity, 0), attrs.threads_per_warp)
     unit = min(granularity, max_threads_per_block)
 
@@ -191,8 +214,11 @@ function uncached_launch_configuration(
     # also confining large workloads to as few blocks as possible.
     (best_threads_per_block, best_num_blocks, best_limit) = (0, 0, :user)
     for threads_per_block in block_sizes
-        (max_blocks_per_wave, active_blocks_limit) =
-            max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
+        (max_blocks_per_wave, active_blocks_limit) = max_active_blocks(
+            threads_per_block,
+            regs_per_thread,
+            shmem_per_block + dynamic_shmem(threads_per_block),
+        )
         user_max_blocks = get_user_max_blocks(threads_per_block, config_args...)
         user_constraints_ignorable &= user_max_blocks >= max_blocks_per_wave * max_waves
         (num_blocks, limit) =
@@ -205,6 +231,21 @@ function uncached_launch_configuration(
         end
     end
 
+    # Every candidate was rejected (see max_active_blocks), or the user asked for no
+    # threads; the shared memory of a launch is the usual cause, since a kernel's static
+    # resources are checked against the device's largest block when it is compiled, and its
+    # dynamic shared memory counts against the same limit per block.
+    iszero(best_num_blocks) && throw(
+        ArgumentError(
+            "No block of a whole number of $unit threads can be launched: a block of $unit \
+             threads needs $(dynamic_shmem(unit)) bytes of dynamic shared memory and \
+             $shmem_per_block bytes of static shared memory, more than the \
+             $(attrs.max_shmem_per_block_optin) bytes of shared memory available per block \
+             (the kernel can be launched with at most $default_max_threads_per_block \
+             threads per block)",
+        ),
+    )
+
     # Compare searches unaffected by config_args against CUDA's implementation,
     # which only ever considers whole warps.
     if DataLayouts.VALIDATE_LAUNCH_CONFIGURATIONS[] &&
@@ -212,8 +253,17 @@ function uncached_launch_configuration(
        isnothing(default_granularity)
         min_blocks_per_wave = cld(best_num_blocks, max_waves)
         cuda_config = (; blocks = min_blocks_per_wave, threads = best_threads_per_block)
-        @assert CUDA.launch_configuration(cu_func) == cuda_config
+        # CUDA's shmem is the dynamic shared memory alone (it adds the static memory itself).
+        @assert CUDA.launch_configuration(cu_func; shmem = dynamic_shmem) == cuda_config
     end
+
+    # A block above the function's limit on dynamic shared memory (48 KB less its static
+    # shared memory, until it is raised) needs the limit raised first: once, since the
+    # configuration is cached, and never lowered, since the launches of the function's other
+    # configurations may need the earlier limit.
+    dynamic_bytes = dynamic_shmem(best_threads_per_block)
+    attribute = CUDA.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+    cu_func_attrs[attribute] < dynamic_bytes && (cu_func_attrs[attribute] = dynamic_bytes)
 
     return (;
         threads = best_threads_per_block,
@@ -225,15 +275,45 @@ end
 # Keyed by function handles, so that lookups allocate nothing (the type of the handle is
 # CUDA.CUfunction before CUDA.jl v6 and CUDA.CUDACore.CUfunction after).
 const CUfunction = fieldtype(CUDA.CuFunction, :handle)
-const MISSING_LAUNCH_CONFIGURATION = (; threads = -1, blocks = -1, limit = :missing)
-const LAUNCH_CONFIGURATION_CACHE =
-    Dict{Tuple{CUfunction, Bool, Int, Int, Int, Int}, typeof(MISSING_LAUNCH_CONFIGURATION)}()
+# The module that compiles kernels (CUDA before CUDA.jl v6 and CUDACore after), through
+# which GPUCompiler is reached.
+const CUDA_COMPILER = parentmodule(CUDA.cufunction)
+
+# The maxregs keyword of a kernel compilation (the register cap of a slice loop; see
+# register_cap), or none when the count is left to ptxas.
+maxregs_kwarg(::Nothing) = (;)
+maxregs_kwarg(maxregs::Int) = (; maxregs)
+
+# A buffer that exceeds the shared memory level of its slice loop fails to compile (see
+# check_shmem_level); the marker is the name of the undefined function that the check calls,
+# read from the invalid IR error's metadata, and the largest one gives the bytes the loop
+# needs (see launch_slice_loop, which launches the loop at the level that holds them), or 0
+# when the error has no marker. The metadata is untyped, so the markers are read in a loop
+# that narrows it, rather than by a closure that would be dispatched on it.
+function shmem_level_error_bytes(err::CUDA_COMPILER.GPUCompiler.InvalidIRError)
+    bytes = 0
+    for (_, _, meta) in err.errors
+        meta isa String || continue
+        startswith(meta, SHMEM_LEVEL_ERROR) || continue
+        digits = chop(
+            meta;
+            head = ncodeunits(SHMEM_LEVEL_ERROR) + 1,
+            tail = ncodeunits("_bytes"),
+        )
+        bytes = max(bytes, something(tryparse(Int, digits), 0))
+    end
+    return bytes
+end
+const LAUNCH_CONFIGURATION_CACHE = Dict{
+    Tuple{CUfunction, Bool, Int, Int, DynamicShmem, Int, Int},
+    @NamedTuple{threads::Int, blocks::Int, limit::Symbol},
+}()
 const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
 
 """
-    launch_configuration(kernel; [max_waves], [granularity])
-    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity])
-    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity])
+    launch_configuration(kernel; [max_waves], [granularity], [shmem])
+    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity], [shmem])
+    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity], [shmem])
 
 Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
 which maximizes occupancy across the entire device instead of just one
@@ -264,7 +344,11 @@ A `granularity` may also be specified, in which case only block sizes that are
 whole multiples of it are considered. This defaults to the warp size, which is
 the smallest unit a block can usefully be made of; a loop that hands each slice
 to a sub-block needs the coarser unit of one sub-block (see
-`DataLayouts.subscope_launch_threads`).
+the whole subscopes invariant in `DataLayouts.subscope_indices`).
+
+A kernel that uses dynamic shared memory is given it as a [`DynamicShmem`](@ref) `shmem`,
+which every block size considered has to accommodate along with the kernel's static
+shared memory.
 
 Like `CUDA.launch_configuration`, this returns a `NamedTuple` containing the
 optimal number of threads per block and the optimal number of blocks, and it
@@ -288,6 +372,7 @@ function launch_configuration(
     strict = true,
     max_waves = MAX_WAVES[],
     granularity = nothing,
+    shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
 )
     cu_func = kernel.fun
     cache_key = (
@@ -295,22 +380,17 @@ function launch_configuration(
         strict,
         max_waves,
         something(granularity, -1),
+        shmem,
         get(config_args, 1, -1),
         get(config_args, 2, -1),
     )
-    return @lock LAUNCH_CONFIGURATION_CACHE_LOCK begin
-        config = get(LAUNCH_CONFIGURATION_CACHE, cache_key, MISSING_LAUNCH_CONFIGURATION)
-        if config == MISSING_LAUNCH_CONFIGURATION
-            config = uncached_launch_configuration(
-                cu_func,
-                strict,
-                max_waves,
-                granularity,
-                config_args...,
-            )
-            LAUNCH_CONFIGURATION_CACHE[cache_key] = config
-        end
-        config
+    return @lock LAUNCH_CONFIGURATION_CACHE_LOCK get!(
+        LAUNCH_CONFIGURATION_CACHE,
+        cache_key,
+    ) do
+        uncached_launch_configuration(
+            cu_func, strict, max_waves, granularity, shmem, config_args...,
+        )
     end
 end
 
@@ -447,36 +527,79 @@ end
 # converts them in a KernelCall, which also tracks the memory that they use, and CUDA.jl v5
 # kernel calls skip their own conversion with convert = Val(false) (isbits closures need no
 # conversion, so they skip Adapt).
+#
+# A compile error from a buffer that exceeds the shared memory level of its slice loop (see
+# check_shmem_level) is returned here as the bytes that the loop needs (see
+# shmem_level_error_bytes). The try block wraps the compilation, not the launch: a value
+# that is live in a try block is boxed on the heap, which would copy the launch's arguments.
 @static if isdefined(CUDA, :KernelCall)
     converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
-    compile_kernel(call, ::Nothing) = CUDA.kernel_compile(call; always_inline = true)
-    compile_kernel(call, name) = CUDA.kernel_compile(call; name, always_inline = true)
-    launch_kernel(kernel, call, threads, blocks) =
-        CUDA.kernel_launch(kernel, call; threads, blocks)
+    function compile_kernel(call, name; maxregs = nothing)
+        try
+            return compile_kernel_call(call, name, maxregs)
+        catch err
+            err isa CUDA_COMPILER.GPUCompiler.InvalidIRError || rethrow()
+            bytes = shmem_level_error_bytes(err)
+            iszero(bytes) && rethrow()
+            return bytes
+        end
+    end
+    compile_kernel_call(call, ::Nothing, maxregs) =
+        CUDA.kernel_compile(call; always_inline = true, maxregs_kwarg(maxregs)...)
+    compile_kernel_call(call, name, maxregs) =
+        CUDA.kernel_compile(call; name, always_inline = true, maxregs_kwarg(maxregs)...)
+    launch_kernel(kernel, call, threads, blocks, shmem) =
+        CUDA.kernel_launch(kernel, call; threads, blocks, shmem)
 else
     converted_kernel_call(f!::F!, args) where {F!} = (;
         f! = isbitstype(F!) ? f! : CUDA.cudaconvert(f!),
         args = map(CUDA.cudaconvert, args),
         source = (f!, args),
     )
-    compile_kernel(call, ::Nothing) =
-        CUDA.cufunction(call.f!, argument_types(call); always_inline = true)
-    compile_kernel(call, name) =
-        CUDA.cufunction(call.f!, argument_types(call); name, always_inline = true)
+    compile_kernel(call, name; maxregs = nothing) =
+        compile_function(call.f!, argument_types(call), name, maxregs)
+    function compile_function(f!::F!, tt, name, maxregs) where {F!}
+        try
+            return compile_function_call(f!, tt, name, maxregs)
+        catch err
+            err isa CUDA_COMPILER.GPUCompiler.InvalidIRError || rethrow()
+            bytes = shmem_level_error_bytes(err)
+            iszero(bytes) && rethrow()
+            return bytes
+        end
+    end
+    compile_function_call(f!, tt, ::Nothing, maxregs) =
+        CUDA.cufunction(f!, tt; always_inline = true, maxregs_kwarg(maxregs)...)
+    compile_function_call(f!, tt, name, maxregs) =
+        CUDA.cufunction(f!, tt; name, always_inline = true, maxregs_kwarg(maxregs)...)
     argument_types(call) = Tuple{map(Core.Typeof, call.args)...}
-    launch_kernel(kernel, call, threads, blocks) =
-        GC.@preserve call kernel(call.args...; threads, blocks, convert = Val(false))
+    launch_kernel(kernel, call, threads, blocks, shmem) = GC.@preserve call kernel(
+        call.args...;
+        threads,
+        blocks,
+        shmem,
+        convert = Val(false),
+    )
 end
 
 """
-    auto_launch!(f!, args; [nitems], [config], [threads_s], [blocks_s])
+    auto_launch!(f!, args; [nitems], [config], [threads_s], [blocks_s], [shmem])
 
 Launch a cuda kernel, using `launch_configuration` to determine the number of
 threads and blocks.
 
 The threads and blocks are computed from the compiled kernel by `config` if it is
 given, or else so that each of `nitems` items gets its own thread; otherwise, the
-suggested threads and blocks (`threads_s`, `blocks_s`) are used.
+suggested threads and blocks (`threads_s`, `blocks_s`) are used. The kernel is launched
+with the [`DynamicShmem`](@ref) `shmem` evaluated at its number of threads per block (none
+by default), which a `config` must also pass to `launch_configuration`, since the launch
+configuration raises the limit on dynamic shared memory of a kernel that needs more than
+the default (a launch given `threads_s` must stay within it). Every kernel that allocates
+dynamic shared memory (see `scoped_static_array`) must be given enough of it.
+
+Return `nothing` once the kernel is launched. A kernel that does not compile because a
+buffer exceeds the shared memory level of its slice loop (see `check_shmem_level`) is not
+launched, and the bytes it needs are returned instead (see `launch_slice_loop`).
 """
 function auto_launch!(
     f!::F!,
@@ -485,6 +608,8 @@ function auto_launch!(
     config = nothing,
     threads_s = nothing,
     blocks_s = nothing,
+    shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
+    maxregs = nothing,
 ) where {F!}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
@@ -554,16 +679,17 @@ function auto_launch!(
 
     # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
     call = converted_kernel_call(f!, args)
-    kernel = compile_kernel(call, kernel_name)
+    kernel = compile_kernel(call, kernel_name; maxregs)
+    kernel isa CUDA.HostKernel || return kernel # the bytes of a buffer beyond the level
     if !isnothing(config)
         (; threads, blocks) = config(kernel)
     elseif isnothing(nitems)
         (threads, blocks) = (threads_s, blocks_s)
     else
-        threads = launch_configuration(kernel, nitems; strict = false).threads
+        threads = launch_configuration(kernel, nitems; strict = false, shmem).threads
         blocks = cld(nitems, threads)
     end
-    launch_kernel(kernel, call, threads, blocks)
+    launch_kernel(kernel, call, threads, blocks, shmem(prod(threads)))
     RECORD_KERNELS[] && push!(RECORDED_KERNELS, kernel)
 
     if collect_kernel_stats() # only for development use
