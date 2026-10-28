@@ -176,6 +176,28 @@ Convert the parameters of the stretching rule `stretch` to the floating point ty
 function _convert_stretch end
 _convert_stretch(::Type{FT}, stretch::Uniform) where {FT} = stretch
 
+"""
+    _faces_from_surface(domain, u_faces, reverse_mode)
+
+Place faces at the heights `u_faces` above the surface, increasing from `0` to
+the domain height. The surface is `coord_min` and heights count upward; in
+`reverse_mode` the surface is `coord_max` and heights count downward, which
+mirrors the profile about the domain midpoint. The end faces are pinned to the
+domain bounds.
+"""
+function _faces_from_surface(
+    domain::IntervalDomain,
+    u_faces::AbstractVector{FT_solve},
+    reverse_mode::Bool,
+) where {FT_solve}
+    z_min = FT_solve(Geometry.component(domain.coord_min, 1))
+    z_max = FT_solve(Geometry.component(domain.coord_max, 1))
+    faces = reverse_mode ? z_max .- reverse(u_faces) : z_min .+ u_faces
+    faces[1] = z_min
+    faces[end] = z_max
+    return faces
+end
+
 function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::Uniform = Uniform();
@@ -238,16 +260,8 @@ function IntervalMesh(
     h = stretch.H / R
 
     η(ζ) = ζ == 1 ? ζ : (-h) * log1p((expm1(-1 / h)) * ζ)
-    faces = [
-        CT(reverse_mode ? cmax + R * η(ζ) : cmin + R * η(ζ)) for
-        ζ in range(FT(0), FT(1); length = nelems + 1)
-    ]
-
-    if reverse_mode
-        faces = map(f -> eltype(faces)(-f), faces)
-        faces[1] = faces[1] == -cmax ? cmax : faces[1]
-        reverse!(faces)
-    end
+    u_faces = [R * η(ζ) for ζ in range(FT(0), FT(1); length = nelems + 1)]
+    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
     monotonic_check(faces)
     IntervalMesh(stretch, domain, faces, nothing, reverse_mode)
 end
@@ -321,17 +335,15 @@ function IntervalMesh(
         throw(ArgumentError("dz_top must be ≤ dz_bottom"))
     end
 
-    # bottom coord height value is always min and top coord height value is always max
-    # since the vertical coordinate is positive upward
-    z_bottom = Geometry.component(domain.coord_min, 1)
-    z_top = Geometry.component(domain.coord_max, 1)
-    # but in reverse_mode they are swapped temporarily, together with dz_bottom and dz_top
-    # so that the following root solve algorithm does not need to change
+    # The solve runs from the surface upward with `dz_bottom` the surface
+    # spacing; in `reverse_mode` the surface is the top, so the two spacings
+    # swap and the profile is mirrored when the faces are placed.
     if reverse_mode
-        z_bottom, z_top = Geometry.component(domain.coord_max, 1),
-        -Geometry.component(domain.coord_min, 1)
         dz_top, dz_bottom = dz_bottom, dz_top
     end
+    z_min = Geometry.component(domain.coord_min, 1)
+    z_max = Geometry.component(domain.coord_max, 1)
+    H = FT_solve(z_max - z_min)
 
     # define the inverse σ⁻¹ exponential stretching function
     exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log(1 - (1 - exp(-1 / h)) * ζ)
@@ -340,14 +352,12 @@ function IntervalMesh(
     ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
     # find bottom height variation
-    find_bottom(h) = dz_bottom - z_top * exp_stretch(ζ_n[1], h)
+    find_bottom(h) = dz_bottom - H * exp_stretch(ζ_n[1], h)
     # we use linearization
-    # h_bottom ≈ -dz_bottom / (z_top - z_bottom) / log(1 - 1/nelems)
+    # h_bottom ≈ -dz_bottom / H / log(1 - 1/nelems)
     # to approx bracket the lower / upper bounds of root sol
-    guess₋ =
-        -dz_bottom / (z_top - z_bottom) / log(1 - FT_solve(1 / (nelems - 1)))
-    guess₊ =
-        -dz_bottom / (z_top - z_bottom) / log(1 - FT_solve(1 / (nelems + 1)))
+    guess₋ = -dz_bottom / H / log(1 - FT_solve(1 / (nelems - 1)))
+    guess₊ = -dz_bottom / H / log(1 - FT_solve(1 / (nelems + 1)))
     h_bottom_sol = RootSolvers.find_zero(
         find_bottom,
         RootSolvers.SecantMethod(guess₋, guess₊),
@@ -356,18 +366,18 @@ function IntervalMesh(
     )
     if h_bottom_sol.converged !== true
         error(
-            "h_bottom root failed to converge for dz_bottom: $dz_bottom on domain ($z_bottom, $z_top)",
+            "h_bottom root failed to converge for dz_bottom: $dz_bottom on domain ($z_min, $z_max)",
         )
     end
     h_bottom = h_bottom_sol.root
 
     # find top height variation
-    find_top(h) = dz_top - z_top * (1 - exp_stretch(ζ_n[end - 1], h))
+    find_top(h) = dz_top - H * (1 - exp_stretch(ζ_n[end - 1], h))
     # we use the linearization
-    # h_top ≈ (z_top - dz_top) / z_top / log(nelem)
+    # h_top ≈ (H - dz_top) / H / log(nelem)
     # to approx braket the lower, upper bounds of root sol
-    guess₋ = ((z_top - z_bottom) - dz_top) / z_top / FT_solve(log(nelems + 1))
-    guess₊ = ((z_top - z_bottom) - dz_top) / z_top / FT_solve(log(nelems - 1))
+    guess₋ = (H - dz_top) / H / FT_solve(log(nelems + 1))
+    guess₊ = (H - dz_top) / H / FT_solve(log(nelems - 1))
     h_top_sol = RootSolvers.find_zero(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
@@ -376,7 +386,7 @@ function IntervalMesh(
     )
     if h_top_sol.converged !== true
         error(
-            "h_top root failed to converge for dz_top: $dz_top on domain ($z_bottom, $z_top)",
+            "h_top root failed to converge for dz_top: $dz_top on domain ($z_min, $z_max)",
         )
     end
     h_top = h_top_sol.root
@@ -385,17 +395,10 @@ function IntervalMesh(
     h =
         h_bottom .+
         (ζ_n .- ζ_n[1]) * (h_top - h_bottom) / (ζ_n[end - 1] - ζ_n[1])
-    faces = z_bottom .+ (z_top - z_bottom) * exp_stretch.(ζ_n, h)
-
-    # add the bottom level
-    faces = FT_solve[z_bottom; faces...]
-    if reverse_mode
-        reverse!(faces)
-        faces = map(f -> eltype(faces)(-f), faces)
-        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
-    end
+    u_faces = FT_solve[zero(FT_solve); (H * exp_stretch.(ζ_n, h))...]
+    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
     monotonic_check(faces)
-    IntervalMesh(stretch, domain, CT.(faces), (; h_top), reverse_mode)
+    IntervalMesh(stretch, domain, faces, (; h_top), reverse_mode)
 end
 
 """
@@ -427,7 +430,8 @@ Construct a stretched mesh via
     )
 
 where `FT_solve` is the float type and `tol` the residual tolerance of the root
-solve for ``γ`` (default `1e-6 * dz_surface`). `nelems` must be at least 2. For
+solve for ``γ`` (default `1e-6 * dz_surface`, floored at ten ulps of the domain
+height so that Float32 solves converge). `nelems` must be at least 2. For
 land configurations, use `reverse_mode = true`. The resulting `faces` are reference
 heights without terrain warping.
 """
@@ -445,7 +449,7 @@ function IntervalMesh(
     stretch::HyperbolicTangentStretching;
     nelems::Int,
     FT_solve = Float64,
-    tol::Union{FT, Nothing} = nothing,
+    tol::Union{Real, Nothing} = nothing,
     reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
@@ -454,17 +458,13 @@ function IntervalMesh(
     stretch = _convert_stretch(FT, stretch)
 
     dz_surface = FT_solve(stretch.dz_surface)
-    tol === nothing && (tol = dz_surface * FT_solve(1e-6))
-
-    # bottom coord height value is always min and top coord height value is always max
-    # since the vertical coordinate is positive upward
-    z_bottom = Geometry.component(domain.coord_min, 1)
-    z_top = Geometry.component(domain.coord_max, 1)
-    # but in case of reverse_mode, we temporarily swap them
-    # so that the following root solve algorithm does not need to change
-    if reverse_mode
-        z_bottom, z_top = Geometry.component(domain.coord_max, 1),
-        -Geometry.component(domain.coord_min, 1)
+    z_min = Geometry.component(domain.coord_min, 1)
+    z_max = Geometry.component(domain.coord_max, 1)
+    H = FT_solve(z_max - z_min)
+    # The residual is a height, and rounding in `H * tanh_stretch` is a few
+    # ulps of `H`; the floor keeps the default reachable in Float32.
+    if tol === nothing
+        tol = max(dz_surface * FT_solve(1e-6), H * 10 * eps(FT_solve))
     end
 
     # define the hyperbolic tangent stretching function
@@ -474,7 +474,7 @@ function IntervalMesh(
     ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
     # find the stretching parameter given the grid spacing at the surface
-    find_surface(γ) = dz_surface - z_top * tanh_stretch(ζ_n[1], γ)
+    find_surface(γ) = dz_surface - H * tanh_stretch(ζ_n[1], γ)
     γ_sol = RootSolvers.find_zero(
         find_surface,
         RootSolvers.NewtonsMethodAD(FT_solve(1.0)),
@@ -483,24 +483,17 @@ function IntervalMesh(
     )
     if γ_sol.converged !== true
         error(
-            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_bottom, $z_top)",
+            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_min, $z_max)",
         )
     end
 
-    faces = z_bottom .+ (z_top - z_bottom) * tanh_stretch.(ζ_n, γ_sol.root)
-
-    # add the bottom level
-    faces = FT_solve[z_bottom; faces...]
-    if reverse_mode
-        reverse!(faces)
-        faces = map(f -> eltype(faces)(-f), faces)
-        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
-    end
+    u_faces = FT_solve[zero(FT_solve); (H * tanh_stretch.(ζ_n, γ_sol.root))...]
+    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
     monotonic_check(faces)
     IntervalMesh(
         stretch,
         domain,
-        CT.(faces),
+        faces,
         (; γ_sol = γ_sol.root),
         reverse_mode,
     )
@@ -519,15 +512,30 @@ index ``k(u) \\in [0, N]`` is the sum of a background hyperbolic tangent profile
 and a boundary-layer hyperbolic tangent profile:
 
 ```math
-k(u; \\gamma) = n_{\\text{bg}}(\\gamma)\\left[1 - \\frac{\\operatorname{atanh}[(1 - \\eta)\\tanh(\\gamma)]}{\\gamma}\\right]
-  + \\big(N - n_{\\text{bg}}(\\gamma)\\big)\\,\\frac{\\tanh(u / z_{\\text{pbl}})}{\\tanh(H / z_{\\text{pbl}})},
+k(u; \\gamma) = n_{\\text{bg}}(\\gamma)
+  \\left[1 - \\frac{\\operatorname{atanh}[(1 - \\eta)\\tanh(\\gamma)]}
+                  {\\gamma}\\right]
+  + \\big(N - n_{\\text{bg}}(\\gamma)\\big)\\,
+  \\frac{\\tanh(u / z_{\\text{pbl}})}{\\tanh(H / z_{\\text{pbl}})},
 ```
 
-where ``n_{\\text{bg}}(\\gamma) = \\gamma / \\operatorname{atanh}[(\\text{dz\\_top} / H)\\tanh(\\gamma)]``
-sets the top element spacing to `dz_top`, and ``\\gamma > 0`` is solved so that
-``k(\\text{dz\\_surface}; \\gamma) = 1``. When ``N \\ge n_{\\text{bg}}(\\gamma)``,
-``k'(u) > 0`` and ``k''(u) < 0`` for ``u \\in (0, H]``, so element spacings
+where
+``n_{\\text{bg}}(\\gamma) = \\gamma / \\operatorname{atanh}[(\\text{dz\\_top} / H)\\tanh(\\gamma)]``
+sets the top element spacing of the background profile to `dz_top`, and
+``\\gamma > 0`` is solved so that ``k(\\text{dz\\_surface}; \\gamma) = 1``. The
+boundary-layer profile is exponentially small near the top, so the top element
+spacing matches `dz_top` to within a relative error of order
+``e^{-2H / z_{\\text{pbl}}}``. When ``N \\ge n_{\\text{bg}}(\\gamma)``,
+``k'(u) > 0`` and ``k''(u) < 0`` for ``u \\in (0, H)``, so element spacings
 increase monotonically from `dz_surface` at the surface to `dz_top` at the top.
+The faces are the heights at which ``k`` takes integer values.
+
+The number of elements is constrained on both sides: `nelems` must be at least
+the number of levels of the single-scale [`HyperbolicTangentStretching`](@ref)
+profile that matches both `dz_surface` and `dz_top`, and below the count at
+which the boundary-layer profile alone places the first face below
+`dz_surface`. The constructor throws an `ArgumentError` naming the admissible
+range when `nelems` lies outside it.
 
 Construct a stretched mesh via
 
@@ -540,10 +548,12 @@ Construct a stretched mesh via
         reverse_mode = false,
     )
 
-where `FT_solve` is the float type and `tol` the residual tolerance of the root
-solves (default `1e-9`). `nelems` must be at least 2. For land configurations,
-use `reverse_mode = true`. The resulting `faces` are reference heights without
-terrain warping.
+where `FT_solve` is the float type and `tol` the residual tolerance, in level
+index units, of the root solves (default `sqrt(eps(FT_solve))`). For land
+configurations, use `reverse_mode = true`: the profile is mirrored so that
+`dz_surface` is the spacing at the top of the domain and `dz_top` the spacing
+at the bottom. The resulting `faces` are reference heights without terrain
+warping.
 """
 struct BoundaryLayerHyperbolicTangentStretching{FT} <: StretchingRule
     dz_surface::FT
@@ -551,6 +561,7 @@ struct BoundaryLayerHyperbolicTangentStretching{FT} <: StretchingRule
     z_pbl::FT
 end
 
+# Promotes mixed `Real` arguments; see `GeneralizedExponentialStretching`.
 function BoundaryLayerHyperbolicTangentStretching(
     dz_surface::Real,
     dz_top::Real,
@@ -589,22 +600,20 @@ function IntervalMesh(
     dz_surface = FT_solve(stretch.dz_surface)
     dz_top = FT_solve(stretch.dz_top)
     z_pbl = FT_solve(stretch.z_pbl)
-    tol_solve = isnothing(tol) ? FT_solve(1e-9) : FT_solve(tol)
+    # The residuals are level indices, so the tolerance is absolute; `sqrt(eps)`
+    # is reachable in Float32 and places faces to within ~1e-8 dz in Float64.
+    tol_solve = isnothing(tol) ? sqrt(eps(FT_solve)) : FT_solve(tol)
 
-    z_bottom = FT_solve(Geometry.component(domain.coord_min, 1))
-    z_top = FT_solve(Geometry.component(domain.coord_max, 1))
-    if reverse_mode
-        z_bottom, z_top = FT_solve(Geometry.component(domain.coord_max, 1)),
-        -FT_solve(Geometry.component(domain.coord_min, 1))
-    end
-    H = z_top - z_bottom
+    z_min = FT_solve(Geometry.component(domain.coord_min, 1))
+    z_max = FT_solve(Geometry.component(domain.coord_max, 1))
+    H = z_max - z_min
     if !(
         zero(FT_solve) < dz_surface < H / nelems < dz_top < H &&
         z_pbl > zero(FT_solve)
     )
         throw(
             ArgumentError(
-                "BoundaryLayerHyperbolicTangentStretching requires 0 < dz_surface < (z_top - z_bottom) / nelems < dz_top < z_top - z_bottom and z_pbl > 0",
+                "BoundaryLayerHyperbolicTangentStretching requires 0 < dz_surface < (z_max - z_min) / nelems < dz_top < z_max - z_min and z_pbl > 0",
             ),
         )
     end
@@ -620,6 +629,11 @@ function IntervalMesh(
         return k_bg + (N - n_bg) * (tanh(u / z_pbl) / th_pbl)
     end
 
+    # The root `γ` is bracketed between the uniform limit `γ → 0` and `γ_max`,
+    # at which the background profile alone already has surface spacing
+    # `dz_surface`. With `n_bg` increasing in `γ`, `n_bg(γ) ≤ n_bg(γ_max) ≤ N`
+    # on the bracket, which keeps the boundary-layer weight `N - n_bg`
+    # nonnegative and the spacing monotonic.
     find_gamma(γ) = cumulative_level(dz_surface, γ) - one(FT_solve)
     η_surface = dz_surface / H
     η_top = dz_top / H
@@ -627,9 +641,14 @@ function IntervalMesh(
     γ_min = FT_solve(1e-6)
     γ_max = atanh(τ_max)
     if !(find_gamma(γ_min) < zero(FT_solve) ≤ find_gamma(γ_max))
+        # `find_gamma` is affine in `N` at fixed `γ`, so its zeros at the
+        # bracket ends are the admissible range of `nelems`.
+        c_pbl = tanh(dz_surface / z_pbl) / th_pbl
+        n_min = n_bg_of_gamma(γ_max)
+        n_max = N - find_gamma(γ_min) / c_pbl
         throw(
             ArgumentError(
-                "BoundaryLayerHyperbolicTangentStretching parameters do not bracket a monotonic root for nelems = $nelems",
+                "BoundaryLayerHyperbolicTangentStretching with dz_surface = $dz_surface, dz_top = $dz_top, z_pbl = $z_pbl on a domain of height $H admits $(ceil(Int, n_min)) ≤ nelems < $(ceil(Int, n_max)); got nelems = $nelems",
             ),
         )
     end
@@ -641,38 +660,34 @@ function IntervalMesh(
     )
     if γ_sol.converged !== true
         error(
-            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_bottom, $z_top)",
+            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_min, $z_max)",
         )
     end
     γ = γ_sol.root
 
-    faces = Vector{FT_solve}(undef, nelems + 1)
-    faces[1] = z_bottom
-    faces[nelems + 1] = z_top
-    u_prev = zero(FT_solve)
+    # Face heights above the surface; `k(u)` is increasing, so each solve is
+    # bracketed by the previous face and the domain top.
+    u_faces = Vector{FT_solve}(undef, nelems + 1)
+    u_faces[1] = zero(FT_solve)
+    u_faces[nelems + 1] = H
     for m in 1:(nelems - 1)
         target_m = FT_solve(m)
         find_face(u) = cumulative_level(u, γ) - target_m
         u_sol = RootSolvers.find_zero(
             find_face,
-            RootSolvers.BrentsMethod(u_prev, H),
+            RootSolvers.BrentsMethod(u_faces[m], H),
             RootSolvers.CompactSolution(),
             RootSolvers.ResidualTolerance(tol_solve),
         )
         if u_sol.converged !== true
             error(
-                "face $m root failed to converge on domain ($z_bottom, $z_top)",
+                "face $m root failed to converge on domain ($z_min, $z_max)",
             )
         end
-        u_prev = u_sol.root
-        faces[m + 1] = z_bottom + u_prev
+        u_faces[m + 1] = u_sol.root
     end
 
-    if reverse_mode
-        reverse!(faces)
-        faces = map(f -> eltype(faces)(-f), faces)
-        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
-    end
+    faces = _faces_from_surface(domain, u_faces, reverse_mode)
     monotonic_check(faces)
     return IntervalMesh(
         stretch,

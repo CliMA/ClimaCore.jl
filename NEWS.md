@@ -9,6 +9,13 @@ main
   for two-scale hyperbolic tangent stretching that refines the boundary layer
   with scale height `z_pbl` while matching element spacing `dz_surface` at the
   surface and `dz_top` at the domain top.
+- ![][badge-🐛bugfix] Stretched `IntervalMesh` constructors now depend on the
+  domain only through its height. `GeneralizedExponentialStretching` and
+  `HyperbolicTangentStretching` solved for the target spacings as fractions of
+  the top coordinate rather than the domain height, and all three stretched
+  rules placed `reverse_mode` faces outside the domain when its top was away
+  from zero. The `HyperbolicTangentStretching` default tolerance is floored so
+  that `FT_solve = Float32` converges.
 
 v1.0.7
 -------
