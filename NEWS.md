@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Added
+  `Meshes.BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl)`
+  for two-scale hyperbolic tangent stretching that refines the boundary layer
+  with scale height `z_pbl` while matching element spacing `dz_surface` at the
+  surface and `dz_top` at the domain top.
+
 v1.0.6
 -------
 

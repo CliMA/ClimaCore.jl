@@ -27,6 +27,7 @@ values of `stretching` are:
   - [`ExponentialStretching(H)`](@ref)
   - [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
   - [`HyperbolicTangentStretching(dz_surface)`](@ref)
+  - [`BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl)`](@ref)
 
 If `reverse_mode` is `true`, the smallest element is at the top, and the largest at the bottom
 (this is typical for land model configurations).
@@ -501,6 +502,183 @@ function IntervalMesh(
         domain,
         CT.(faces),
         (; γ_sol = γ_sol.root),
+        reverse_mode,
+    )
+end
+
+"""
+    BoundaryLayerHyperbolicTangentStretching(dz_surface::FT, dz_top::FT, z_pbl::FT)
+
+Apply two-scale hyperbolic tangent stretching that refines the boundary layer
+with scale height `z_pbl` [m] while matching element spacing `dz_surface` at the
+surface [m] and `dz_top` at the top of the domain [m].
+
+For an interval ``[z_0, z_1]`` of height ``H = z_1 - z_0`` and height above the
+surface ``u = z - z_0 \\in [0, H]`` with ``\\eta = u / H``, the cumulative level
+index ``k(u) \\in [0, N]`` is the sum of a background hyperbolic tangent profile
+and a boundary-layer hyperbolic tangent profile:
+
+```math
+k(u; \\gamma) = n_{\\text{bg}}(\\gamma)\\left[1 - \\frac{\\operatorname{atanh}[(1 - \\eta)\\tanh(\\gamma)]}{\\gamma}\\right]
+  + \\big(N - n_{\\text{bg}}(\\gamma)\\big)\\,\\frac{\\tanh(u / z_{\\text{pbl}})}{\\tanh(H / z_{\\text{pbl}})},
+```
+
+where ``n_{\\text{bg}}(\\gamma) = \\gamma / \\operatorname{atanh}[(\\text{dz\\_top} / H)\\tanh(\\gamma)]``
+sets the top element spacing to `dz_top`, and ``\\gamma > 0`` is solved so that
+``k(\\text{dz\\_surface}; \\gamma) = 1``. When ``N \\ge n_{\\text{bg}}(\\gamma)``,
+``k'(u) > 0`` and ``k''(u) < 0`` for ``u \\in (0, H]``, so element spacings
+increase monotonically from `dz_surface` at the surface to `dz_top` at the top.
+
+Construct a stretched mesh via
+
+    IntervalMesh(
+        interval_domain,
+        BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl);
+        nelems,
+        FT_solve = Float64,
+        tol = nothing,
+        reverse_mode = false,
+    )
+
+where `FT_solve` is the float type and `tol` the residual tolerance of the root
+solves (default `1e-9`). `nelems` must be at least 2. For land configurations,
+use `reverse_mode = true`. The resulting `faces` are reference heights without
+terrain warping.
+"""
+struct BoundaryLayerHyperbolicTangentStretching{FT} <: StretchingRule
+    dz_surface::FT
+    dz_top::FT
+    z_pbl::FT
+end
+
+function BoundaryLayerHyperbolicTangentStretching(
+    dz_surface::Real,
+    dz_top::Real,
+    z_pbl::Real,
+)
+    dz_surface, dz_top, z_pbl = promote(dz_surface, dz_top, z_pbl)
+    return BoundaryLayerHyperbolicTangentStretching{typeof(dz_surface)}(
+        dz_surface,
+        dz_top,
+        z_pbl,
+    )
+end
+
+_convert_stretch(
+    ::Type{FT},
+    stretch::BoundaryLayerHyperbolicTangentStretching,
+) where {FT} = BoundaryLayerHyperbolicTangentStretching{FT}(
+    stretch.dz_surface,
+    stretch.dz_top,
+    stretch.z_pbl,
+)
+
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::BoundaryLayerHyperbolicTangentStretching;
+    nelems::Int,
+    FT_solve = Float64,
+    tol::Union{Real, Nothing} = nothing,
+    reverse_mode::Bool = false,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+    if nelems ≤ 1
+        throw(ArgumentError("`nelems` must be ≥ 2"))
+    end
+    stretch = _convert_stretch(FT, stretch)
+
+    dz_surface = FT_solve(stretch.dz_surface)
+    dz_top = FT_solve(stretch.dz_top)
+    z_pbl = FT_solve(stretch.z_pbl)
+    tol_solve = isnothing(tol) ? FT_solve(1e-9) : FT_solve(tol)
+
+    z_bottom = FT_solve(Geometry.component(domain.coord_min, 1))
+    z_top = FT_solve(Geometry.component(domain.coord_max, 1))
+    if reverse_mode
+        z_bottom, z_top = FT_solve(Geometry.component(domain.coord_max, 1)),
+        -FT_solve(Geometry.component(domain.coord_min, 1))
+    end
+    H = z_top - z_bottom
+    if !(
+        zero(FT_solve) < dz_surface < H / nelems < dz_top < H &&
+        z_pbl > zero(FT_solve)
+    )
+        throw(
+            ArgumentError(
+                "BoundaryLayerHyperbolicTangentStretching requires 0 < dz_surface < (z_top - z_bottom) / nelems < dz_top < z_top - z_bottom and z_pbl > 0",
+            ),
+        )
+    end
+
+    N = FT_solve(nelems)
+    th_pbl = tanh(H / z_pbl)
+    n_bg_of_gamma(γ) = γ / atanh((dz_top / H) * tanh(γ))
+
+    function cumulative_level(u, γ)
+        η = u / H
+        n_bg = n_bg_of_gamma(γ)
+        k_bg = n_bg * (one(FT_solve) - atanh((one(FT_solve) - η) * tanh(γ)) / γ)
+        return k_bg + (N - n_bg) * (tanh(u / z_pbl) / th_pbl)
+    end
+
+    find_gamma(γ) = cumulative_level(dz_surface, γ) - one(FT_solve)
+    η_surface = dz_surface / H
+    η_top = dz_top / H
+    τ_max = sqrt((η_top - η_surface) / ((one(FT_solve) - η_surface) * η_top))
+    γ_min = FT_solve(1e-6)
+    γ_max = atanh(τ_max)
+    if !(find_gamma(γ_min) < zero(FT_solve) ≤ find_gamma(γ_max))
+        throw(
+            ArgumentError(
+                "BoundaryLayerHyperbolicTangentStretching parameters do not bracket a monotonic root for nelems = $nelems",
+            ),
+        )
+    end
+    γ_sol = RootSolvers.find_zero(
+        find_gamma,
+        RootSolvers.BrentsMethod(γ_min, γ_max),
+        RootSolvers.CompactSolution(),
+        RootSolvers.ResidualTolerance(tol_solve),
+    )
+    if γ_sol.converged !== true
+        error(
+            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_bottom, $z_top)",
+        )
+    end
+    γ = γ_sol.root
+
+    faces = Vector{FT_solve}(undef, nelems + 1)
+    faces[1] = z_bottom
+    faces[nelems + 1] = z_top
+    u_prev = zero(FT_solve)
+    for m in 1:(nelems - 1)
+        target_m = FT_solve(m)
+        find_face(u) = cumulative_level(u, γ) - target_m
+        u_sol = RootSolvers.find_zero(
+            find_face,
+            RootSolvers.BrentsMethod(u_prev, H),
+            RootSolvers.CompactSolution(),
+            RootSolvers.ResidualTolerance(tol_solve),
+        )
+        if u_sol.converged !== true
+            error(
+                "face $m root failed to converge on domain ($z_bottom, $z_top)",
+            )
+        end
+        u_prev = u_sol.root
+        faces[m + 1] = z_bottom + u_prev
+    end
+
+    if reverse_mode
+        reverse!(faces)
+        faces = map(f -> eltype(faces)(-f), faces)
+        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
+    end
+    monotonic_check(faces)
+    return IntervalMesh(
+        stretch,
+        domain,
+        CT.(faces),
+        (; γ_sol = γ),
         reverse_mode,
     )
 end
