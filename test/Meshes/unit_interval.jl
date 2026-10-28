@@ -362,6 +362,95 @@ end
     )
 end
 
+@testset "Stretched IntervalMesh on shifted domains" begin
+    # Every rule depends on the domain only through its height: shifting the
+    # bounds translates the faces, and `reverse_mode` mirrors them about the
+    # domain midpoint, with the surface spacing at the corresponding end.
+    FT = Float64
+    H = FT(30000)
+    z_lo = FT(1000)
+    base = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(H);
+        boundary_names = (:bottom, :top),
+    )
+    shifted = Domains.IntervalDomain(
+        Geometry.ZPoint(z_lo),
+        Geometry.ZPoint(z_lo + H);
+        boundary_names = (:bottom, :top),
+    )
+    faces_z(mesh) = [f.z for f in mesh.faces]
+    for (stretch, rev_stretch, dz_surface, nelems) in (
+        (
+            Meshes.ExponentialStretching(FT(7500)),
+            Meshes.ExponentialStretching(FT(7500)),
+            nothing,
+            10,
+        ),
+        (
+            Meshes.GeneralizedExponentialStretching(FT(30), FT(5000)),
+            Meshes.GeneralizedExponentialStretching(FT(5000), FT(30)),
+            FT(30),
+            20,
+        ),
+        (
+            Meshes.HyperbolicTangentStretching(FT(30)),
+            Meshes.HyperbolicTangentStretching(FT(30)),
+            FT(30),
+            20,
+        ),
+        (
+            Meshes.BoundaryLayerHyperbolicTangentStretching(
+                FT(30),
+                FT(3000),
+                FT(2200),
+            ),
+            Meshes.BoundaryLayerHyperbolicTangentStretching(
+                FT(30),
+                FT(3000),
+                FT(2200),
+            ),
+            FT(30),
+            43,
+        ),
+    )
+        z_base = faces_z(Meshes.IntervalMesh(base, stretch; nelems))
+        z_shift = faces_z(Meshes.IntervalMesh(shifted, stretch; nelems))
+        @test z_shift[1] == z_lo
+        @test z_shift[end] == z_lo + H
+        @test z_shift ≈ z_lo .+ z_base
+        if !isnothing(dz_surface)
+            @test isapprox(z_shift[2] - z_shift[1], dz_surface; rtol = 1e-3)
+        end
+
+        z_rev = faces_z(
+            Meshes.IntervalMesh(
+                shifted,
+                rev_stretch;
+                nelems,
+                reverse_mode = true,
+            ),
+        )
+        @test z_rev[1] == z_lo
+        @test z_rev[end] == z_lo + H
+        @test z_rev ≈ (z_lo + H) .- reverse(z_base)
+    end
+
+    # Float32 solves reach the default tolerance.
+    domain32 = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0f0),
+        Geometry.ZPoint(30000.0f0);
+        boundary_names = (:bottom, :top),
+    )
+    mesh32 = Meshes.IntervalMesh(
+        domain32,
+        Meshes.HyperbolicTangentStretching(30.0f0);
+        nelems = 20,
+        FT_solve = Float32,
+    )
+    @test isapprox(mesh32.faces[2].z, 30.0f0; rtol = 1e-3)
+end
+
 @testset "IntervalMesh BoundaryLayerHyperbolicTangentStretching" begin
     FT = Float64
     z_max = FT(60000)
@@ -377,7 +466,15 @@ end
     )
     @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 0)
     @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 1)
-    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 25)
+    # Too few levels for the boundary layer, and too many for the background.
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 61)
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 98)
+    err = try
+        Meshes.IntervalMesh(domain, stretch; nelems = 25)
+    catch e
+        e
+    end
+    @test occursin("admits 62 ≤ nelems < 98", err.msg)
 
     adaption = ClimaCore.Hypsography.SLEVEAdaption(
         Geometry.ZPoint(FT(5500.0)),
@@ -401,7 +498,8 @@ end
         @test minimum(dz_ref) >= FT(28.0) * (1 - 1e-5)
         @test isapprox(dz_ref[end], FT(3000.0); rtol = 1e-3)
 
-        # Verify monotonicity and minimum physical Δz under SLEVE over 5500 m terrain
+        # Physical spacing stays monotonic and above 20 m under SLEVE over
+        # 5500 m terrain.
         phys_faces = [
             ClimaCore.Hypsography.ref_z_to_physical_z(adaption, f, z_top_pt).z
             for f in mesh.faces
@@ -410,6 +508,45 @@ end
         @test all(>(0), dz_phys)
         @test all(>(0), diff(dz_phys))
         @test minimum(dz_phys) >= FT(20.0)
+    end
+
+    # Float32 solves reach the default tolerance.
+    mesh32 =
+        Meshes.IntervalMesh(domain, stretch; nelems = 75, FT_solve = Float32)
+    mesh64 = Meshes.IntervalMesh(domain, stretch; nelems = 75)
+    @test isapprox(
+        [f.z for f in mesh32.faces],
+        [f.z for f in mesh64.faces];
+        rtol = 1e-4,
+    )
+
+    # `reverse_mode` mirrors the profile about the domain midpoint, for a
+    # domain whose top is away from zero as well.
+    soil_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        FT(0.05),
+        FT(2.0),
+        FT(1.0),
+    )
+    for (z_lo, z_hi) in ((FT(-10), FT(0)), (FT(-5), FT(5)))
+        soil_domain = Domains.IntervalDomain(
+            Geometry.ZPoint(z_lo),
+            Geometry.ZPoint(z_hi);
+            boundary_names = (:bottom, :top),
+        )
+        up = Meshes.IntervalMesh(soil_domain, soil_stretch; nelems = 20)
+        down = Meshes.IntervalMesh(
+            soil_domain,
+            soil_stretch;
+            nelems = 20,
+            reverse_mode = true,
+        )
+        z_up = [f.z for f in up.faces]
+        z_down = [f.z for f in down.faces]
+        @test z_down[1] == z_lo
+        @test z_down[end] == z_hi
+        @test z_down ≈ z_lo .+ z_hi .- reverse(z_up)
+        @test isapprox(z_hi - z_down[end - 1], FT(0.05); rtol = 1e-5)
+        @test all(<(0), diff(diff(z_down)))
     end
 end
 
