@@ -362,6 +362,57 @@ end
     )
 end
 
+@testset "IntervalMesh BoundaryLayerHyperbolicTangentStretching" begin
+    FT = Float64
+    z_max = FT(60000)
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(z_max);
+        boundary_names = (:bottom, :top),
+    )
+    stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        FT(28.0),
+        FT(3000.0),
+        FT(2200.0),
+    )
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 0)
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 1)
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 25)
+
+    adaption = ClimaCore.Hypsography.SLEVEAdaption(
+        Geometry.ZPoint(FT(5500.0)),
+        FT(0.7),
+        FT(10.0),
+    )
+    z_top_pt = Geometry.ZPoint(z_max)
+
+    for nelems in (63, 75, 79, 87, 95)
+        mesh = Meshes.IntervalMesh(domain, stretch; nelems)
+        @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(FT(0))
+        @test Meshes.coordinates(mesh, nelems, 2) == Geometry.ZPoint(z_max)
+        @test isapprox(
+            Meshes.coordinates(mesh, 1, 2).z,
+            FT(28.0);
+            rtol = 1e-5,
+        )
+        dz_ref = diff([f.z for f in mesh.faces])
+        @test all(>(0), dz_ref)
+        @test all(>(0), diff(dz_ref))
+        @test minimum(dz_ref) >= FT(28.0) * (1 - 1e-5)
+        @test isapprox(dz_ref[end], FT(3000.0); rtol = 1e-3)
+
+        # Verify monotonicity and minimum physical Δz under SLEVE over 5500 m terrain
+        phys_faces = [
+            ClimaCore.Hypsography.ref_z_to_physical_z(adaption, f, z_top_pt).z
+            for f in mesh.faces
+        ]
+        dz_phys = diff(phys_faces)
+        @test all(>(0), dz_phys)
+        @test all(>(0), diff(dz_phys))
+        @test minimum(dz_phys) >= FT(20.0)
+    end
+end
+
 @testset "Truncated IntervalMesh" begin
     FT = Float64
     nz = 55
@@ -430,9 +481,22 @@ end
                 Meshes.HyperbolicTangentStretching(30),
                 Meshes.HyperbolicTangentStretching(FT(30)),
             ),
+            (
+                Meshes.BoundaryLayerHyperbolicTangentStretching(30, 3000, 2200),
+                Meshes.BoundaryLayerHyperbolicTangentStretching(
+                    FT(30),
+                    FT(3000),
+                    FT(2200),
+                ),
+            ),
         )
-            int_mesh = Meshes.IntervalMesh(domain, int_stretch; nelems = 20)
-            float_mesh = Meshes.IntervalMesh(domain, float_stretch; nelems = 20)
+            nelems =
+                int_stretch isa Meshes.BoundaryLayerHyperbolicTangentStretching ?
+                43 : 20
+            int_mesh =
+                Meshes.IntervalMesh(domain, int_stretch; nelems = nelems)
+            float_mesh =
+                Meshes.IntervalMesh(domain, float_stretch; nelems = nelems)
             @test int_mesh.faces == float_mesh.faces
             @test typeof(int_mesh.stretch) === typeof(float_stretch)
         end
