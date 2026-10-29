@@ -149,12 +149,33 @@ Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
     keys(dict1) == keys(dict2) && values(dict1) == values(dict2)
 
 function Base.getindex(dict::FieldNameDict, key)
-    key in keys(dict) || throw(KeyError(key))
-    key′, entry′ =
-        unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))[1]
-    internal_key = get_internal_key(key, key′)
-    return get_internal_entry(entry′, internal_key)
+    key in keys(dict) || return combined_entry(dict, key)
+    n = child_value_index(key, keys(dict).values)
+    internal_key = get_internal_key(key, keys(dict).values[n])
+    return get_internal_entry(values(dict)[n], internal_key)
 end
+
+# The entries at the children of a name (e.g., in a lazy FieldVectorView whose broadcast had
+# their names), combined into an entry of Tuples or NamedTuples.
+function combined_entry(dict, key)
+    has_child_entries(dict, key) || throw(KeyError(key))
+    names = child_names(key, keys(dict).name_tree)
+    entries = unrolled_map(
+        name -> name in keys(dict) ? dict[name] : combined_entry(dict, name),
+        names,
+    )
+    components = unrolled_map(name -> name_chain(name)[end], names)
+    f = components isa Tuple{Vararg{Int}} ? tuple : NamedTupleOf{components}()
+    return Base.Broadcast.broadcasted(f, entries...)
+end
+has_child_entries(dict, key) =
+    key isa FieldName && is_node_name(key, keys(dict).name_tree) &&
+    unrolled_all(child_names(key, keys(dict).name_tree)) do name
+        name in keys(dict) || has_child_entries(dict, name)
+    end
+struct NamedTupleOf{names} end
+(::NamedTupleOf{names})(values...) where {names} = NamedTuple{names}(values)
+@drop_recursion_limits combined_entry has_child_entries
 
 get_internal_key(child_name::FieldName, name::FieldName) =
     extract_internal_name(child_name, name)
@@ -169,6 +190,10 @@ Return the component of `entry` at `name`, i.e. `get_field(entry, name)`.
 Called from `Base.getindex(::FieldNameDict, key)`.
 """
 get_internal_entry(entry, name::FieldName) = get_field(entry, name)
+get_internal_entry(entry::Fields.LazyField, ::FieldName{()}) = entry
+get_internal_entry(entry::Fields.LazyField, name::FieldName) =
+    Base.Broadcast.broadcasted(Base.Fix2(broadcasted_get_field, name), entry)
+
 # call get_internal_entry on scaling value, and rebuild entry container
 """
     get_internal_entry(entry, name_pair::FieldNamePair)
@@ -327,7 +352,7 @@ end
 
 # Similar behavior to indexing an array with a slice.
 function Base.getindex(dict::FieldNameDict, new_keys::FieldNameSet)
-    common_keys = intersect(keys(dict), new_keys)
+    common_keys = static_call(intersect, keys(dict), new_keys)
     return FieldNameDict(common_keys, map(key -> dict[key], common_keys))
 end
 
@@ -912,9 +937,10 @@ function Base.Broadcast.broadcasted(
     vector_or_matrix1::FieldNameDict,
     vector_or_matrix2::FieldNameDict,
 )
-    all_keys = union(keys(vector_or_matrix1), keys(vector_or_matrix2))
+    all_keys = static_call(union, keys(vector_or_matrix1), keys(vector_or_matrix2))
+    common_keys = static_call(intersect, keys(vector_or_matrix1), keys(vector_or_matrix2))
     entries = map(all_keys) do key
-        if key in intersect(keys(vector_or_matrix1), keys(vector_or_matrix2))
+        if key in common_keys
             entry1 = vector_or_matrix1[key]
             entry2 = vector_or_matrix2[key]
             if (
@@ -950,9 +976,11 @@ function Base.Broadcast.broadcasted(
     matrix::FieldMatrix,
     vector_or_matrix::FieldNameDict,
 )
-    product_keys = matrix_product_keys(keys(matrix), keys(vector_or_matrix))
+    product_keys =
+        static_call(matrix_product_keys, keys(matrix), keys(vector_or_matrix))
     entries = map(product_keys) do product_key
-        summand_names = summand_names_for_matrix_product(
+        summand_names = static_call(
+            summand_names_for_matrix_product,
             product_key,
             keys(matrix),
             keys(vector_or_matrix),
@@ -1057,32 +1085,53 @@ Base.Broadcast.materialize!(
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
 
-NVTX.@annotate function copyto_foreach!(
-    dest::FieldNameDict,
-    vector_or_matrix::FieldNameDict,
-)
+# Broadcasts at the top level check their keys, but those in a slice loop (like the loop of
+# field_matrix_solve!, which checks its arguments first) skip checks and NVTX annotations.
+# A destination without Fields can only be compared with its result, which also compiles in
+# a slice loop on a GPU.
+Base.Broadcast.materialize!(dest::FieldNameDict, vector_or_matrix::FieldNameDict) =
+    in_slice_loop(dest) ?
+    (copyto_foreach!(dest, vector_or_matrix, Val(false)); synchronize_in_loop(dest)) :
+    !unrolled_any(Base.Fix2(isa, Fields.Field), values(dest)) && !is_lazy(dest) ?
+    checked_copyto_foreach!(dest, vector_or_matrix) :
+    checked_materialize!(dest, vector_or_matrix)
+
+NVTX.@annotate checked_materialize!(dest, vector_or_matrix) =
+    checked_copyto_foreach!(dest, vector_or_matrix)
+function checked_copyto_foreach!(dest, vector_or_matrix)
+    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
+    # It is not always the case that keys(vector_or_matrix) == keys(dest).
+    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) ||
+        error(incompatible_keys_string(keys(vector_or_matrix), keys(dest)))
+    copyto_foreach!(dest, vector_or_matrix, Val(true))
+end
+
+# The messages are compile-time constants, so that GPU kernels need not build them.
+@generated immutable_entry_string(
+    key,
+) = "matrix entry at $(key <: Tuple ? map(T -> T.instance, fieldtypes(key)) : key.instance) \
+     is immutable"
+@generated incompatible_keys_string(keys1, keys2) =
+    Base.issingletontype(keys1) && Base.issingletontype(keys2) ?
+    "Broadcast result and destination keys are incompatible: \
+     $(set_string(keys1.instance)) vs. $(set_string(keys2.instance))" :
+    "Broadcast result and destination keys are incompatible"
+
+function copyto_foreach!(dest, vector_or_matrix, check)
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
         if dest[key] isa ScalingFieldMatrixEntry
-            dest[key] == entry || error("matrix entry at $key is immutable")
+            check isa Val{false} || dest[key] == entry || error(immutable_entry_string(key))
         elseif entry isa ScalingFieldMatrixEntry
             dest[key] .= (entry,)
+        elseif check isa Val{false}
+            # A call in a slice loop would pass the statement through local memory on a GPU,
+            # and its statement ends with one barrier after every entry (see materialize!).
+            Operators.apply_operators!(dest[key], entry, Val(false))
         else
             dest[key] .= entry
         end
     end
-end
-
-NVTX.@annotate function Base.Broadcast.materialize!(
-    dest::FieldNameDict,
-    vector_or_matrix::FieldNameDict,
-)
-    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
-    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) || error(
-        "Broadcast result and destination keys are incompatible: \
-         $(set_string(keys(vector_or_matrix))) vs. $(set_string(keys(dest)))",
-    ) # It is not always the case that keys(vector_or_matrix) == keys(dest).
-    copyto_foreach!(dest, vector_or_matrix)
 end
 
 #=

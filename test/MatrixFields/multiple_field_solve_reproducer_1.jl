@@ -109,12 +109,11 @@ A = MatrixFields.replace_name_tree(A_mf, keys(b).name_tree);
 
 alg = MatrixFields.BlockDiagonalSolve();
 solver = MatrixFields.FieldMatrixSolver(alg, A_mf, vector);
-(; cache) = solver;
 
 # With A = I on the implicit blocks and A = -I on the explicit blocks,
 # solving A * x = b for b ≡ 1 must give x ≡ 1 and x ≡ -1 respectively.
 b_vec .= FT(1);
-MatrixFields.run_field_matrix_solver!(alg, cache, x, A, b)
+MatrixFields.run_field_matrix_solver!(alg, x, A, b)
 
 @testset "multiple field solve reproducer 1" begin
     for var in implicit_vars
