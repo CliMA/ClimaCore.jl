@@ -38,7 +38,9 @@ solve for correlated solves (see [`previous_solution`](@ref)); `b` and the entri
 be lazy (see [`lazy_mul`](@ref)). Temporary vectors and matrices are new `Field`s; in a loop
 over columns, they are in the registers of the threads that compute them, or in a shared
 buffer when other threads read them; in a loop of their own, they are taken from the `pool`
-of the [`FieldMatrixSolver`](@ref) when there is one (see `pooled`).
+of the [`FieldMatrixSolver`](@ref) when there is one (see `pooled`). Return the entries of `x`
+that are not zero by structure (see `is_zero_entry`), so that callers can skip products with
+the others.
 
 Methods should be inlined: when the columns of a GPU kernel are solved in one loop, a call
 of a method that is too large to inline copies its arguments to local memory.
@@ -399,8 +401,20 @@ lazy_inv(A) = Base.Broadcast.broadcasted(inv, A)
 lazy_add(As...) = Base.Broadcast.broadcasted(+, As...)
 lazy_sub(As...) = Base.Broadcast.broadcasted(-, As...)
 
+# Whether an entry of a lazy FieldNameDict is zero by structure (a lazy zero of a Field, like
+# the rows of a right-hand side that its matrix does not have; see schur_complement_rhs), and
+# the keys of the other entries. Solves skip such entries, and products skip absent keys.
+is_zero_entry(_) = false
+is_zero_entry(::Base.Broadcast.Broadcasted{<:Any, <:Any, typeof(zero)}) = true
+
+nonzero_keys(dict) = FieldVectorKeys(
+    unrolled_filter(key -> !is_zero_entry(dict[key]), keys(dict).values),
+    keys(dict).name_tree,
+)
+
 # A lazy Field evaluated into a new Field (from the pool in a loop of its own), or a lazy
-# FieldNameDict with its lazy entries so evaluated; in a slice loop, the new Fields are in
+# FieldNameDict with its lazy entries that are not zero by structure so evaluated (zeros take
+# no Fields); in a slice loop, the new Fields are in
 # registers (an immutable array on the stack of a thread that owns its whole slice, as on
 # CPUs), whose points the statement updates directly (as in copyto_foreach!) instead of
 # through a nested slice loop.
@@ -430,7 +444,8 @@ end
     (entries, _) = unrolled_reduce(values(dict), ((), batched)) do (entries, batched), entry
         is_batched(entry) ?
         ((entries..., Operators.constant_field(batched[1][1])), Base.tail(batched)) :
-        ((entries..., entry isa Fields.LazyField ? evaluated(entry, pool) : entry), batched)
+        entry isa Fields.LazyField && !is_zero_entry(entry) ?
+        ((entries..., evaluated(entry, pool)), batched) : ((entries..., entry), batched)
     end
     return FieldNameDict(keys(dict), entries)
 end
@@ -453,7 +468,11 @@ end
 new_rhs(x, b, pool) = in_slice_loop(x) ? nothing : pooled(pool, similar, b)
 
 evaluate_rhs!(::Nothing, lazy_b) = lazy_b
-evaluate_rhs!(b, lazy_b) = (foreach(key -> evaluate!(b[key], lazy_b[key]), keys(b)); b)
+function evaluate_rhs!(b, lazy_b)
+    keys_to_evaluate = nonzero_keys(lazy_b)
+    foreach(key -> evaluate!(b[key], lazy_b[key]), keys_to_evaluate)
+    return union_dicts(b[keys_to_evaluate], lazy_b)
+end
 
 # The lazy difference b - Ax with the keys of b, whose entries that the product Ax splits into
 # children (e.g., a Field of NamedTuples whose components have their own matrix rows) are
@@ -485,8 +504,12 @@ supports the "lazy" functions [`lazy_mul`](@ref), which multiplies it by the vec
 
 The values `alg₁`, `x₁`, `b₁′`, and `pool` must be specified for `lazy_mul` to compute
 `inv(A₁₁) * A₁₂ * x₂`, which it stores in `x₁`, with `A₁₂ * x₂` evaluated into `b₁′` (see
-`new_rhs`) and temporaries from the `pool` (see [`run_field_matrix_solver!`](@ref)). When a
-`LazySchurComplement` is not passed to `lazy_mul`, these values can be omitted.
+`new_rhs`) and temporaries from the `pool` (see [`run_field_matrix_solver!`](@ref)); `x₁`
+and `A₁₁` can be restricted to the entries that the product `A₂₁ * x₁` reads and the ones
+they depend on (see `needed_keys`), the rows of `A₁₂ * x₂` that `A₁₂` does not have are
+zero by structure, so `alg₁` skips their solves, and the product skips the entries of `x₁`
+that are zero by structure. When a `LazySchurComplement` is not passed to `lazy_mul`, these
+values can be omitted.
 """
 struct LazySchurComplement{M11, M12, M21, M22, A1, V1, V2, P}
     A₁₁::M11
@@ -507,15 +530,15 @@ Base.zero(lsc::LazySchurComplement) =
 function lazy_mul(A₂₂′::LazySchurComplement, x₂)
     (; A₁₁, A₁₂, alg₁, x₁, b₁′, pool) = A₂₂′
     rhs = evaluate_rhs!(b₁′, schur_complement_rhs(A₁₂, x₂, x₁))
-    run_field_matrix_solver!(alg₁, x₁, A₁₁, rhs, empty_dict(rhs), pool)
-    return lazy_mul_template(A₂₂′, x₂)
+    nonzero_x₁ = run_field_matrix_solver!(alg₁, x₁, A₁₁, rhs, empty_dict(rhs), pool)
+    return lazy_mul_template(A₂₂′, x₂, nonzero_x₁)
 end
 
 # The lazy product of lazy_mul without the solve of a LazySchurComplement, whose types are
-# those of the product.
+# those of the product (with every entry of x₁, before the solve finds the zero ones).
 lazy_mul_template(A, x) = lazy_mul(A, x)
-lazy_mul_template(A₂₂′::LazySchurComplement, x₂) =
-    lazy_sub(lazy_mul(A₂₂′.A₂₂, x₂), lazy_mul(A₂₂′.A₂₁, A₂₂′.x₁))
+lazy_mul_template(A₂₂′::LazySchurComplement, x₂, x₁ = A₂₂′.x₁) =
+    lazy_sub(lazy_mul(A₂₂′.A₂₂, x₂), lazy_mul(A₂₂′.A₂₁, x₁))
 
 # The right-hand side of the solve in lazy_mul, A₁₂ * x₂, with zeros at the rows of x₁ that
 # A₁₂ does not have.
@@ -524,6 +547,21 @@ function schur_complement_rhs(A₁₂, x₂, x₁)
     lazy_b = @. lazy(A₁₂ * x₂ + zero(x₁[zero_rows]))
     keys(lazy_b) == keys(x₁) && return lazy_b
     return FieldNameDict(keys(x₁), map(key -> lazy_b[key], keys(x₁)))
+end
+
+# The keys of the entries of x₁ that a Schur complement reads (the columns of A₂₁) and of the
+# entries that they depend on through the off-diagonal entries of A₁₁ (closed by adding the
+# columns of the rows in the set as many times as there are rows); the solves of inv(A₁₁) * b
+# in lazy_mul and in the first step of SchurComplementReductionSolve skip the other entries.
+function needed_keys(A₁₁, A₂₁)
+    names = matrix_row_keys(keys(A₁₁))
+    return unrolled_reduce(
+        StaticOneTo(length(names)),
+        matrix_col_keys(keys(A₂₁)),
+    ) do keys₁, _
+        coupling_keys = keys(A₁₁[cartesian_product(keys₁, setdiff(names, keys₁))])
+        union(keys₁, matrix_col_keys(coupling_keys))
+    end
 end
 
 """
@@ -559,7 +597,8 @@ A = \\begin{bmatrix}
 \\end{bmatrix}
 ```
 
-This algorithm solves the `N` block equations `Aₙₙ * xₙ = bₙ` in sequence.
+This algorithm solves the `N` block equations `Aₙₙ * xₙ = bₙ` in sequence, setting
+`xₙ` to zero without a solve when `bₙ` is zero by structure (see `is_zero_entry`).
 
 If `Aₙₙ` is a diagonal matrix, the equation `Aₙₙ * xₙ = bₙ` is solved by making a
 single pass over the data, setting each `xₙ[i]` to `inv(Aₙₙ[i, i]) * bₙ[i]`.
@@ -658,10 +697,13 @@ band_matrices(args) = (args[2], band_matrices(unrolled_drop(args, Val(3)))...)
 end
 
 # The band matrix solves that a block diagonal solve fuses into one loop over columns, as
-# one Tuple of their arguments (x, A, b); the other blocks are solved pointwise.
+# one Tuple of their arguments (x, A, b); the other blocks are solved pointwise, or set to
+# zero when their right-hand sides are zero by structure.
+is_fused_solve(A, b, name) =
+    !avoid_fusing_solver(A[name, name]) && !is_zero_entry(b[name])
 fused_solves(x, A, b) =
     unrolled_flatmap(matrix_row_keys(keys(A)).values) do name
-        avoid_fusing_solver(A[name, name]) ? () : (x[name], A[name, name], b[name])
+        is_fused_solve(A, b, name) ? (x[name], A[name, name], b[name]) : ()
     end
 
 @inline function run_field_matrix_solver!(::BlockDiagonalSolve, x, A, b, _, pool)
@@ -669,44 +711,47 @@ fused_solves(x, A, b) =
     # which are then compiled once for all right-hand sides of a type.
     (A, b) = in_slice_loop(x) ? (evaluated(A), evaluated(b)) : (A, b)
     if in_slice_loop(x)
-        names = split_by(
-            name -> !avoid_fusing_solver(A[name, name]),
-            matrix_row_keys(keys(A)).values,
-        )[2]
+        names =
+            split_by(name -> is_fused_solve(A, b, name), matrix_row_keys(keys(A)).values)[2]
         copy_values!(
             unrolled_map(names) do name
-                copy_arg(x[name], pointwise_solution(A[name, name], b[name]))
+                value =
+                    is_zero_entry(b[name]) ? b[name] :
+                    pointwise_solution(A[name, name], b[name])
+                copy_arg(x[name], value)
             end,
         )
     else
         foreach(matrix_row_keys(keys(A))) do name
-            avoid_fusing_solver(A[name, name]) &&
+            if is_zero_entry(b[name])
+                x[name] .= b[name]
+            elseif avoid_fusing_solver(A[name, name])
                 single_field_solve!(x[name], A[name, name], b[name], pool)
+            end
         end
     end
     args = fused_solves(x, A, b)
-    # In a slice loop, other threads can read the solutions in later statements.
-    isempty(args) && return synchronize_in_loop(x)
-    # Fields with different column shapes (e.g., on column and extruded spaces)
-    # cannot share a loop, so every matrix is then solved in its own loop.
-    unrolled_allequal(column_shape, args) ||
-        return foreach(matrix_row_keys(keys(A))) do name
-            avoid_fusing_solver(A[name, name]) ||
+    if isempty(args) || !unrolled_allequal(column_shape, args)
+        # Fields with different column shapes (e.g., on column and extruded spaces)
+        # cannot share a loop, so every matrix is then solved in its own loop.
+        foreach(matrix_row_keys(keys(A))) do name
+            is_fused_solve(A, b, name) &&
                 single_field_solve!(x[name], A[name, name], b[name], pool)
         end
-    # In a slice loop, the previous statement ends with a barrier, so the columns are solved
-    # without a nested loop, whose barriers would be redundant (see _foreach_slice). The mask
-    # comes from a solution that is fused.
-    if in_slice_loop(x)
+    elseif in_slice_loop(x)
+        # The previous statement ends with a barrier, so the columns are solved without a
+        # nested loop, whose barriers would be redundant (see _foreach_slice).
         data_args = unrolled_map(solve_arg, args)
         solve_columns!(Val(shared_buffers(data_args)), data_args)
     else
+        # The mask comes from a solution that is fused.
         mask = Spaces.get_mask(axes(args[1]))
         data_args = unrolled_map(Base.Fix2(materialized_values, pool), args)
         solve_columns_in_loops!(mask, data_args)
     end
+    # In a slice loop, other threads can read the solutions in later statements.
     synchronize_in_loop(x)
-    return nothing
+    return x[nonzero_keys(b)]
 end
 
 # Lazy pairs of Fields and the values to copy into them in a slice loop (see copy_arg), copied
@@ -842,13 +887,15 @@ end
     pool,
 )
     A₁₁, _, A₂₁, A₂₂, b₁, b₂, x₁, x₂ = partition_blocks(alg.names₁, A, b, x)
-    run_field_matrix_solver!(alg.alg₁, x₁, A₁₁, b₁, previous_x[keys(b₁)], pool)
+    nonzero_x₁ = run_field_matrix_solver!(alg.alg₁, x₁, A₁₁, b₁, previous_x[keys(b₁)], pool)
     # In a slice loop, the solves of A₂₂ evaluate their right-hand side once, so it is lazy;
     # in a loop of their own, they can read it several times (e.g., a Schur complement
     # reduction reads its first block twice), so it is evaluated once.
-    b₂′ = lazy_residual(b₂, lazy_mul(A₂₁, x₁))
+    b₂′ = lazy_residual(b₂, lazy_mul(A₂₁, nonzero_x₁))
     b₂′ = in_slice_loop(x) ? b₂′ : evaluated(b₂′, pool)
-    run_field_matrix_solver!(alg.alg₂, x₂, A₂₂, b₂′, previous_x[keys(b₂)], pool)
+    nonzero_x₂ =
+        run_field_matrix_solver!(alg.alg₂, x₂, A₂₂, b₂′, previous_x[keys(b₂)], pool)
+    return union_dicts(nonzero_x₁, nonzero_x₂)
 end
 
 function solver_bytes(alg::BlockLowerTriangularSolve, x, A, b)
@@ -932,6 +979,7 @@ arrowhead_system(A₂₁_invA₁₁, A₁₂, A₂₂, b₁, b₂) =
     A₂₂′, b₂′ = arrowhead_system(A₂₁_invA₁₁, A₁₂, A₂₂, b₁, b₂)
     run_field_matrix_solver!(alg.alg₂, x₂, A₂₂′, b₂′, previous_x[keys(b₂)], pool)
     @. x₁ = inv(A₁₁) * (b₁ - A₁₂ * x₂)
+    return x
 end
 
 # The bytes are found from the types of lazy expressions, which are not evaluated.
@@ -954,7 +1002,9 @@ The `FieldName`s in `names₁` correspond to the subscript `₁`, while all othe
 `FieldName`s correspond to the subscript `₂`. This algorithm has 3 steps:
 
  1. Solve `A₁₁ * x₁′ = b₁` for `x₁′` using the algorithm `alg₁`, which is set to
-    a [`BlockDiagonalSolve`](@ref) by default.
+    a [`BlockDiagonalSolve`](@ref) by default (only for the entries of `x₁′` that
+    step 2 reads, i.e., the columns of `A₂₁`, and the entries they depend on, unless
+    `alg₁` has correlated solves).
  2. Solve `(A₂₂ - A₂₁ * inv(A₁₁) * A₁₂) * x₂ = b₂ - A₂₁ * x₁′` for `x₂`
     using the algorithm `alg₂`.
  3. Solve `A₁₁ * x₁ = b₁ - A₁₂ * x₂` for `x₁` using the algorithm `alg₁`.
@@ -1011,10 +1061,16 @@ end
     pool,
 )
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂, x₁, x₂ = partition_blocks(alg.names₁, A, b, x)
-    x₁′ = x₁ # Use x₁ as temporary storage to avoid additional allocations.
+    # Only the entries of x₁′ = inv(A₁₁) * b₁ that the Schur complement reads are solved for
+    # (see needed_keys), in the entries of x₁ that the last solve overwrites, unless alg₁ has
+    # correlated solves, which keep previous solutions of every entry.
+    keys₁′ =
+        isempty(keys(previous_x[keys(b₁)])) ? needed_keys(A₁₁, A₂₁) : keys(b₁)
+    A₁₁′ = A₁₁[cartesian_product(keys₁′, keys₁′)]
+    x₁′ = x₁[keys₁′]
     b₁′ = new_rhs(x, b₁, pool)
-    A₂₂′ = LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, alg.alg₁, x₁′, b₁′, pool)
-    run_field_matrix_solver!(alg.alg₁, x₁′, A₁₁, b₁, previous_x[keys(b₁)], pool)
+    A₂₂′ = LazySchurComplement(A₁₁′, A₁₂, A₂₁, A₂₂, alg.alg₁, x₁′, b₁′, pool)
+    run_field_matrix_solver!(alg.alg₁, x₁′, A₁₁′, b₁[keys₁′], previous_x[keys₁′], pool)
     # Every iteration of alg₂ reads its right-hand side, so it is evaluated once (in a slice
     # loop, the barrier keeps the solves of alg₂ from updating x₁ before it is evaluated).
     b₂′ = evaluated(lazy_residual(b₂, lazy_mul(A₂₁, x₁′)), pool)
@@ -1022,6 +1078,7 @@ end
     run_field_matrix_solver!(alg.alg₂, x₂, A₂₂′, b₂′, previous_x[keys(b₂)], pool)
     rhs = evaluate_rhs!(b₁′, lazy_residual(b₁, lazy_mul(A₁₂, x₂)))
     run_field_matrix_solver!(alg.alg₁, x₁, A₁₁, rhs, previous_x[keys(b₁)], pool)
+    return x
 end
 
 # The solves of the Schur complement (see lazy_mul) have the types of the solves of A₁₁.

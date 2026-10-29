@@ -407,6 +407,16 @@ end
         )
     end
 
+    @testset "iterative solve without iterations returns x[0] = 0" begin
+        alg = MatrixFields.StationaryIterativeSolve(; n_iters = 0)
+        A = MatrixFields.FieldMatrix((@name(c), @name(c)) => ᶜᶜmat3)
+        b = Fields.FieldVector(; c = ᶜvec)
+        x = similar(b)
+        parent(x) .= 1
+        ldiv!(x, FieldMatrixWithSolver(A, b, alg), b)
+        @test iszero(parent(x))
+    end
+
     @testset "approximate iterative solve with debugging" begin
         Logging.with_logger(Logging.SimpleLogger(stderr, Logging.Debug)) do
             # Recreate the setup from the previous unit test.
