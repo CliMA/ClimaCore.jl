@@ -5,6 +5,8 @@ agents:
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
+  # Written only by init, `.buildkite/hooks/pre-command` puts a node-local
+  # depot ahead of it for every other step.
   JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
   JULIA_CPU_TARGET: 'broadwell;skylake'
@@ -153,9 +155,31 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/runtests.jl"
+        timeout_in_minutes: 60
         env:
           CLIMACOMMS_DEVICE: "CUDA"
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
+          # Runs in its own step below (it matches only that file, so it is safe
+          # for every subsystem).
+          TEST_EXCLUDE_TAG: "operators/integrals.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      # The column integral tests compile about 20 minutes of GPU kernels, which
+      # pushed the operators job past its time limit.
+      - label: "Unit (GPU) - operators integrals"
+        key: unit_curated_suite_gpu_operators_integrals
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/runtests.jl"
+        timeout_in_minutes: 60
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          TEST_SUBSYSTEM: "operators"
+          TEST_TAG: "operators/integrals.jl"
           TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
         agents:
           slurm_gpus: 1
@@ -768,7 +792,11 @@ steps:
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
-          slurm_gpus: 1
+          # benchmark_stencils_utils.jl selects reference timings by GPU model
+          # (P100 and A100 tables exist); pin the hardware so they apply.
+          slurm_gres: "gpu:p100:1"
+          slurm_mem: 20G
+          slurm_cpus_per_task: 8
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
@@ -1334,6 +1362,8 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/invalidations.jl"
   - group: "Downstream tests"
+    depends_on: ~ # downstream builds should not depend on any steps in this
+                  # pipeline
     steps:
       # Downstream test: run ClimaAtmos CI against this ClimaCore commit.
       # ClimaAtmos's pipeline sees UPSTREAM_PACKAGES and
@@ -1353,6 +1383,22 @@ steps:
           env:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT} ClimaCoreSpectra#${BUILDKITE_COMMIT} ClimaCoreTempestRemap#${BUILDKITE_COMMIT}"
         soft_fail: true # downstream test failures don't block a merge
+
+      - label: ":rocket: Downstream: trigger ClimaLand CI"
+        trigger: "climaland-ci"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+
+      - label: ":rocket: Downstream: trigger ClimaCoupler CI"
+        trigger: "climacoupler-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
 
   - wait
 

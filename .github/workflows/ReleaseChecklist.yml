@@ -1,0 +1,56 @@
+name: Release checklist
+
+on:
+  pull_request:
+    paths:
+      - Project.toml
+
+# Queue runs for the same PR so that two runs cannot both post the checklist.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  comment:
+    # The GITHUB_TOKEN of a PR from a fork cannot comment.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Fetch the merge commit and its first parent, the base branch.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Check for a version bump
+        id: version
+        run: |
+          old=$(git show HEAD^1:Project.toml | grep -m1 '^version')
+          new=$(grep -m1 '^version' Project.toml)
+          echo "base: $old"
+          echo "PR:   $new"
+          if [[ "$old" != "$new" ]]; then
+            echo "bumped=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post release checklist
+        if: steps.version.outputs.bumped == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- release-checklist -->';
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            // Do not comment again if it already exists
+            if (comments.some(c => c.body?.includes(marker))) return;
+
+            const checklist = fs.readFileSync('.github/release_checklist.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body: `${marker}\n${checklist}`,
+            });

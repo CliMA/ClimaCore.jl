@@ -209,12 +209,13 @@ op_with_matrix_bcs(op) =
     isempty(op.bcs) ? op : Base.typename(typeof(op)).wrapper(matrix_bcs(op))
 
 # Constructs the `op_matrix .* arg` broadcast expression that applies an operator
-# matrix to `arg`.
-multiply_matrix_broadcasted(style, op_matrix, arg) = Base.Broadcast.Broadcasted(
-    style,
-    MultiplyColumnwiseBandMatrixField(),
-    (op_matrix, projected_operand(op_matrix, arg)),
-)
+# matrix to `arg`. The constructor is called from a function that is only inlined for
+# inferred arguments: when inference fails (e.g., for long expressions in Julia 1.10), a
+# dynamic constructor call would allocate a tuple type for every method lookup.
+@inline multiply_matrix_broadcasted(style, op_matrix, arg) =
+    _multiply_matrix_broadcasted(style, op_matrix, projected_operand(op_matrix, arg))
+_multiply_matrix_broadcasted(style, op_matrix, arg) =
+    Base.Broadcast.Broadcasted(style, MultiplyColumnwiseBandMatrixField(), (op_matrix, arg))
 
 # Wraps `arg` in a broadcast expression that applies boundary conditions, if any.
 set_boundaries(style, bcs, arg) =
@@ -244,7 +245,7 @@ Operators.operator_broadcasted(style, op::Operators.SetBoundaryOperator, args) =
 # Divergence operators require an additional adjoint on the input and output,
 # respectively. An operator with a SetValue stencil stays a stencil (see
 # `Operators.SetValueC2FOperator`).
-function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
+@inline function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
     Operators.has_setvalue_stencil(op) && return Base.Broadcast.Broadcasted(style, op, args)
     input_space = operator_input_space(op, Operators.return_space(op, args...))
     op_matrix = Base.Broadcast.broadcasted(
@@ -796,7 +797,8 @@ end
 
 # The interior stencils of the operators that stay stencils with a SetValue (see
 # `Operators.SetValueC2FOperator`): their matrix rows times their arguments, computed as in
-# a matrix product (see `multiply_matrix_row`, `projected_operand` and `adjoint_matrix_arg`).
+# a matrix product (see `MultiplyColumnwiseBandMatrixField`, `projected_operand` and
+# `adjoint_matrix_arg`).
 Base.@propagate_inbounds Operators.stencil_interior(
     op::Union{Operators.GradientC2F, Operators.DivergenceC2F, Operators.CurlC2F},
     space,

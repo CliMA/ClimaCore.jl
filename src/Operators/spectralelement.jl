@@ -238,21 +238,26 @@ end
     end
 end
 
-# Apply clipped_muladd_slab! along all available horizontal dimensions (or
-# plain muladd_slab! when only one is available). The two synchronizations make
-# every write to partial_result visible before it is read, and every read
-# complete before its buffer can be reused (see the buffer reuse invariant).
-@inline sequential_muladd_slab!(dest, matrix, arg) =
+# Apply clipped_muladd_slab! along all available horizontal dimensions (or plain
+# muladd_slab! when only one is available), reading arg at other threads' points, so a
+# buffer arg is published first: by a synchronization along one dimension, and along two by
+# the allocation of partial_result, which synchronizes (see the buffer reuse invariant). The
+# two synchronizations after that make every write to partial_result visible before it is
+# read, and every read complete before its buffer can be reused.
+@inline sequential_muladd_slab!(dest, matrix, arg, offset = Val(0)) =
     if horizontal_dims(arg) == (1,)
+        reads_buffer(arg) && DataLayouts.synchronize(DataLayouts.DataScope(arg))
         muladd_slab!(dest, matrix, arg, Val(:i))
     elseif horizontal_dims(arg) == (2,)
+        reads_buffer(arg) && DataLayouts.synchronize(DataLayouts.DataScope(arg))
         muladd_slab!(dest, matrix, arg, Val(:j))
     elseif horizontal_dims(arg) == (1, 2)
         # partial_result crosses threads (the :j pass reads the :i pass's
-        # points), so it must be a shared buffer, never registers.
+        # points), so it must be a shared buffer, never registers, placed after arg's.
         partial_result =
             DataLayouts.nquadpoints(dest) > DataLayouts.nquadpoints(arg) ?
-            buffer_similar(dest) : buffer_similar(arg)
+            buffer_similar(dest, eltype(dest), offset) :
+            buffer_similar(arg, eltype(arg), offset)
         muladd_slab_init!(partial_result)
         clipped_muladd_slab!(partial_result, matrix, arg, Val(:i))
         DataLayouts.synchronize(DataLayouts.DataScope(partial_result))
@@ -293,15 +298,17 @@ end
 
 # Contravariant component along horizontal dimension h of a Jacobian-weighted
 # argument, and the covariant basis vector eʰ that Gradient multiplies by.
-@inline materialize_contravariant(::Val{h}, arg, lg) where {h} = cached_arg(
-    components_broadcasted(
-        h == 1 ? Geometry.contravariant1 : Geometry.contravariant2,
-        Geometry.Contravariant(),
-        arg,
-        lg,
-    ),
-    Val(true),
-)
+@inline materialize_contravariant(::Val{h}, arg, lg, offset = Val(0)) where {h} =
+    cached_arg(
+        components_broadcasted(
+            h == 1 ? Geometry.contravariant1 : Geometry.contravariant2,
+            Geometry.Contravariant(),
+            arg,
+            lg,
+        ),
+        Val(true),
+        offset,
+    )
 @inline covariant_basis_vector(::Val{h}) where {h} =
     h == 1 ? Geometry.Covariant1Vector(true) : Geometry.Covariant2Vector(true)
 
@@ -432,9 +439,10 @@ function apply_operator(op::Divergence{F}, arg) where {F}
     )
     return jacobian_unweighted(F(), constant_field(dest))
 end
-# The contravariant component cached per dimension has the type of the divergence.
+# The contravariant component cached per dimension has the type of the divergence, and the
+# dimensions share one buffer (see the buffer reuse invariant in apply_operator).
 buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence}) =
-    length(horizontal_dims(bc.args[1])) * cached_bytes(bc.args[1], eltype(bc))
+    isempty(horizontal_dims(bc.args[1])) ? 0 : cached_bytes(bc.args[1], eltype(bc))
 
 """
     split_div = SplitDivergence()
@@ -570,17 +578,21 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
         full_matrix = deriv_matrix(StrongForm(), dest)
         full_matrix - LinearAlgebra.Diagonal(full_matrix)
     end
-    @inline contravariant(dim) = materialize_contravariant(dim, arg1′, lg)
+    # The intermediates are live at the same time as a buffer of arg2′, so they follow it.
+    offset = shared_buffer_bytes(arg2′)
+    @inline contravariant(dim) = materialize_contravariant(dim, arg1′, lg, offset)
     muladd_slab_dims!(
         split_muladd_slab!, contravariant, DataLayouts.DataScope(arg1), dims, dest,
         matrix, arg2′,
     )
     return jacobian_unweighted(StrongForm(), constant_field(dest))
 end
+# The dimensions share one buffer, as in Divergence.
 buffer_bytes(bc::SpectralOperatorBroadcasted{<:SplitDivergence}) =
-    length(horizontal_dims(bc.args[1])) *
-    cached_bytes(bc.args[1], Geometry.divergence_result_type(eltype(bc.args[1]))) +
-    (is_cached(bc.args[2]) ? cached_bytes(bc.args[2]) : 0)
+    (
+        isempty(horizontal_dims(bc.args[1])) ? 0 :
+        cached_bytes(bc.args[1], Geometry.divergence_result_type(eltype(bc.args[1])))
+    ) + (is_cached(bc.args[2]) ? cached_bytes(bc.args[2]) : 0)
 
 """
     grad = Gradient()              # strong form, == Gradient{StrongForm}()
@@ -784,8 +796,12 @@ function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl})
     (arg,) = bc.args
     (dims, lg) = (horizontal_dims(arg), Fields.local_geometry_field(arg))
     term_bytes(dim) = cached_bytes(arg, eltype(levi_civita(dim, arg, lg)))
-    return (unrolled_in(1, dims) ? term_bytes(Val(1)) : 0) +
-           (unrolled_in(2, dims) ? term_bytes(Val(2)) : 0)
+    # The terms cached per dimension can differ in type, and share one buffer (see the
+    # buffer reuse invariant in apply_operator).
+    return max(
+        unrolled_in(1, dims) ? term_bytes(Val(1)) : 0,
+        unrolled_in(2, dims) ? term_bytes(Val(2)) : 0,
+    )
 end
 
 abstract type TensorOperator <: SpectralElementOperator end
@@ -859,26 +875,19 @@ end
 tensor_form(::Interpolate) = StrongForm()
 tensor_form(::Restrict) = WeakForm()
 tensor_weighted(::Interpolate, arg) = materialize_buffer(arg)
-function tensor_weighted(::Restrict, arg)
-    # Restrict reads the lazily weighted argument at other threads' points, so
-    # register-resident values cannot reach it: a copy republished through
-    # materialize_buffer would have the same byte size as the arg-sized partial
-    # result of sequential_muladd_slab! and alias it (see the buffer reuse
-    # invariant). Fail loudly instead of silently reading each thread's own points.
-    DataLayouts.stored_in_registers(Fields.field_values(arg)) && throw(
-        ArgumentError(
-            "Restrict cannot read register-resident values on GPUs; \
-             materialize its argument outside the fused loop",
-        ),
-    )
-    return maybe_private_buffer(Base.broadcasted(*, arg, jacobian_weight(WeakForm(), arg)))
-end
+# Restrict reads the lazily weighted argument at other threads' points, so register-resident
+# values are republished through a buffer (which the partial result of
+# sequential_muladd_slab! is placed after).
+tensor_weighted(::Restrict, arg) =
+    let weighted = Base.broadcasted(*, arg, jacobian_weight(WeakForm(), arg))
+        DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
+        materialize_buffer(weighted) : maybe_private_buffer(weighted)
+    end
 tensor_unweighted(::Interpolate, dest) = dest
 tensor_unweighted(::Restrict, dest) = jacobian_unweighted(WeakForm(), dest)
 
 function apply_operator(op::TensorOperator, arg)
     arg′ = tensor_weighted(op, arg)
-    DataLayouts.synchronize(DataLayouts.DataScope(arg))
     # The destination's shape comes from the output space's local geometry type
     # (not a value, which would make the buffer's size dynamic and its
     # allocation dynamically dispatched) and its scope from the argument.
@@ -891,21 +900,27 @@ function apply_operator(op::TensorOperator, arg)
         Fields.Field(DataLayouts.register_similar(dest_shape, eltype(arg)), dest_space)
     matrix = interp_matrix(tensor_form(op), dest, arg)
     muladd_slab_init!(dest)
-    # arg′ and sequential_muladd_slab!'s own partial_result buffer are both
-    # retired by the synchronization at the end of that function.
-    sequential_muladd_slab!(dest, matrix, arg′)
+    # A buffered arg′ is published by sequential_muladd_slab!, whose partial result is placed
+    # after it; both are retired by the synchronization at the end of that function.
+    sequential_muladd_slab!(dest, matrix, arg′, shared_buffer_bytes(arg′))
     # Synchronize before returning; see the comment in the Divergence method.
     DataLayouts.synchronize(DataLayouts.DataScope(arg))
     return tensor_unweighted(op, constant_field(dest))
 end
 # Interpolate copies a lazy or register-resident argument into a buffer, while Restrict reads
-# its weighted argument lazily; two-dimensional slabs also need a partial result buffer.
+# its weighted argument lazily unless it is register-resident; two-dimensional slabs also
+# need a partial result buffer.
 function buffer_bytes(bc::SpectralOperatorBroadcasted{<:TensorOperator})
     (arg,) = bc.args
-    arg_bytes = bc.f isa Interpolate && is_cached(arg) ? single_field_buffer_bytes(arg) : 0
+    scope = DataLayouts.DataScope(arg)
+    arg_bytes =
+        (bc.f isa Interpolate ? is_cached(arg) : in_registers_when_applied(arg)) ?
+        DataLayouts.scoped_buffer_bytes(scope, single_field_buffer_bytes(arg)) : 0
     horizontal_dims(arg) == (1, 2) || return arg_bytes
-    return arg_bytes +
-           max(single_field_buffer_bytes(arg, eltype(bc)), single_field_buffer_bytes(bc))
+    return arg_bytes + DataLayouts.scoped_buffer_bytes(
+        scope,
+        max(single_field_buffer_bytes(arg, eltype(bc)), single_field_buffer_bytes(bc)),
+    )
 end
 
 
@@ -1034,14 +1049,21 @@ end
 # A buffer for the coarse values of one slab: the layout of data, with its
 # horizontal dimensions in dims shrunk to Nc points, allocated through data's
 # DataScope so that every thread of the slab can read it.
-@inline function coarse_buffer(data, ::Type{T}, dims, ::Val{Nc}) where {T, Nc}
+@inline function coarse_buffer(
+    data,
+    ::Type{T},
+    dims,
+    ::Val{Nc},
+    offset = Val(0),
+) where {T, Nc}
     B = DataLayouts.checked_valid_basetype(eltype(DataLayouts.parent_type(data)), T)
     Nf = DataLayouts.num_basetypes(B, T)
     (; Nv, Ni, Nj, Nh) = DataLayouts.vijh_params(data)
     Ni′ = unrolled_in(1, dims) ? Nc : Ni
     Nj′ = unrolled_in(2, dims) ? Nc : Nj
     array_size = DataLayouts.add_f_dim((Nv, Ni′, Nj′, Nh), Nf, Val(DataLayouts.f_dim(data)))
-    array = DataLayouts.scoped_static_array(DataLayouts.DataScope(data), B, array_size)
+    array =
+        DataLayouts.scoped_static_array(DataLayouts.DataScope(data), B, array_size, offset)
     return DataLayouts.rebuild(data, array, T; Ni = Ni′, Nj = Nj′)
 end
 
@@ -1107,13 +1129,13 @@ function apply_operator(op::LumpedRestriction, arg)
     # Every coarse point reads every point of WJ f, so publish it through a
     # buffer even when arg is register-resident (e.g., the result of Gradient).
     arg′ = materialize_buffer(Base.broadcasted(*, arg, WJ))
-    DataLayouts.synchronize(scope)
     B = Quadratures.interpolation_matrix(FT, fine_quadrature_style, op.quadrature_style)
     Bᵢ = dim_matrix(Val(1), dims, B)
     Bⱼ = dim_matrix(Val(2), dims, B)
-    # θ has a different byte size from arg′ (Nc < Nq), so the two buffers cannot
-    # alias while both are live; see the buffer reuse invariant.
-    θ = coarse_buffer(slab_data(arg′), T, dims, Val(Nc))
+    # θ is live at the same time as arg′, so it is placed after it; see the buffer reuse
+    # invariant. Its allocation synchronizes the scope, which publishes arg′ before
+    # lumped_restrict_slab! reads it.
+    θ = coarse_buffer(slab_data(arg′), T, dims, Val(Nc), shared_buffer_bytes(arg′))
     lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
     DataLayouts.synchronize(scope)
     prolong_slab!(dest, Bᵢ, Bⱼ, constant_data(θ))
@@ -1130,7 +1152,11 @@ function buffer_bytes(bc::SpectralOperatorBroadcasted{<:LumpedRestriction})
     ) &&
         return 0
     Nc = Quadratures.degrees_of_freedom(bc.f.quadrature_style)
-    return single_field_buffer_bytes(arg, eltype(bc)) + sizeof(eltype(bc)) * Nc^length(dims)
+    scope = DataLayouts.DataScope(arg)
+    return DataLayouts.scoped_buffer_bytes(
+        scope,
+        single_field_buffer_bytes(arg, eltype(bc)),
+    ) + DataLayouts.scoped_buffer_bytes(scope, sizeof(eltype(bc)) * Nc^length(dims))
 end
 
 """

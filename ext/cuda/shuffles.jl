@@ -68,7 +68,7 @@ end
 # A thread reads its own points' values from its registers, without shuffles.
 @inline Operators.own_values(
     data::DataLayouts.DataLayout{<:Any, <:Any, <:Any, <:Any, <:ShuffledArray},
-) = DataLayouts.rebuild(data, own_registers(parent(data)), eltype(data))
+) = DataLayouts.unchecked_rebuild(data, own_registers(parent(data)))
 @inline own_registers(
     array::ShuffledArray{<:Any, <:Any, Sz, F, Stride},
 ) where {Sz, F, Stride} =
@@ -97,7 +97,7 @@ Base.@propagate_inbounds round_point_index(indices, position) = indices[position
     scope = DataLayouts.DataScope(data)
     shuffles_in_warp(scope) ||
         return Base.@invoke DataLayouts.update_points!(f::F, op::O, data::Any, slice_op::S)
-    indices = DataLayouts.maskable_slice_indices(scope, NoMask(), slice_op, data)
+    indices = DataLayouts.maskable_slice_indices(NoMask(), slice_op, data)
     rank = Int(DataLayouts.thread_rank(scope))
     for offset in 0:Int(DataLayouts.num_threads(scope)):(length(indices) - 1)
         i = offset + rank
@@ -115,13 +115,14 @@ end
 @inline Operators.caches_in_registers(scope::ThisSubBlock, arg, ::Val{true}) =
     shuffles_in_warp(scope) &&
     owns_one_point_each(Fields.field_values(Operators.destination_template(arg)), scope)
-@inline Operators.cached_values(scope::ThisSubBlock, arg, ::Val{true}) =
+@inline Operators.cached_values(scope::ThisSubBlock, arg, ::Val{true}, offset = Val(0)) =
     Operators.caches_in_registers(scope, arg, Val(true)) ?
-    shuffled_field(Operators.register_values(arg)) : Operators.materialize_buffer(arg)
+    shuffled_field(Operators.register_values(arg, offset)) :
+    Operators.materialize_buffer(arg, offset)
 @inline owns_one_point_each(data, ::ThisSubBlock{N}) where {N} =
     DataLayouts.has_inferred_size(data) && prod(DataLayouts.inferred_size(data)) <= N
 @inline function shuffled_field(field)
     data = Fields.field_values(field)
     array = ShuffledArray(parent(data), DataLayouts.DataScope(data))
-    return Fields.Field(DataLayouts.rebuild(data, array, eltype(data)), axes(field))
+    return Fields.Field(DataLayouts.unchecked_rebuild(data, array), axes(field))
 end

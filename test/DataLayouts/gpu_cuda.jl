@@ -110,6 +110,19 @@ Base.broadcastable(f::ScaledSum) = tuple(f)
     end
 end
 
+# Points of CuArrays outside of kernels are views at Cartesian indices, which GPUArrays can
+# broadcast over, including points of layouts with several components at linear indices.
+@testset "host views of points in GPU layouts" begin
+    data = VIJFH{Tuple{Float64, Float64}, 3, 2, 2, nothing}(CuArray{Float64}, 3)
+    fill!(parent(data), 0)
+    for index in (5, CartesianIndex(2, 1, 2, 3))
+        point = view(data, index)
+        @test parent(parent(point)) isa CuArray
+        parent(point) .+= 1
+    end
+    @test count(==(1), Array(parent(data))) == 4
+end
+
 @testset "point views of compact device views" begin
     CUDA_EXT = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
     # Each component of a point in a view of a parent array must be found at the parent

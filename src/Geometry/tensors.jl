@@ -505,7 +505,7 @@ Base.adjoint(x::Covector) = Tensor(parent(x)', (axes(x, 2),))
 Base.adjoint(x::Tensor{1}) = Tensor(parent(x)', (ScalarComponents(), axes(x, 1)))
 Base.adjoint(x::Tensor{2}) = Tensor(parent(x)', (axes(x, 2), axes(x, 1)))
 
-Base.inv(x::Tensor{2}) =
+@inline Base.inv(x::Tensor{2}) =
     Tensor(inv(parent(x)), (dual(axes(x, 2)), dual(axes(x, 1))))
 
 function Base.:^(x::AbstractTensor{2}, p::Integer)

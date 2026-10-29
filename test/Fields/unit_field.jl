@@ -905,6 +905,20 @@ end
     end
 end
 
+@testset "Point loops over Fields and DataLayouts" begin
+    FT = Float64
+    for VIJH in (DataLayouts.VIJFH, DataLayouts.VIJHF)
+        space = TU.CenterExtrudedFiniteDifferenceSpace(FT; VIJH)
+        field = Fields.coordinate_field(space).z .+ 1
+        data = similar(Fields.field_values(field))
+        double!(dest_point, src_point) = (dest_point[] = 2 * src_point[]; nothing)
+        foreach_point(double!, data, field)
+        @test data == Fields.field_values(2 .* field)
+        foreach_point(double!, field, data)
+        @test Fields.field_values(field) == 2 .* data
+    end
+end
+
 @testset "Lazy Field broadcasts" begin
     FT = Float64
     for space in TU.all_spaces(FT)

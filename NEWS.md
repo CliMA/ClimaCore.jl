@@ -9,6 +9,58 @@ main
   differencing with Roe or Rusanov interface fluxes, `DG_FLUX`) or in
   vector-invariant form (`MOMENTUM_FORM=vector_invariant`).
 
+v1.0.6
+-------
+
+- ![][badge-🔥behavioralΔ] Unmasked point loops use linear indices on CPUs too
+  whenever every argument supports them, except over layouts whose sizes are
+  all static, with several axes longer than 1 and an axis whose length is not a
+  power of two. With `enumerate = Val(true)`, CPU loops then pass `Int` indices
+  instead of `CartesianIndex`es. On CPUs, fills of layouts with dynamic sizes
+  are up to 8x faster, and simple pointwise broadcasts up to about 4x faster.
+- ![][badge-🚀performance] Masked GPU point loops, limiter kernels and DG
+  kernels use 32-bit index arithmetic, with no 64-bit divisions.
+- ![][badge-🚀performance] Points of CPU `Array`s are read and written at one
+  linear index and stride through `DataLayouts.PointView`, like points of GPU
+  kernel arrays, instead of through `SubArray`s.
+- ![][badge-🚀performance] LLVM assumes that parent arrays have the extents
+  fixed by their layout's type (`DataLayouts.assume_extents`), so CPU
+  broadcasts keep constant strides even when `materialize!` is compiled
+  separately from their construction, and fills of layouts whose sizes are all
+  static are up to 34x faster on CPUs.
+- ![][badge-🚀performance] Operator broadcasts compile with less work: internal
+  rebuilds that are valid by construction do not compile array checks, finite
+  difference applications skip two forwarding layers, stencil point updates are
+  inferred without constant propagation, and MatrixFields band products
+  evaluate their rows directly.
+- ![][badge-🚀performance] `inv` of 2-tensors is inlined, speeding up CPU
+  stencils that convert orthonormal vectors (e.g., `WVector`s).
+- ![][badge-🐛bugfix] GPU kernels support at most 2^31 - 1 elements per array
+  (not 2^32 - 1), the same limit as for slices per `DataLayouts.foreach_slice`:
+  `LLVM.jl` can sign-extend 32-bit indices, so they should not use the sign bit.
+- ![][badge-🚀performance] The CUDA extension stores operator buffers in dynamic
+  shared memory, with co-live buffers at offsets known at compile time and every
+  statement of a `DataLayouts.foreach_slice` body inlined, which makes fused
+  finite difference bodies many times faster. The slice loops take an
+  experimental `shmem` keyword (`Val(:auto)`, `Val(:none)`, `Val(:medium)`,
+  `Val(:large)`, `Val(:max)`, or bytes per thread) that sets the most shared
+  memory each slice is given; buffers that do not fit are recomputed, or the
+  loop is launched at the next level with a warning. At the default
+  `Val(:auto)` level, a broadcast whose operators cache nothing, or a loop body
+  over slices of at most a warp, is launched without shared memory (leaving
+  the memory of a multiprocessor to its L1 cache), and a loop body whose
+  buffers exceed a level is compiled again at the next one. `similar` of a
+  slice inside a loop body allocates a shared buffer that the next statement
+  caching values retires. `Operators.apply_operators!` takes an optional
+  `finish` argument that skips the barrier publishing its result, for fused
+  loops that synchronize once per statement. `Restrict` can read
+  register-resident arguments.
+  The slice loops also take an experimental `maxregs` keyword (`Val(:auto)`,
+  `Val(:none)`, or registers per thread) that caps the registers of a GPU
+  kernel: no cap by default, and a count of the caller's choosing, which can
+  speed up fused column loop bodies but slows down heavier pointwise bodies.
+>>>>>>> origin/main
+
 v1.0.5
 -------
 

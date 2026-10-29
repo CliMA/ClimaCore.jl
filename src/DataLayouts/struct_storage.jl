@@ -147,18 +147,19 @@ end
 @inline struct_indices(array, ::Val{Nf}, index::Integer, stride::Integer) where {Nf} =
     (StridedRange{Int}(index, stride, index + (Nf - 1) * stride),)
 
-# Check the bounds of struct_indices at their first and last entries, since last divides for
-# a StridedRange. Julia 1.10 keeps the dead checks of @inbounds reads, and inlining costs
-# count them, so a division here keeps closures that read points from inlining into loops.
+# Check the bounds of struct_indices at their first and last entries (none for zero-size
+# values), since last divides for a StridedRange. Julia 1.10 keeps the dead checks of
+# @inbounds reads, and inlining costs count them, so a division here keeps closures that
+# read points from inlining into loops.
 @inline check_struct_bounds(array, val_Nf, index...) =
     checkbounds(array, struct_indices(array, val_Nf, index...)...)
 @inline function check_struct_bounds(
     array, ::Val{Nf}, index::Integer, stride::Integer,
 ) where {Nf}
     in_bounds =
-        isone(Nf) ? checkbounds(Bool, array, index) :
+        iszero(Nf) ||
         checkbounds(Bool, array, index) &
-        checkbounds(Bool, array, index + (Nf - 1) * stride)
+        (isone(Nf) || checkbounds(Bool, array, index + (Nf - 1) * stride))
     in_bounds ||
         Base.throw_boundserror(array, struct_indices(array, Val(Nf), index, stride))
     return nothing
@@ -301,6 +302,36 @@ and it can be updated with `set_struct!(struct_view, new_value)`.
     @boundscheck check_struct_bounds(array, Val(Nf), index...)
     return unchecked_view_struct(array, Val(Nf), index...)
 end
-# Overridden by arrays whose points are not views of the array (see RegisterPointView).
+
 @inline unchecked_view_struct(array, val_Nf, index...) =
     @inbounds stable_view(array, struct_indices(array, val_Nf, index...)...)
+@inline unchecked_view_struct(array::Array, ::Val{Nf}, i::Integer, s::Integer) where {Nf} =
+    PointView{eltype(array), Nf, typeof(array), typeof(i)}(array, i, s)
+
+# A view of the Nf entries of a value in an array, with a linear index and a
+# stride of the same integer type as the index (Int64 on CPUs, UInt32 on GPUs).
+struct PointView{T, Nf, A <: AbstractArray{T}, I} <: AbstractVector{T}
+    parent::A
+    offset::I
+    stride::I
+end
+
+Base.IndexStyle(::Type{<:PointView}) = IndexLinear()
+Base.parent(view::PointView) = view.parent
+Base.size(::PointView{<:Any, Nf}) where {Nf} = (Nf,)
+
+@inline point_index(view::PointView{<:Any, <:Any, <:Any, I}, i::Integer) where {I} =
+    view.offset + (i % I - one(I)) * view.stride
+
+@inline Base.pointer(view::PointView, i::Integer = 1) =
+    pointer(parent(view), Int(point_index(view, i)))
+
+Base.@propagate_inbounds function Base.getindex(view::PointView, i::Integer)
+    @boundscheck checkbounds(view, i)
+    return @inbounds parent(view)[point_index(view, i)]
+end
+Base.@propagate_inbounds function Base.setindex!(view::PointView, value, i::Integer)
+    @boundscheck checkbounds(view, i)
+    @inbounds parent(view)[point_index(view, i)] = value
+    return view
+end

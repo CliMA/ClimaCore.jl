@@ -15,22 +15,24 @@ include("benchmark_stencils_utils.jl")
     bm = Benchmark(;float_type = Float64, device_name)
     # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
     (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, VIJH = DataLayouts.VIJFH)
-    test_results_sphere(t_min)
+    test_results_sphere(t_min; VIJH = DataLayouts.VIJFH)
 
     @info "sphere, VIJHF, Float64"
     bm = Benchmark(;float_type = Float64, device_name)
     (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, VIJH = DataLayouts.VIJHF)
-    test_results_sphere(t_min)
+    test_results_sphere(t_min; VIJH = DataLayouts.VIJHF)
 
     @info "sphere, VIJFH, Float32"
     bm = Benchmark(;float_type = Float32, device_name)
     # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
     (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, VIJH = DataLayouts.VIJFH)
+    test_results_sphere(t_min; VIJH = DataLayouts.VIJFH, float_type = Float32)
 
     @info "sphere, VIJHF, Float32"
     bm = Benchmark(;float_type = Float32, device_name)
     # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
     (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, VIJH = DataLayouts.VIJHF)
+    test_results_sphere(t_min; VIJH = DataLayouts.VIJHF, float_type = Float32)
 end
 #! format: on
 
