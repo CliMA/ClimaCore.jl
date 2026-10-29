@@ -514,6 +514,11 @@ end
     ),
 )
 
+# The index of the first value in a set of which a name or name pair is a child.
+@generated child_value_index(::W, ::V) where {W, V <: Tuple} = constant(
+    findfirst(c -> is_child_chain(name_chain(instance(W)), c), chain_vector(instance(V))),
+)
+
 @generated unique_and_non_overlapping_values(::V, ::N) where {V <: Tuple, N} =
     constant(
         name_tuple(
@@ -534,3 +539,9 @@ end
             ),
         ),
     )
+
+# The value of f for arguments of singleton types (e.g., FieldNames and FieldNameSets),
+# computed once per type when a caller is compiled instead of inferred through the loops of
+# f; like the other generators, it can only call methods defined before this one.
+@generated static_call(::F, args...) where {F} =
+    constant(instance(F)(map(instance, args)...))
