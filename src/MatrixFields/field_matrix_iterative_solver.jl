@@ -279,6 +279,9 @@ then iteratively updating it to
 x[n] = x[n - 1] + \\textrm{inv}(P) * (b - A * x[n - 1]).
 ```
 
+When `x[0]` is ``\\mathbf{0}``, the first iteration sets `x[1]` to `inv(P) * b`
+without computing the product `A * x[0]`.
+
 The matrix `P` is called a "left preconditioner" for `A`. In general, this
 algorithm converges more quickly when `P` is a close approximation of `A`,
 although more complicated approximations often come with a performance penalty.
@@ -469,34 +472,42 @@ check_field_matrix_solver(alg::StationaryIterativeSolve, A, b) =
     end
     if alg.correlated_solves
         @. x = previous_x
-    else
+    elseif alg.n_iters == 0
         @. x = zero(x)
+    else
+        # The residual of x[0] = 0 is b, so the first iteration skips the product with A.
+        lazy_Δx = apply_preconditioner(alg.P_alg, P, Δx, b, pool)
+        debug_error_norm(alg, lazy_Δx, 0)
+        @. x = lazy_Δx
     end
     # When columns are solved in one GPU kernel, this loop reads every matrix entry.
-    @disable_licm for iter in 1:(alg.n_iters)
+    @disable_licm for iter in (alg.correlated_solves ? 1 : 2):(alg.n_iters)
         lazy_Δb = evaluate_rhs!(Δb, lazy_residual(b, lazy_mul(A, x)))
         lazy_Δx = apply_preconditioner(alg.P_alg, P, Δx, lazy_Δb, pool)
-        if get_debug(alg)
-            @debug begin
-                norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
-                "||x[$(iter - 1)] - x'||₂ ≈ $norm_Δx"
-            end _group = :error_norm
-        end
+        debug_error_norm(alg, lazy_Δx, iter - 1)
         is_diagonal(alg.P_alg) && (@. Δx = lazy_Δx)
         @. x += Δx
     end
     if get_debug(alg)
-        @debug begin
-            lazy_Δb = lazy_residual(b, lazy_mul(A, x))
-            lazy_Δx = apply_preconditioner(alg.P_alg, P, Δx, lazy_Δb)
-            norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
-            "||x[$(alg.n_iters)] - x'||₂ ≈ $norm_Δx"
-        end _group = :error_norm
+        lazy_Δb = lazy_residual(b, lazy_mul(A, x))
+        lazy_Δx = apply_preconditioner(alg.P_alg, P, Δx, lazy_Δb)
+        debug_error_norm(alg, lazy_Δx, alg.n_iters)
     end
     if alg.correlated_solves
         @. previous_x = x
     end
+    return x
 end
+
+# The approximate norm of the error x[n] - x' (see StationaryIterativeSolve), given the
+# increment of the next iteration, printed with @debug when the solver is debugging.
+@inline debug_error_norm(alg, lazy_Δx, n) =
+    if get_debug(alg)
+        @debug begin
+            norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
+            "||x[$n] - x'||₂ ≈ $norm_Δx"
+        end _group = :error_norm
+    end
 
 # The increment of x on an iteration (see StationaryIterativeSolve), which is stored before x
 # is updated since the product A * x reads x at neighboring points: in a slice loop, in

@@ -44,6 +44,15 @@ main
   `FieldMatrixSolver` only keeps the previous solution of correlated solves
   (see `previous_solution`) and a pool of the temporaries of solves in a loop
   of their own (on CPUs), which are allocated once.
+- ![][badge-🚀performance] `StationaryIterativeSolve` starts from `x[1] = inv(P) * b`
+  when `x[0]` is zero, instead of computing the residual of `x[0]`, and the
+  `MatrixFields` solvers skip solves whose right-hand sides are zero by
+  structure (e.g., the rows of `A₁₂ * x₂` that `A₁₂` does not have in a
+  `SchurComplementReductionSolve`) and products with their solutions, which
+  `run_field_matrix_solver!` leaves out of the entries of `x` it returns, and
+  `SchurComplementReductionSolve` only solves for the entries of
+  `inv(A₁₁) * b₁` that its Schur complement reads. The results change only by
+  the signs of zeros.
 - ![][badge-🐛bugfix] Inside a GPU loop over columns, the output of
   `column_reduce!` into a temporary with a single point is stored by every
   thread of the column, so that every thread reads its value; only the thread
