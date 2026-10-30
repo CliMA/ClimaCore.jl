@@ -31,6 +31,7 @@ Meshes.NormalizedBilinearMap
 ## Mesh stretching
 
 ```@docs
+Meshes.StretchingRule
 Meshes.Uniform
 Meshes.ExponentialStretching
 Meshes.GeneralizedExponentialStretching

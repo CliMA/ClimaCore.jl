@@ -14,8 +14,10 @@ main
   `HyperbolicTangentStretching` solved for the target spacings as fractions of
   the top coordinate rather than the domain height, and all three stretched
   rules placed `reverse_mode` faces outside the domain when its top was away
-  from zero. The `HyperbolicTangentStretching` default tolerance is floored so
-  that `FT_solve = Float32` converges.
+  from zero. `HyperbolicTangentStretching` and
+  `GeneralizedExponentialStretching` evaluate their stretching functions
+  without cancellation at the end faces, so `FT_solve = Float32` solves
+  converge and place the end spacings to within ~1e-6.
 
 v1.0.7
 -------
