@@ -18,20 +18,21 @@ main
   `GeneralizedExponentialStretching` evaluate their stretching functions
   without cancellation at the end faces, so `FT_solve = Float32` solves
   converge to their residual tolerances.
-- ![][badge-🐛bugfix] `Meshes.truncate_mesh` keeps the parent faces above a
-  raised `trunc_domain` bottom and accepts `reverse_mode` parents such as land
-  meshes. Stretched meshes solved with an `FT_solve` narrower than the domain's
-  float type end exactly at the domain bounds. `HyperbolicTangentStretching`
-  throws an `ArgumentError` for `dz_surface ≥ (z_max - z_min) / nelems`, and
-  `IntervalMesh(domain, faces)` requires at least two faces.
+- ![][badge-🐛bugfix] `Meshes.truncate_mesh` fits its mesh to the parent faces
+  between the bottom and top of `trunc_domain`, so it handles a raised bottom,
+  and it accepts `reverse_mode` parents such as land meshes. Stretched meshes
+  solved with an `FT_solve` narrower than the domain's float type end exactly at
+  the domain bounds. `HyperbolicTangentStretching` throws an `ArgumentError` for
+  `dz_surface ≥ (z_max - z_min) / nelems`, and `IntervalMesh(domain, faces)`
+  requires at least two faces.
 - ![][badge-🔥behavioralΔ] The default `tol` of `IntervalMesh` with
   `GeneralizedExponentialStretching` is
   `sqrt(eps(FT_solve)) * min(dz_bottom, dz_top)`, which places the end
   spacings to within ~1e-8 in Float64 and ~2e-4 in Float32. The previous
   default, an absolute residual tolerance of `1e-3`, left end-spacing errors of
-  1% in shallow soil columns (2 m deep, 20 levels, 5 cm surface spacing). Faces of
-  existing stretched meshes move by at most 0.4 mm in ClimaLand's soil
-  configurations; pass `tol = 1e-3` to reproduce the previous meshes.
+  1% in shallow soil columns (2 m deep, 20 levels, 5 cm surface spacing). Faces
+  of existing stretched meshes move by at most 0.4 mm in ClimaLand's soil
+  configurations. Passing `tol = 1e-3` reproduces the previous meshes.
 
 v1.0.6
 -------
