@@ -31,6 +31,19 @@ values of `stretching` are:
 
 If `reverse_mode` is `true`, the smallest element is at the top, and the largest at the bottom
 (this is typical for land model configurations).
+
+# Examples
+
+```julia
+using ClimaCore: Domains, Geometry, Meshes
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(30000.0);
+    boundary_names = (:bottom, :top),
+)
+uniform_mesh = Meshes.IntervalMesh(domain; nelems = 30)
+face_mesh = Meshes.IntervalMesh(domain, Geometry.ZPoint.([0.0, 100.0, 1000.0, 30000.0]))
+```
 """
 struct IntervalMesh{S, I <: IntervalDomain, V <: AbstractVector, M} <:
        AbstractMesh1D
@@ -137,19 +150,33 @@ function monotonic_check(
         error(
             string(
                 "Faces in vertical mesh are not increasing or decreasing monotonically. ",
-                "We need to have dz_bottom <= z_max / z_elem and dz_top >= z_max / z_elem.",
+                "A stretched mesh needs the surface spacing below (z_max - z_min) / nelems ",
+                "and the spacing at the far end above it.",
             ),
         )
     end
     return :pass
 end
 
+"""
+    StretchingRule
+
+Abstract type of the rules that place the faces of an [`IntervalMesh`](@ref)
+constructed from a number of elements. Each subtype `S` has a method
+`IntervalMesh(domain, rule::S; nelems, kwargs...)` that builds the faces, and,
+if it has parameters, a method `Meshes._convert_stretch(FT, rule::S)` that
+converts them to the float type of the domain. Subtypes: [`Uniform`](@ref),
+[`ExponentialStretching`](@ref), [`GeneralizedExponentialStretching`](@ref),
+[`HyperbolicTangentStretching`](@ref), and
+[`BoundaryLayerHyperbolicTangentStretching`](@ref).
+"""
 abstract type StretchingRule end
 
 """
     UnknownStretch()
 
-Placeholder stretching rule of an `IntervalMesh` constructed from explicit faces.
+Stretching rule recorded by an `IntervalMesh` constructed from explicit faces.
+It is not a [`StretchingRule`](@ref), since no constructor builds faces from it.
 """
 struct UnknownStretch end
 
@@ -171,7 +198,7 @@ struct Uniform <: StretchingRule end
 """
     Meshes._convert_stretch(FT, stretch)
 
-Convert the parameters of the stretching rule `stretch` to the floating point type `FT`
+Convert the parameters of the stretching rule `stretch` to the floating point type `FT`.
 """
 function _convert_stretch end
 _convert_stretch(::Type{FT}, stretch::Uniform) where {FT} = stretch
@@ -183,7 +210,8 @@ Place faces at the heights `u_faces` above the surface, increasing from `0` to
 the domain height. The surface is `coord_min` and heights count upward; in
 `reverse_mode` the surface is `coord_max` and heights count downward, which
 mirrors the profile about the domain midpoint. The end faces are pinned to the
-domain bounds.
+domain bounds. Called from the [`StretchingRule`](@ref) constructors of
+`IntervalMesh`.
 """
 function _faces_from_surface(
     domain::IntervalDomain,
@@ -227,15 +255,32 @@ For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``ζ``, whe
 ```
 
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``, and ``h = \\frac{H}{z_1-z_0}`` is
-the non-dimensional scale height. If `reverse_mode` is `true`, the smallest
-element is at the top, and the largest at the bottom (this is typical for land
-model configurations).
+the nondimensional scale height. The resulting `faces` are reference heights
+without terrain warping.
 
-Construct a stretched mesh via
+# Fields
 
-    IntervalMesh(interval_domain, ExponentialStretching(H); nelems, reverse_mode = false)
+  - `H`: Scale height [m].
 
-The resulting `faces` are reference heights without terrain warping.
+# Keyword Arguments
+
+Keyword arguments of `IntervalMesh(domain, ExponentialStretching(H); ...)`:
+
+  - `nelems`: Number of elements.
+  - `reverse_mode = false`: Whether the smallest element is at the top and the
+    largest at the bottom, as in land model configurations.
+
+# Examples
+
+```julia
+using ClimaCore: Domains, Geometry, Meshes
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(30000.0);
+    boundary_names = (:bottom, :top),
+)
+mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7500.0); nelems = 30)
+```
 """
 struct ExponentialStretching{FT} <: StretchingRule
     H::FT
@@ -269,27 +314,56 @@ end
 """
     GeneralizedExponentialStretching(dz_bottom::FT, dz_top::FT)
 
-Apply a generalized form of exponential stretching to the domain when constructing
-elements. `dz_bottom` and `dz_top` are the target element spacings at the bottom and
-at the top of the vertical column domain [m]. In typical atmosphere configurations,
-`dz_bottom` is the smallest spacing and `dz_top` the largest; in typical land
-configurations, `dz_bottom` is the largest and `dz_top` the smallest. For land
-configurations, use `reverse_mode = true` (default `false`).
+Apply exponential stretching with a scale height that varies with height, so
+that the elements have spacing `dz_bottom` at the bottom and `dz_top` at the top
+of the domain [m].
 
-Construct a generalized stretched mesh via
+For an interval ``[z_0, z_1]`` with ``N`` elements, the elements are uniformly
+spaced in ``\\zeta``, where
 
-    IntervalMesh(
-        interval_domain,
-        GeneralizedExponentialStretching(dz_bottom, dz_top);
-        nelems,
-        FT_solve = Float64,
-        tol = 1e-3,
-        reverse_mode = false,
-    )
+```math
+\\eta = -h(\\zeta) \\ln\\left[1 - \\left(1 - e^{-1/h(\\zeta)}\\right)\\zeta\\right]
+```
 
-where `FT_solve` is the float type and `tol` the residual tolerance of the root
-solve for the stretching parameters. `nelems` must be at least 2. The resulting
-`faces` are reference heights without terrain warping.
+and ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The nondimensional scale height
+``h(\\zeta)`` varies linearly from ``h_\\text{bottom}`` at ``\\zeta = 1/N`` to
+``h_\\text{top}`` at ``\\zeta = 1 - 1/N``; both are solved so that the first and
+last elements have the target spacings. With constant ``h``, this is
+[`ExponentialStretching`](@ref). In typical atmosphere configurations,
+`dz_bottom` is the smallest spacing and `dz_top` the largest. In typical land
+configurations, `dz_bottom` is the largest and `dz_top` the smallest, and
+`reverse_mode = true` mirrors the profile so that its fine end is at the top.
+The resulting `faces` are reference heights without terrain warping.
+
+# Fields
+
+  - `dz_bottom`: Target element spacing at the bottom of the domain [m].
+  - `dz_top`: Target element spacing at the top of the domain [m].
+
+# Keyword Arguments
+
+Keyword arguments of
+`IntervalMesh(domain, GeneralizedExponentialStretching(dz_bottom, dz_top); ...)`:
+
+  - `nelems`: Number of elements, at least 2.
+  - `FT_solve = Float64`: Float type of the root solves for ``h_\\text{bottom}``
+    and ``h_\\text{top}``.
+  - `tol = 1e-3`: Residual tolerance of the root solves, a spacing [m].
+  - `reverse_mode = false`: Whether `dz_bottom ≥ dz_top`, with the fine end of
+    the profile at the top, as in land model configurations.
+
+# Examples
+
+```julia
+using ClimaCore: Domains, Geometry, Meshes
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint(-10.0),
+    Geometry.ZPoint(0.0);
+    boundary_names = (:bottom, :top),
+)
+stretch = Meshes.GeneralizedExponentialStretching(1.5, 0.1)
+mesh = Meshes.IntervalMesh(domain, stretch; nelems = 20, reverse_mode = true)
+```
 """
 struct GeneralizedExponentialStretching{FT} <: StretchingRule
     dz_bottom::FT
@@ -345,17 +419,18 @@ function IntervalMesh(
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
 
-    # define the inverse σ⁻¹ exponential stretching function
-    exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log(1 - (1 - exp(-1 / h)) * ζ)
+    # The stretching function η(ζ, h) and its complement 1 - η, written
+    # without the subtraction, which cancels near the top and keeps the Float32
+    # top solve from converging.
+    exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log1p(expm1(-1 / h) * ζ)
+    exp_stretch_from_top(ζ, h) = h * log1p(expm1(1 / h) * (1 - ζ))
 
-    # nondimensional vertical coordinate ([0.0, 1.0])
+    # Faces above the surface in the nondimensional coordinate ζ ∈ (0, 1].
     ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
-    # find bottom height variation
+    # For small h, η(1 / nelems, h) ≈ -h log(1 - 1 / nelems); the secant solve
+    # starts from this estimate with nelems ∓ 1.
     find_bottom(h) = dz_bottom - H * exp_stretch(ζ_n[1], h)
-    # we use linearization
-    # h_bottom ≈ -dz_bottom / H / log(1 - 1/nelems)
-    # to approx bracket the lower / upper bounds of root sol
     guess₋ = -dz_bottom / H / log(1 - FT_solve(1 / (nelems - 1)))
     guess₊ = -dz_bottom / H / log(1 - FT_solve(1 / (nelems + 1)))
     h_bottom_sol = RootSolvers.find_zero(
@@ -366,16 +441,14 @@ function IntervalMesh(
     )
     if h_bottom_sol.converged !== true
         error(
-            "h_bottom root failed to converge for dz_bottom: $dz_bottom on domain ($z_min, $z_max)",
+            "h_bottom root failed to converge for the surface spacing $dz_bottom on domain ($z_min, $z_max)",
         )
     end
     h_bottom = h_bottom_sol.root
 
-    # find top height variation
-    find_top(h) = dz_top - H * (1 - exp_stretch(ζ_n[end - 1], h))
-    # we use the linearization
-    # h_top ≈ (H - dz_top) / H / log(nelem)
-    # to approx braket the lower, upper bounds of root sol
+    # For large 1 / h, 1 - η(1 - 1 / nelems, h) ≈ 1 - h log(nelems); the
+    # secant solve starts from this estimate with nelems ± 1.
+    find_top(h) = dz_top - H * exp_stretch_from_top(ζ_n[end - 1], h)
     guess₋ = (H - dz_top) / H / FT_solve(log(nelems + 1))
     guess₊ = (H - dz_top) / H / FT_solve(log(nelems - 1))
     h_top_sol = RootSolvers.find_zero(
@@ -386,12 +459,12 @@ function IntervalMesh(
     )
     if h_top_sol.converged !== true
         error(
-            "h_top root failed to converge for dz_top: $dz_top on domain ($z_min, $z_max)",
+            "h_top root failed to converge for the far-end spacing $dz_top on domain ($z_min, $z_max)",
         )
     end
     h_top = h_top_sol.root
 
-    # scale height variation with height
+    # h varies linearly in ζ between the two solved values.
     h =
         h_bottom .+
         (ζ_n .- ζ_n[1]) * (h_top - h_bottom) / (ζ_n[end - 1] - ζ_n[1])
@@ -404,36 +477,50 @@ end
 """
     HyperbolicTangentStretching(dz_surface::FT)
 
-Apply hyperbolic tangent stretching to the domain when constructing elements.
-`dz_surface` is the target element spacing at the surface [m]: in typical
-atmosphere configurations, the spacing at the bottom of the vertical column domain;
-in typical land configurations, the spacing at the top.
+Apply hyperbolic tangent stretching with element spacing `dz_surface` at the
+surface [m]: in typical atmosphere configurations, the spacing at the bottom of
+the domain; in typical land configurations, with `reverse_mode = true`, the
+spacing at the top.
 
-For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``ζ``, where
+For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``\\zeta``,
+where
 
 ```math
-\\eta = 1 - \\frac{tanh[\\gamma(1-\\zeta)]}{tanh(\\gamma)},
+\\eta = 1 - \\frac{\\tanh[\\gamma(1-\\zeta)]}{\\tanh(\\gamma)}
 ```
 
-where ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter ``\\gamma``
-is chosen to achieve a given resolution `dz_surface` at the surface.
+and ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter
+``\\gamma`` is solved so that the first element has spacing `dz_surface`, which
+requires `dz_surface < (z_1 - z_0) / nelems`. The resulting `faces` are
+reference heights without terrain warping.
 
-Construct a stretched mesh via
+# Fields
 
-    IntervalMesh(
-        interval_domain,
-        HyperbolicTangentStretching(dz_surface);
-        nelems,
-        FT_solve = Float64,
-        tol = nothing,
-        reverse_mode = false,
-    )
+  - `dz_surface`: Target element spacing at the surface [m].
 
-where `FT_solve` is the float type and `tol` the residual tolerance of the root
-solve for ``γ`` (default `1e-6 * dz_surface`, floored at ten ulps of the domain
-height so that Float32 solves converge). `nelems` must be at least 2. For
-land configurations, use `reverse_mode = true`. The resulting `faces` are reference
-heights without terrain warping.
+# Keyword Arguments
+
+Keyword arguments of
+`IntervalMesh(domain, HyperbolicTangentStretching(dz_surface); ...)`:
+
+  - `nelems`: Number of elements, at least 2.
+  - `FT_solve = Float64`: Float type of the root solve for ``\\gamma``.
+  - `tol = 1e-6 * dz_surface`: Residual tolerance of the root solve, a spacing
+    [m].
+  - `reverse_mode = false`: Whether the surface, and with it the smallest
+    element, is at the top, as in land model configurations.
+
+# Examples
+
+```julia
+using ClimaCore: Domains, Geometry, Meshes
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(30000.0);
+    boundary_names = (:bottom, :top),
+)
+mesh = Meshes.IntervalMesh(domain, Meshes.HyperbolicTangentStretching(30.0); nelems = 43)
+```
 """
 struct HyperbolicTangentStretching{FT} <: StretchingRule
     dz_surface::FT
@@ -461,19 +548,19 @@ function IntervalMesh(
     z_min = Geometry.component(domain.coord_min, 1)
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
-    # The residual is a height, and rounding in `H * tanh_stretch` is a few
-    # ulps of `H`; the floor keeps the default reachable in Float32.
-    if tol === nothing
-        tol = max(dz_surface * FT_solve(1e-6), H * 10 * eps(FT_solve))
-    end
+    tol === nothing && (tol = dz_surface * FT_solve(1e-6))
 
-    # define the hyperbolic tangent stretching function
-    tanh_stretch(ζ, γ) = 1 - tanh(γ * (1 - ζ)) / tanh(γ)
+    # The stretching function η = 1 - tanh(γ (1 - ζ)) / tanh(γ), rewritten
+    # with tanh a - tanh b = sinh(a - b) / (cosh a cosh b) so that it has no
+    # cancellation near the surface, where η ≪ 1; the subtraction there costs
+    # Float32 up to 25% of the first spacing. The product of sinh and cosh
+    # overflows for γ ≳ 45 in Float32 (≳ 355 in Float64), where η(1 / nelems)
+    # is below Float32's normal range.
+    tanh_stretch(ζ, γ) = sinh(γ * ζ) / (cosh(γ * (1 - ζ)) * sinh(γ))
 
-    # nondimensional vertical coordinate ([0.0, 1.0])
+    # Faces above the surface in the nondimensional coordinate ζ ∈ (0, 1].
     ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
-    # find the stretching parameter given the grid spacing at the surface
     find_surface(γ) = dz_surface - H * tanh_stretch(ζ_n[1], γ)
     γ_sol = RootSolvers.find_zero(
         find_surface,
@@ -506,10 +593,10 @@ Apply two-scale hyperbolic tangent stretching that refines the boundary layer
 with scale height `z_pbl` [m] while matching element spacing `dz_surface` at the
 surface [m] and `dz_top` at the top of the domain [m].
 
-For an interval ``[z_0, z_1]`` of height ``H = z_1 - z_0`` and height above the
-surface ``u = z - z_0 \\in [0, H]`` with ``\\eta = u / H``, the cumulative level
-index ``k(u) \\in [0, N]`` is the sum of a background hyperbolic tangent profile
-and a boundary-layer hyperbolic tangent profile:
+For an interval ``[z_0, z_1]`` of height ``H = z_1 - z_0`` with ``N`` elements
+and height above the surface ``u = z - z_0 \\in [0, H]`` with ``\\eta = u / H``,
+the cumulative level index ``k(u) \\in [0, N]`` is the sum of a background
+hyperbolic tangent profile and a boundary-layer hyperbolic tangent profile:
 
 ```math
 k(u; \\gamma) = n_{\\text{bg}}(\\gamma)
@@ -523,37 +610,61 @@ where
 ``n_{\\text{bg}}(\\gamma) = \\gamma / \\operatorname{atanh}[(\\text{dz\\_top} / H)\\tanh(\\gamma)]``
 sets the top element spacing of the background profile to `dz_top`, and
 ``\\gamma > 0`` is solved so that ``k(\\text{dz\\_surface}; \\gamma) = 1``. The
-boundary-layer profile is exponentially small near the top, so the top element
-spacing matches `dz_top` to within a relative error of order
-``e^{-2H / z_{\\text{pbl}}}``. When ``N \\ge n_{\\text{bg}}(\\gamma)``,
-``k'(u) > 0`` and ``k''(u) < 0`` for ``u \\in (0, H)``, so element spacings
-increase monotonically from `dz_surface` at the surface to `dz_top` at the top.
-The faces are the heights at which ``k`` takes integer values.
+faces are the heights at which ``k`` takes integer values, and the element
+spacings increase monotonically from `dz_surface` to `dz_top`. The resulting
+`faces` are reference heights without terrain warping.
 
-The number of elements is constrained on both sides: `nelems` must be at least
-the number of levels of the single-scale [`HyperbolicTangentStretching`](@ref)
-profile that matches both `dz_surface` and `dz_top`, and below the count at
-which the boundary-layer profile alone places the first face below
-`dz_surface`. The constructor throws an `ArgumentError` naming the admissible
-range when `nelems` lies outside it.
+`nelems` is bounded on both sides. The constructor throws an `ArgumentError`
+naming the admissible range when `nelems` lies outside it.
 
-Construct a stretched mesh via
+# Fields
 
-    IntervalMesh(
-        interval_domain,
-        BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl);
-        nelems,
-        FT_solve = Float64,
-        tol = nothing,
-        reverse_mode = false,
-    )
+  - `dz_surface`: Target element spacing at the surface [m].
+  - `dz_top`: Target element spacing at the far end of the domain [m].
+  - `z_pbl`: Scale height of the boundary-layer refinement [m].
 
-where `FT_solve` is the float type and `tol` the residual tolerance, in level
-index units, of the root solves (default `sqrt(eps(FT_solve))`). For land
-configurations, use `reverse_mode = true`: the profile is mirrored so that
-`dz_surface` is the spacing at the top of the domain and `dz_top` the spacing
-at the bottom. The resulting `faces` are reference heights without terrain
-warping.
+# Keyword Arguments
+
+Keyword arguments of
+`IntervalMesh(domain, BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl); ...)`:
+
+  - `nelems`: Number of elements, within the admissible range.
+  - `FT_solve = Float64`: Float type of the root solves.
+  - `tol = sqrt(eps(FT_solve))`: Residual tolerance of the root solves for
+    ``\\gamma`` and the faces, in level-index units [-].
+  - `reverse_mode = false`: Whether the profile is mirrored so that
+    `dz_surface` is the spacing at the top of the domain and `dz_top` the
+    spacing at the bottom, as in land model configurations.
+
+# Examples
+
+```julia
+using ClimaCore: Domains, Geometry, Meshes
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(60000.0);
+    boundary_names = (:bottom, :top),
+)
+stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(28.0, 3000.0, 2200.0)
+mesh = Meshes.IntervalMesh(domain, stretch; nelems = 75)
+```
+
+# Extended help
+
+The lower bound on `nelems` is the number of levels of the single-scale
+[`HyperbolicTangentStretching`](@ref) profile that matches both `dz_surface`
+and `dz_top`; at it, the boundary-layer weight ``N - n_{\\text{bg}}`` is zero.
+The upper bound is the count beyond which the boundary-layer profile, which
+receives the levels the background profile does not, places the first face
+below `dz_surface` for every ``\\gamma``. In between, up to two values of
+``\\gamma`` satisfy the surface condition; the larger is used, which assigns the
+most levels to the background profile.
+
+Since ``n_{\\text{bg}}`` increases with ``\\gamma``, ``N \\ge n_{\\text{bg}}(\\gamma)``
+holds for every admissible ``\\gamma``, so ``k'(u) > 0`` and ``k''(u) < 0`` on
+``(0, H)`` and the spacings increase monotonically. The boundary-layer profile
+is exponentially small near the top, so the top element spacing matches
+`dz_top` to within a relative error of order ``e^{-2H / z_{\\text{pbl}}}``.
 """
 struct BoundaryLayerHyperbolicTangentStretching{FT} <: StretchingRule
     dz_surface::FT
@@ -583,6 +694,32 @@ _convert_stretch(
     stretch.dz_top,
     stretch.z_pbl,
 )
+
+"""
+    _golden_section_argmin(f, a, b)
+
+Minimizer of a unimodal function `f` on `[a, b]`, located by golden-section
+search to a relative width of `sqrt(eps)`. Called from the
+[`BoundaryLayerHyperbolicTangentStretching`](@ref) constructor.
+"""
+function _golden_section_argmin(f, a::FT, b::FT) where {FT}
+    r = (sqrt(FT(5)) - 1) / 2
+    x1 = b - r * (b - a)
+    x2 = a + r * (b - a)
+    f1, f2 = f(x1), f(x2)
+    while b - a > sqrt(eps(FT)) * b
+        if f1 ≤ f2
+            b, x2, f2 = x2, x1, f1
+            x1 = b - r * (b - a)
+            f1 = f(x1)
+        else
+            a, x1, f1 = x1, x2, f2
+            x2 = a + r * (b - a)
+            f2 = f(x2)
+        end
+    end
+    return f1 ≤ f2 ? x1 : x2
+end
 
 function IntervalMesh(
     domain::IntervalDomain{CT},
@@ -622,17 +759,27 @@ function IntervalMesh(
     th_pbl = tanh(H / z_pbl)
     n_bg_of_gamma(γ) = γ / atanh((dz_top / H) * tanh(γ))
 
+    # The background level index
+    # n_bg [atanh(tanh γ) - atanh((1 - η) tanh γ)] / γ is written as a
+    # difference of logarithms. The direct form subtracts two nearly equal
+    # numbers near the surface and errs by up to 1e-3 levels in Float32, above
+    # the default tolerance. `expm1(2γ)` overflows for γ ≳ 44 in Float32
+    # (≳ 354 in Float64), above the largest finite `γ_max` (≈ 8.7 and ≈ 19,
+    # where `τ_max` rounds to 1).
     function cumulative_level(u, γ)
         η = u / H
         n_bg = n_bg_of_gamma(γ)
-        k_bg = n_bg * (one(FT_solve) - atanh((one(FT_solve) - η) * tanh(γ)) / γ)
+        k_bg =
+            n_bg * (
+                log1p(η * expm1(2 * γ) / 2) - log1p(η * expm1(-2 * γ) / 2)
+            ) / (2 * γ)
         return k_bg + (N - n_bg) * (tanh(u / z_pbl) / th_pbl)
     end
 
-    # The root `γ` is bracketed between the uniform limit `γ → 0` and `γ_max`,
-    # at which the background profile alone already has surface spacing
+    # The root `γ` lies between the uniform limit `γ → 0` and `γ_max`, at
+    # which the background profile alone already has surface spacing
     # `dz_surface`. With `n_bg` increasing in `γ`, `n_bg(γ) ≤ n_bg(γ_max) ≤ N`
-    # on the bracket, which keeps the boundary-layer weight `N - n_bg`
+    # on that interval, which keeps the boundary-layer weight `N - n_bg`
     # nonnegative and the spacing monotonic.
     find_gamma(γ) = cumulative_level(dz_surface, γ) - one(FT_solve)
     η_surface = dz_surface / H
@@ -640,21 +787,30 @@ function IntervalMesh(
     τ_max = sqrt((η_top - η_surface) / ((one(FT_solve) - η_surface) * η_top))
     γ_min = FT_solve(1e-6)
     γ_max = atanh(τ_max)
-    if !(find_gamma(γ_min) < zero(FT_solve) ≤ find_gamma(γ_max))
-        # `find_gamma` is affine in `N` at fixed `γ`, so its zeros at the
-        # bracket ends are the admissible range of `nelems`.
+    # `find_gamma` first decreases and then increases in `γ` (in all 2880
+    # configurations of a parameter sweep), so it can have two roots. The
+    # solve brackets the root on the increasing branch, between the minimizer
+    # `γ_low` and `γ_max`; it is the larger root, which assigns the most levels
+    # to the background profile.
+    γ_low = _golden_section_argmin(find_gamma, γ_min, γ_max)
+    if !(find_gamma(γ_low) ≤ zero(FT_solve) ≤ find_gamma(γ_max))
+        # `find_gamma` is `N c_pbl` plus a function of `γ` alone, so its
+        # minimizer is independent of `N`, and its zeros at `γ_low` and
+        # `γ_max` bound the admissible range of `nelems`.
         c_pbl = tanh(dz_surface / z_pbl) / th_pbl
-        n_min = n_bg_of_gamma(γ_max)
-        n_max = N - find_gamma(γ_min) / c_pbl
+        n_lo = ceil(Int, n_bg_of_gamma(γ_max))
+        n_hi = floor(Int, N - find_gamma(γ_low) / c_pbl)
+        admissible =
+            n_lo ≤ n_hi ? "$n_lo ≤ nelems ≤ $n_hi" : "no value of nelems"
         throw(
             ArgumentError(
-                "BoundaryLayerHyperbolicTangentStretching with dz_surface = $dz_surface, dz_top = $dz_top, z_pbl = $z_pbl on a domain of height $H admits $(ceil(Int, n_min)) ≤ nelems < $(ceil(Int, n_max)); got nelems = $nelems",
+                "BoundaryLayerHyperbolicTangentStretching with dz_surface = $dz_surface, dz_top = $dz_top, z_pbl = $z_pbl on a domain of height $H admits $admissible; got nelems = $nelems",
             ),
         )
     end
     γ_sol = RootSolvers.find_zero(
         find_gamma,
-        RootSolvers.BrentsMethod(γ_min, γ_max),
+        RootSolvers.BrentsMethod(γ_low, γ_max),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(tol_solve),
     )
@@ -711,7 +867,8 @@ function truncate_mesh(
     trunc_domain::IntervalDomain{CT},
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
 
-    # Get approximate top
+    # The first parent face at or above the top of `trunc_domain` closes the
+    # truncated mesh.
     faces = parent_mesh.faces
     k_top = length(faces)
     z_top = trunc_domain.coord_max
