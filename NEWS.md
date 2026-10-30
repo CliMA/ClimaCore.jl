@@ -18,6 +18,12 @@ main
   `GeneralizedExponentialStretching` evaluate their stretching functions
   without cancellation at the end faces, so `FT_solve = Float32` solves
   converge and place the end spacings to within ~1e-6.
+- ![][badge-🐛bugfix] `Meshes.truncate_mesh` keeps the parent faces above a
+  raised `trunc_domain` bottom and accepts `reverse_mode` parents such as land
+  meshes. Stretched meshes solved with an `FT_solve` narrower than the domain's
+  float type end exactly at the domain bounds. `HyperbolicTangentStretching`
+  throws an `ArgumentError` for `dz_surface ≥ (z_max - z_min) / nelems`, and
+  `IntervalMesh(domain, faces)` requires at least two faces.
 
 v1.0.6
 -------
