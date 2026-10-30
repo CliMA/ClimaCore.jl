@@ -349,7 +349,8 @@ Keyword arguments of
   - `nelems`: Number of elements, at least 2.
   - `FT_solve = Float64`: Float type of the root solves for ``h_\\text{bottom}``
     and ``h_\\text{top}``.
-  - `tol = 1e-3`: Residual tolerance of the root solves, a spacing [m].
+  - `tol = sqrt(eps(FT_solve)) * min(dz_bottom, dz_top)`: Residual tolerance of
+    the root solves, a spacing [m].
   - `reverse_mode = false`: Whether `dz_bottom ≥ dz_top`, with the fine end of
     the profile at the top, as in land model configurations.
 
@@ -392,7 +393,7 @@ function IntervalMesh(
     stretch::GeneralizedExponentialStretching;
     nelems::Int,
     FT_solve = Float64,
-    tol = 1e-3,
+    tol::Union{Real, Nothing} = nothing,
     reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
@@ -419,7 +420,11 @@ function IntervalMesh(
     z_min = Geometry.component(domain.coord_min, 1)
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
-    tol_solve = FT_solve(tol)
+    # The residuals are spacings, so the tolerance scales with the finer one;
+    # `sqrt(eps)` is reachable by the secant solves in Float32.
+    tol_solve =
+        isnothing(tol) ? sqrt(eps(FT_solve)) * min(dz_bottom, dz_top) :
+        FT_solve(tol)
 
     # The stretching function η(ζ, h) and its complement 1 - η, written
     # without the subtraction, which cancels near the top and keeps the Float32

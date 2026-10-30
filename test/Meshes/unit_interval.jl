@@ -305,6 +305,29 @@ end
     @test fₑ - fₑ₋₁ ≈ 0.02 / 45.0 rtol = 1e-2
 end
 
+@testset "IntervalMesh GeneralizedExponentialStretching default tolerance" begin
+    # The default tolerance scales with the finer spacing, so both end
+    # spacings match their targets on a unit domain, with a GCM-like profile
+    # and a scaled 2 m soil column, where a residual tolerance of 1e-3 leaves
+    # end-spacing errors of 0.3% and 1.2%.
+    for (reverse_mode, dz_bottom, dz_top, nelems) in (
+        (false, 0.02 / 45.0, 7.0 / 45.0, 45),
+        (true, 0.3 / 2.0, 0.05 / 2.0, 20),
+    )
+        _, mesh = unit_intervalmesh(;
+            stretching = Meshes.GeneralizedExponentialStretching(
+                dz_bottom,
+                dz_top,
+            ),
+            nelems,
+            reverse_mode,
+        )
+        z = [f.z for f in mesh.faces]
+        @test isapprox(z[2] - z[1], dz_bottom; rtol = 1e-6)
+        @test isapprox(z[end] - z[end - 1], dz_top; rtol = 1e-6)
+    end
+end
+
 @testset "IntervalMesh HyperbolicTangentStretching" begin
     # Use normalized GCM profile heights (75km)
     @test_throws ArgumentError unit_intervalmesh(
@@ -457,6 +480,9 @@ end
         )
         @test isapprox(mesh32.faces[2].z, dz_surface; rtol = 1e-5)
     end
+    # The default tolerance of `GeneralizedExponentialStretching` is
+    # `sqrt(eps(Float32)) * min(dz_bottom, dz_top)`, which places the end
+    # spacings to within 2.1e-4 in a 12-configuration sweep.
     for (dz_bottom, dz_top, nelems) in ((30.0f0, 5000.0f0, 20), (700.0f0, 800.0f0, 63))
         mesh32 = Meshes.IntervalMesh(
             domain32,
@@ -465,8 +491,8 @@ end
             FT_solve = Float32,
         )
         z32 = [f.z for f in mesh32.faces]
-        @test isapprox(z32[2] - z32[1], dz_bottom; rtol = 1e-4)
-        @test isapprox(z32[end] - z32[end - 1], dz_top; rtol = 1e-4)
+        @test isapprox(z32[2] - z32[1], dz_bottom; rtol = 1e-3)
+        @test isapprox(z32[end] - z32[end - 1], dz_top; rtol = 1e-3)
     end
 
     # Faces solved in Float32 on a Float64 domain end at the domain bounds,
