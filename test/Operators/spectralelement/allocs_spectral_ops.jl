@@ -123,3 +123,49 @@ end
         TU.@test_zero_allocations cartesian_tensor_div!(out, Tc, T, completion)
     end
 end
+
+# Every lookup of the object cache never allocates, including one that meets another key with
+# the same slot and short hash (which it compares with its key), and one for a level space
+# (whose grid is not on the heap).
+@testset "memoized objects are looked up without allocating" begin
+    space = tensor_div_sphere_space(Float64; helem = 3)
+    out, Tc, T, completion = tensor_div_alloc_setup(Float64, space)
+    level_space =
+        Spaces.level(TU.CenterExtrudedFiniteDifferenceSpace(Float64; zelem = 4), 1)
+    χ = Fields.coordinate_field(level_space).lat
+    χ_out = similar(χ)
+    dg_space = tensor_div_sphere_space(Float64; helem = 3, discretization = Spaces.DG())
+    staging_buffer(space) = (Operators._dg_staging_buffer(space, Float64, 2, 10); nothing)
+    cartesian_tensor_div!(out, Tc, T, completion)
+    Operators.scalar_laplacian!(χ_out, χ)
+    staging_buffer(dg_space)
+    (; OBJECT_CACHE, ObjectKey) = ClimaCore.Utilities.Cache
+    sizehint!(OBJECT_CACHE, 2 * length(OBJECT_CACHE))
+    colliding_keys = map(collect(OBJECT_CACHE)) do (key, value)
+        colliding_key = ObjectKey(:Dummy, Ref(0))
+        while Base.hashindex(colliding_key, length(OBJECT_CACHE.keys)) !=
+              Base.hashindex(key, length(OBJECT_CACHE.keys))
+            colliding_key = ObjectKey(:Dummy, Ref(0))
+        end
+        delete!(OBJECT_CACHE, key)
+        OBJECT_CACHE[colliding_key] = nothing
+        OBJECT_CACHE[key] = value
+        return colliding_key
+    end
+    TU.@test_zero_allocations cartesian_tensor_div!(out, Tc, T, completion)
+    TU.@test_zero_allocations Operators.scalar_laplacian!(χ_out, χ)
+    TU.@test_zero_allocations staging_buffer(dg_space)
+    foreach(key -> delete!(OBJECT_CACHE, key), colliding_keys)
+end
+
+# Utilities.Cache.clean_cache!(grid) also releases the objects cached for the grid.
+@testset "memoized objects are released with their grid" begin
+    space = tensor_div_sphere_space(Float64; helem = 2)
+    out, Tc, T, completion = tensor_div_alloc_setup(Float64, space)
+    cartesian_tensor_div!(out, Tc, T, completion)
+    (; OBJECT_CACHE, clean_cache!) = ClimaCore.Utilities.Cache
+    num_owned_objects(grid) = count(key -> key.owner === grid, keys(OBJECT_CACHE))
+    @test num_owned_objects(Spaces.grid(space)) > 0
+    clean_cache!(Spaces.grid(space))
+    @test num_owned_objects(Spaces.grid(space)) == 0
+end

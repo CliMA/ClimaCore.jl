@@ -125,21 +125,22 @@ end
 # Memoized scratch Fields for the DG Laplacian, keyed on the space's grid.
 # `tag` separates the fields one call uses in turn. Like the DG staging
 # buffers, a scratch field is shared by every call on the same space and
-# eltype, so its contents are only valid until the next call. The grid is part
-# of the key rather than the cached value, so `Cache.clean_cache!(grid)` does
-# not release these entries; only the zero-argument `clean_cache!()` does. The
-# type assertion recovers the concrete field type lost through the untyped
-# cache, so the caller dispatches statically instead of boxing its arguments.
+# eltype, so its contents are only valid until the next call. The levels and
+# columns of a grid share the scratch Fields of their space type, keyed on the
+# full grid, which unlike a level or column grid is not copied to the heap by
+# the key, and which `Cache.clean_cache!(grid)` releases them with. The type
+# assertion recovers the concrete field type lost through the untyped cache, so
+# the caller dispatches statically instead of boxing its arguments.
 function _laplacian_scratch_field(space, ::Type{T}, tag::Symbol) where {T}
+    grid = Spaces.grid(space)
+    owner = grid isa Union{Grids.LevelGrid, Grids.ColumnGrid} ? grid.full_grid : grid
     field = get!(
         () -> Fields.Field(T, space),
         Cache.OBJECT_CACHE,
-        (:LaplacianScratchField, tag, Spaces.grid(space), typeof(space), T),
+        Cache.ObjectKey(tag, owner, Tuple{typeof(space), T}),
     )
-    return field::Utilities.return_type(
-        Fields.Field,
-        Tuple{Type{T}, typeof(space)},
-    )
+    FT = Utilities.return_type(Fields.Field, Tuple{Type{T}, typeof(space)})
+    return Fields.Field(Fields.field_values(field::FT), space)
 end
 
 """

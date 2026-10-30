@@ -7,7 +7,8 @@ only storing the entries that belong to the thread reading it, in a
 a view of some of its entries, for a field view of the data). `F`
 is the position of the field dimension (see [`f_dim`](@ref)), `Stride` is the
 number of threads in the scope it was allocated for (also the stride between
-consecutive points of the reading thread), and `register_array_params`
+consecutive points of the reading thread), or 1 for a single point that every thread
+stores (see [`register_similar`](@ref)), and `register_array_params`
 derives the remaining size parameters from `Sz` and `F`.
 
 Every thread is assigned the strided subset `rank:Stride:Np` of the scope's
@@ -170,10 +171,12 @@ Base.@propagate_inbounds rebuild(
 
 Whether `data` is a [`DataLayout`](@ref) in the registers that [`register_similar`](@ref)
 allocates for its [`DataScope`](@ref), with each thread holding its own points' values.
+Every thread also holds a copy of a single point, but only the copy of the thread that
+owns the point (see `owns_point`) is certain to be written.
 """
 @inline stored_in_scope_registers(data) =
     data isa DataLayout && stored_in_registers(data) &&
-    register_stride(parent(data)) == static_num_threads(DataScope(data))
+    register_stride(parent(data)) in (1, static_num_threads(DataScope(data)))
 @inline register_stride(
     ::RegisterArray{<:Any, <:Any, <:Any, <:Any, Stride},
 ) where {Stride} = Stride
@@ -191,7 +194,10 @@ allocates for its [`DataScope`](@ref), with each thread holding its own points' 
 
 Allocate a [`DataLayout`](@ref) like `Base.similar(data, T)`, but backed by a
 [`RegisterArray`](@ref) that only stores each thread's own points; the result must
-not be read by any other thread (see [`RegisterArray`](@ref)). This falls back to
+not be read by any other thread (see [`RegisterArray`](@ref)). A single point (like a
+value derived from a level of a column) is stored by every thread instead, with a stride
+of 1, and every thread's copy is written, either by every thread or from the copy of its
+owner (see `share_single_point!`), so that every thread can read it. This falls back to
 [`buffer_similar`](@ref) when registers cannot be used (a non-inferrable size, a
 non-constant thread count, or a single-thread scope, which is already an `MArray`);
 lazy layouts are first converted into the layout type that [`buffer_similar`](@ref)
@@ -224,5 +230,6 @@ end
     (; Nf, Np) = register_array_params(array_size, Val(F))
     storage = StaticArrays.MArray{Tuple{cld(Np, Stride) * Nf}, B}(undef)
     # The register array has the layout's canonical size and a valid base type.
-    return unchecked_rebuild(data, RegisterArray{array_size, F, Stride}(storage), T)
+    array = RegisterArray{array_size, F, isone(Np) ? 1 : Stride}(storage)
+    return unchecked_rebuild(data, array, T)
 end

@@ -4,7 +4,7 @@ has_inferred_slice_size(op::O, arg) where {O} =
         Val(DataLayouts.has_inferred_size(slice))
     end
 has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
-    unrolled_all(Base.Fix1(has_inferred_slice_size, op), DataLayouts.leaves(arg))
+    unrolled_all(Base.Fix1(has_inferred_slice_size, op), arg)
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
 
@@ -20,16 +20,16 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 ) where {L, R, O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
-    elseif !isempty(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
+    elseif !isempty(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
         check_device_assumptions()
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
         kernel_subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
         subscope = slice_subscope_at_level(kernel_subscope, Val(L), op, f, args...)
         max_slices =
-            length(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
+            length(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
         check_index_count(max_slices)
-        compact_args = kernel_parameters(Grids.toggle_compact_args(args...))
+        compact_args = Grids.toggle_compact_args(args...)
         launch_slice_loop(
             subscope,
             can_exceed_level(kernel_subscope, Val(L), op, f, args...),
@@ -46,11 +46,8 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 # The kernel of a slice loop whose slices are assigned to subscope, a closure whose type names
 # the subscope and the body (see launch_slice_loop and SHMEM_LEVEL_CACHE).
 slice_loop_kernel(subscope, op::O, f::F, mask, enumerate) where {O, F} =
-    function (parameters...)
-        args =
-            parameters isa Tuple{Utilities.AutoBroadcaster} ?
-            Utilities.drop_auto_broadcasters(parameters[1]) : parameters
-        kernel_args = Grids.toggle_compact_args(args...)
+    function (compact_kernel_args...)
+        kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
         DataLayouts.scoped_slice_loop(
             subscope,
             ThisKernel(),
@@ -62,15 +59,6 @@ slice_loop_kernel(subscope, op::O, f::F, mask, enumerate) where {O, F} =
         )
         return nothing
     end
-
-# Every argument of a slice loop is a parameter of its kernel, unless the loop has containers
-# of arguments (see DataLayouts.foreach_slice), which Adapt maps with calls that Julia does not
-# infer for more than 31 values: the arguments are then one AutoBroadcaster, which Adapt
-# converts value by value.
-kernel_parameters(args) =
-    unrolled_any(DataLayouts.is_container, args) ?
-    (Utilities.add_auto_broadcasters(args),) :
-    args
 
 # Whether the kernel of a slice loop at a level of shared memory compiles, by the types of
 # the kernel (which names its subscope; see slice_loop_kernel) and of its arguments (see
@@ -130,8 +118,11 @@ function launch_slice_loop(
     isnothing(exceeded) || throw_shmem_level_exceeded(f, subscope, exceeded)
     return nothing
 end
+
 # One thread per slice; extra threads run empty loops, so the count of slices isn't a strict
-# limit. The kernel is compiled with the loop's register cap (see register_cap).
+# limit. The blocks of a masked loop are whole warps, which take slices in turn (see
+# subscope_slice_indices). The kernel is compiled with the loop's register cap (see
+# register_cap).
 function launch_slice_loop(
     subscope::DataLayouts.ThisThread,
     _,
@@ -144,7 +135,8 @@ function launch_slice_loop(
     max_slices,
 ) where {R, O, F}
     kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
-    config = kernel -> launch_configuration(kernel, max_slices; strict = false)
+    granularity = mask isa DataLayouts.NoMask ? nothing : THREADS_PER_WARP
+    config = kernel -> launch_configuration(kernel, max_slices; strict = false, granularity)
     auto_launch!(
         kernel_function,
         compact_args;
@@ -152,6 +144,32 @@ function launch_slice_loop(
         maxregs = register_cap(Val(R), subscope),
     )
     return nothing
+end
+
+# The slices of a masked loop with one thread per slice are dealt out to the warps of a
+# kernel's blocks in turn, each warp taking consecutive slices, so that its active slices
+# (which its launch does not count) run on every multiprocessor, instead of on those of its
+# first blocks. The threads of a kernel whose blocks are not whole warps (which a slice loop
+# never launches) take slices in the order of their ranks.
+@inline function DataLayouts.subscope_slice_indices(
+    ::DataLayouts.ThisThread,
+    ::ThisKernel,
+    mask::DataLayouts.IJHMask,
+    op::O,
+    args...,
+) where {O}
+    indices = DataLayouts.maskable_slice_indices(mask, op, args...)
+    lanes = UInt32(THREADS_PER_WARP)
+    thread = DataLayouts.thread_rank(ThisBlock()) - one(UInt32)
+    block = DataLayouts.subscope_rank(ThisBlock(), ThisKernel()) - one(UInt32)
+    num_blocks = DataLayouts.num_subscopes(ThisBlock(), ThisKernel())
+    rank =
+        iszero(DataLayouts.num_threads(ThisBlock()) % lanes) ?
+        (thread ÷ lanes * num_blocks + block) * lanes + thread % lanes + one(UInt32) :
+        DataLayouts.thread_rank(ThisKernel())
+    n = DataLayouts.num_threads(ThisKernel())
+    view_range = DataLayouts.strided_range(rank, n, length(indices))
+    return @inbounds DataLayouts.subscope_index_view(ThisKernel(), indices, view_range)
 end
 
 # Launch a slice loop whose kernel assigns a slice to each sub-block, and return nothing, or
@@ -228,7 +246,8 @@ shmem_level_name(::DataLayouts.ThisThread) = ":none"
 # :auto a sub-block at the first level that holds the buffers of the function's operators
 # when they are known from the slices (see DataLayouts.required_shared_memory): no shared
 # memory when the function allocates none, which leaves the memory of a multiprocessor to
-# its L1 cache, then :medium, :large, and :max, and one thread per slice beyond :max. A loop
+# its L1 cache, then :medium (which never limits occupancy) or else exactly their bytes (the
+# rest goes to more blocks and the L1 cache), and one thread per slice beyond :max. A loop
 # whose buffers are not known is launched at :medium when its slices are wider than a warp,
 # and without shared memory when they are not: sub-blocks of at most a warp cache the values
 # they read without branching in registers (see Operators.caches_in_registers) and rarely
@@ -255,11 +274,9 @@ function slice_subscope_at_level(
     (bytes, uses) = requirement
     iszero(bytes) && !uses && return ThisSubBlock{N, 0}()
     bytes <= DataLayouts.total_buffer_limit(medium) && return medium
-    large = ThisSubBlock{N, shmem_level_bytes(Val(:large), Val(N))}()
-    bytes <= DataLayouts.total_buffer_limit(large) && return large
     max = ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}()
-    bytes <= DataLayouts.total_buffer_limit(max) && return max
-    return DataLayouts.ThisThread()
+    bytes <= DataLayouts.total_buffer_limit(max) || return DataLayouts.ThisThread()
+    return ThisSubBlock{N, cld(aligned_buffer_bytes(bytes), N)}()
 end
 
 # Whether a loop can exceed the level of shared memory of its slices (see
@@ -300,7 +317,7 @@ slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
     val_value(
         Utilities.return_type(Tuple{F, typeof(args)}) do f, args
             index =
-                first(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
+                first(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
             slices = DataLayouts.slice_every_arg(op, index, args...)
             scoped_slices = unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)
             bytes = DataLayouts.required_shared_memory(f, scoped_slices...)
@@ -486,19 +503,26 @@ DataLayouts.reduce_points(
 @generated num_reductions(::ThisSubBlock{N}) where {N} =
     8 * sizeof(N) - leading_zeros(N) - 1
 
-# Binary-tree reduction over first num_values threads: all active lanes (nonzero
-# lower bits in the mask) exchange data, but ranks above num_values are ignored.
+# Butterfly reduction over the first num_values threads, in which all active lanes (nonzero
+# lower bits in the mask) exchange data at every power-of-two offset. Before the shuffle at an
+# offset, the threads of every aligned block of offset ranks hold the combination of the
+# block's values among the first num_values (if it has any), and they combine it with that of
+# the neighboring block. Every thread ends up with the combination of all num_values values
+# when every lane of the scope is active (as in slice loops), and the first thread always does.
 function shuffle_reduce(scope, op::O, value, num_values) where {O}
     num_offsets = num_reductions(scope)
     num_inactive = THREADS_PER_WARP - num_active_threads(ThisWarp())
-    thread_index = DataLayouts.thread_rank(scope)
-    for offset in
-        ntuple(Base.Fix1(>>, DataLayouts.num_threads(scope)), Val(num_offsets))
+    block_start = DataLayouts.thread_rank(scope) - one(UInt32)
+    num_block_values = num_values % UInt32
+    for offset in ntuple(n -> one(UInt32) << (n - 1), Val(num_offsets))
         shuffled_value =
             CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
-        if thread_index <= num_values && xor(thread_index - 1, offset) + 1 <= num_values
-            value = op(value, shuffled_value)
-        end
+        block_start &= ~(offset - one(UInt32))
+        has_value = block_start < num_block_values
+        has_shuffled_value = xor(block_start, offset) < num_block_values
+        value =
+            has_shuffled_value ? (has_value ? op(value, shuffled_value) : shuffled_value) :
+            value
     end
     return value
 end

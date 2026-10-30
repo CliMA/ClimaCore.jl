@@ -58,21 +58,31 @@ function toggle_placeholder_grid(arg, grid::AbstractGrid)
     full_grid = grid isa Union{LevelGrid, ColumnGrid} ? grid.full_grid : grid
     return Adapt.adapt(PlaceholderGridAdaptor(full_grid), arg)
 end
+
 # Containers of loop arguments (see DataLayouts.foreach_slice) are toggled argument by
 # argument, since Adapt maps them with calls that Julia does not infer for more than 31 values.
 toggle_placeholder_grid(arg::Union{Tuple, NamedTuple}, grid::AbstractGrid) =
-    DataLayouts.map_leaves(Base.Fix2(toggle_placeholder_grid, grid), arg)
+    unrolled_map(Base.Fix2(toggle_placeholder_grid, grid), arg)
 
 """
     toggle_compact_args(args...)
 
 Modify `args` to take up as few bytes as possible, or undo that transformation.
 For example, this can call [`Grids.toggle_placeholder_grid`](@ref) to eliminate
-duplicate grid pointers, and put the grid before the arguments. This is only
-applied to arguments of GPU kernels launched from a host device, and it is
-reversed at the start of each kernel. Specific data structures like `Field`s
-should extend this in their own modules.
+duplicate grid pointers, and put the grid before the arguments. Containers of
+arguments (see `DataLayouts.foreach_slice`) are wrapped in `AutoBroadcaster`s,
+which Adapt converts value by value. This is only applied to arguments of GPU
+kernels launched from a host device, and it is reversed at the start of each
+kernel. Specific data structures like `Field`s should extend this in their own
+modules.
 """
-toggle_compact_args(args...) = args
+toggle_compact_args(args...) = unrolled_map(toggle_auto_broadcasters, args)
 toggle_compact_args(grid::AbstractGrid, args...) =
-    unrolled_map(Base.Fix2(toggle_placeholder_grid, grid), args)
+    unrolled_map(args) do arg
+        toggle_placeholder_grid(toggle_auto_broadcasters(arg), grid)
+    end
+
+# Arguments of kernels launched from a host are never AutoBroadcasters, so containers of
+# arguments are wrapped in AutoBroadcasters on the host and unwrapped in each kernel.
+toggle_auto_broadcasters(arg) =
+    arg isa AutoBroadcaster ? drop_auto_broadcasters(arg) : add_auto_broadcasters(arg)

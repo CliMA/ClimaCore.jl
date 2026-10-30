@@ -3,7 +3,8 @@ module Grids
 import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm, I
 import ..DataLayouts, ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
-import ..Utilities: PlusHalf, half, Cache
+import ..Utilities:
+    PlusHalf, half, Cache, AutoBroadcaster, add_auto_broadcasters, drop_auto_broadcasters
 import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 

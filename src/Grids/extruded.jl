@@ -88,12 +88,9 @@ function ExtrudedFiniteDifferenceGrid(
 )
     get!(
         Cache.OBJECT_CACHE,
-        (
-            ExtrudedFiniteDifferenceGrid,
-            horizontal_grid,
-            vertical_grid,
-            hypsography,
-            global_geometry,
+        Cache.ObjectKey(
+            :ExtrudedFiniteDifferenceGrid,
+            (horizontal_grid, vertical_grid, hypsography, global_geometry),
         ),
     ) do
         _ExtrudedFiniteDifferenceGrid(

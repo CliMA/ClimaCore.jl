@@ -38,7 +38,7 @@ function IntervalTopology(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.IntervalMesh,
 )
-    get!(Cache.OBJECT_CACHE, (IntervalTopology, context, mesh)) do
+    get!(Cache.OBJECT_CACHE, Cache.ObjectKey(:IntervalTopology, (context, mesh))) do
         _IntervalTopology(context, mesh)
     end
 end

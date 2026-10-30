@@ -674,7 +674,7 @@ end
 # of the same type at the same position share one buffer; the in-flight latch
 # below makes an overlapping second use an error instead of data corruption.
 function _dg_face_exchange(space, data, i)
-    key = (Topologies.GhostFaceExchange, Spaces.grid(space), typeof(data), i)
+    key = Cache.ObjectKey(:GhostFaceExchange, Spaces.grid(space), typeof(data), i)
     ex = get(Cache.OBJECT_CACHE, key, :missing)
     if ex === :missing
         ex = Topologies.create_ghost_face_exchange(data, Spaces.topology(space))
@@ -1221,18 +1221,20 @@ end
 
 Return the memoized [`DGConnectivity`](@ref) for `space`, keyed on the underlying
 grid and the space type (so center/face extruded spaces get separate buffers).
-Stored in `Utilities.Cache.OBJECT_CACHE` alongside the grid objects, so
+Stored in `Utilities.Cache` alongside the grid objects, so
 `Utilities.Cache.clean_cache!` releases it (the buffer holds device arrays).
 """
 function dg_connectivity(space)
-    key = (DGConnectivity, Spaces.grid(space), typeof(space))
-    return get!(() -> build_dg_connectivity(space), Cache.OBJECT_CACHE, key)
+    key = Cache.ObjectKey(:DGConnectivity, Spaces.grid(space), typeof(space))
+    connectivity = get!(() -> build_dg_connectivity(space), Cache.OBJECT_CACHE, key)
+    return connectivity::Utilities.return_type(build_dg_connectivity, space)
 end
 
 # Memoized device staging array of shape `(Nv, Nq, nsides, nfaces)` for the GPU
 # face kernels, keyed (and released by `clean_cache!`) alongside the space's
 # connectivity. `tag` separates the interior (`nsides` 1 or 2) and ghost
-# (`nsides == 1`) buffers, which the same operator call uses in turn.
+# (`nsides == 1`) buffers, which the same operator call uses in turn, and
+# `nfaces` is the number of faces of the connectivity that a tag goes with.
 function _dg_staging_buffer(
     space,
     ::Type{T},
@@ -1240,16 +1242,16 @@ function _dg_staging_buffer(
     nfaces;
     tag = :DGStagingBuffer,
 ) where {T}
-    key = (tag, Spaces.grid(space), typeof(space), T, nsides, nfaces)
+    key = Cache.ObjectKey(tag, Spaces.grid(space), Tuple{typeof(space), T}, nsides)
+    DA = ClimaComms.array_type(Spaces.topology(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nv = Spaces.nlevels(space)
     buf = get(Cache.OBJECT_CACHE, key, nothing)
     if isnothing(buf)
-        Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-        Nv = Spaces.nlevels(space)
-        DA = ClimaComms.array_type(Spaces.topology(space))
         buf = DA{T}(undef, Nv, Nq, nsides, nfaces)
         Cache.OBJECT_CACHE[key] = buf
     end
-    return buf
+    return buf::Utilities.return_type(DA{T}, undef, Nv, Nq, nsides, nfaces)
 end
 
 _dg_ghost_staging_buffer(space, ::Type{T}, nfaces) where {T} =
@@ -1365,13 +1367,8 @@ the other side (see `_add_dg_ghost_faces!` for the operator contract that
 makes the two sides consistent).
 """
 function dg_ghost_connectivity(space)
-    key = (DGConnectivity, :ghost, Spaces.grid(space), typeof(space))
-    conn = get(Cache.OBJECT_CACHE, key, :missing)
-    if conn === :missing
-        conn = build_dg_ghost_connectivity(space)
-        Cache.OBJECT_CACHE[key] = conn
-    end
-    return conn
+    key = Cache.ObjectKey(:DGGhostConnectivity, Spaces.grid(space), typeof(space))
+    return get!(() -> build_dg_ghost_connectivity(space), Cache.OBJECT_CACHE, key)
 end
 
 function build_dg_ghost_connectivity(space)
@@ -1429,13 +1426,8 @@ minus-side contributions — a node at a domain corner receives one contribution
 from each of its two boundary faces.
 """
 function dg_boundary_connectivity(space)
-    key = (DGConnectivity, :boundary, Spaces.grid(space), typeof(space))
-    conn = get(Cache.OBJECT_CACHE, key, :missing)
-    if conn === :missing
-        conn = build_dg_boundary_connectivity(space)
-        Cache.OBJECT_CACHE[key] = conn
-    end
-    return conn
+    key = Cache.ObjectKey(:DGBoundaryConnectivity, Spaces.grid(space), typeof(space))
+    return get!(() -> build_dg_boundary_connectivity(space), Cache.OBJECT_CACHE, key)
 end
 
 function build_dg_boundary_connectivity(space)

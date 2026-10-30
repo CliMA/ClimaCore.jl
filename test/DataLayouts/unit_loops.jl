@@ -144,6 +144,13 @@ end
     values32 = Array(parent(data32))
     @test DataLayouts.reduce_points(+, data32; init = 0.0) === sum(Float64, values32)
     @test DataLayouts.reduce_points(max, data32; init = -Inf) === maximum(Float64, values32)
+
+    # A container init value is combined with the containers in the data, and the result has
+    # a concrete type (on GPUs, its size is the size of the block's warp results). Like the
+    # init of Base.reduce, it must be a neutral element, since every thread may fold it.
+    data = DataLayouts.VIJFH{T, 64, Ni, Nj, nothing}(device_array(device, array))
+    result = @inferred reduce(+, data; init = (0.0f0, 0.0f0))
+    @test collect(result) ≈ [sum(array[:, :, :, f, :]) for f in 1:2]
 end
 
 @testset "0-dimensional data in broadcast expressions [$FT]" for FT in (Float32, Float64)

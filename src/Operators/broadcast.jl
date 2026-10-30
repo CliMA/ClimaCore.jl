@@ -287,7 +287,11 @@ function copyto_by_slices!(dest, bc)
         DataLayouts._foreach_slice(scope, op, apply_operators!, mask, Val(false), dest, bc)
     else
         # Every statement of a slice loop body is compiled into the same function, and the
-        # buffers of different statements are never live at once, so they share memory.
+        # buffers of different statements are never live at once, so they share memory. A
+        # statement first waits for the statements before it when it reads their pointwise
+        # results at other threads' points (see reads_fields_at_neighbors).
+        !has_private_buffers(bc) && reads_fields_at_neighbors(bc, Val(false)) &&
+            DataLayouts.synchronize(scope)
         DataLayouts.scoped_slice_loop(
             DataLayouts.slice_subscope(scope, op, dest, bc),
             scope,
@@ -298,6 +302,14 @@ function copyto_by_slices!(dest, bc)
             dest,
             bc,
         )
+        DataLayouts.share_single_point!(Fields.field_values(dest))
+        # A statement into registers ends without a barrier, so one that reads Fields at other
+        # threads' points then waits for its slowest thread, before the statements after it can
+        # overwrite them.
+        !has_private_buffers(bc) &&
+            DataLayouts.stored_in_registers(Fields.field_values(dest)) &&
+            reads_fields_at_neighbors(bc, Val(false)) &&
+            DataLayouts.synchronize(scope)
     end
     call_post_op_callback() && post_op_callback(dest, dest, bc)
     return dest
