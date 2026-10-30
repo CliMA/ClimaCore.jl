@@ -307,9 +307,9 @@ end
 
 @testset "IntervalMesh GeneralizedExponentialStretching default tolerance" begin
     # The default tolerance scales with the finer spacing, so both end
-    # spacings match their targets on a unit domain, with a GCM-like profile
-    # and a scaled 2 m soil column, where a residual tolerance of 1e-3 leaves
-    # end-spacing errors of 0.3% and 1.2%.
+    # spacings match their targets. The meshes are a GCM-like profile and a
+    # scaled 2 m soil column on a unit domain; an absolute tolerance of 1e-3
+    # leaves end-spacing errors of 0.3% and 1.2% in them.
     for (reverse_mode, dz_bottom, dz_top, nelems) in (
         (false, 0.02 / 45.0, 7.0 / 45.0, 45),
         (true, 0.3 / 2.0, 0.05 / 2.0, 20),
@@ -464,8 +464,8 @@ end
         @test z_rev ≈ (z_lo + H) .- reverse(z_base)
     end
 
-    # Float32 solves reach the default tolerance and place the end spacings,
-    # including a surface spacing four orders of magnitude below `H / nelems`.
+    # Float32 solves reach the default tolerance and match the end spacings,
+    # including a surface spacing of 1/560 of `H / nelems`.
     domain32 = Domains.IntervalDomain(
         Geometry.ZPoint(0.0f0),
         Geometry.ZPoint(45000.0f0);
@@ -720,7 +720,8 @@ end
     @test Meshes.coordinates(trunc_mesh, Meshes.nelements(trunc_mesh), 2) ==
           Geometry.ZPoint(z_top)
 
-    # A raised bottom keeps the parent's faces and spacings between the bounds.
+    # With a raised bottom, the mesh has the parent's element count and end
+    # spacings between the bounds.
     faces_z(mesh) = [f.z for f in mesh.faces]
     z_parent = faces_z(parent_mesh)
     raised_domain = Domains.IntervalDomain(
@@ -739,7 +740,7 @@ end
         rtol = 1e-6,
     )
 
-    # A land mesh, with its fine end at the top, truncates from below the
+    # A land mesh, with its fine end at the top, can be truncated below the
     # surface.
     land_domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(-10),

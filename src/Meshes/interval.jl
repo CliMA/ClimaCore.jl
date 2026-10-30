@@ -420,15 +420,16 @@ function IntervalMesh(
     z_min = Geometry.component(domain.coord_min, 1)
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
-    # The residuals are spacings, so the tolerance scales with the finer one;
-    # `sqrt(eps)` is reachable by the secant solves in Float32.
+    # The residuals are spacings, so the tolerance scales with the finer one.
+    # In a sweep of 12 configurations, Float32 secant solves reach the default
+    # in all 12 and miss `1e-5 * min(dz_bottom, dz_top)` in 4.
     tol_solve =
         isnothing(tol) ? sqrt(eps(FT_solve)) * min(dz_bottom, dz_top) :
         FT_solve(tol)
 
-    # The stretching function η(ζ, h) and its complement 1 - η, written
-    # without the subtraction, which cancels near the top and keeps the Float32
-    # top solve from converging.
+    # The stretching function η(ζ, h) and its complement 1 - η. The complement
+    # has its own formula because the subtraction 1 - η cancels near the top,
+    # where the Float32 top solve then fails to converge.
     exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log1p(expm1(-1 / h) * ζ)
     exp_stretch_from_top(ζ, h) = h * log1p(expm1(1 / h) * (1 - ζ))
 
@@ -485,9 +486,8 @@ end
     HyperbolicTangentStretching(dz_surface::FT)
 
 Apply hyperbolic tangent stretching with element spacing `dz_surface` at the
-surface [m]: in typical atmosphere configurations, the spacing at the bottom of
-the domain; in typical land configurations, with `reverse_mode = true`, the
-spacing at the top.
+surface [m]. The surface is the bottom of the domain, or the top with
+`reverse_mode = true`, as in land model configurations.
 
 For an interval ``[z_0, z_1]``, the elements are uniformly spaced in ``\\zeta``,
 where
@@ -566,8 +566,8 @@ function IntervalMesh(
 
     # The stretching function η = 1 - tanh(γ (1 - ζ)) / tanh(γ), rewritten
     # with tanh a - tanh b = sinh(a - b) / (cosh a cosh b) so that it has no
-    # cancellation near the surface, where η ≪ 1; the subtraction there costs
-    # Float32 up to 25% of the first spacing. The product of sinh and cosh
+    # cancellation near the surface, where η ≪ 1. In Float32, the subtraction
+    # there errs by up to 25% of the first spacing. The product of sinh and cosh
     # overflows for γ ≳ 45 in Float32 (≳ 355 in Float64), where η(1 / nelems)
     # is below Float32's normal range.
     tanh_stretch(ζ, γ) = sinh(γ * ζ) / (cosh(γ * (1 - ζ)) * sinh(γ))
@@ -628,8 +628,8 @@ faces are the heights at which ``k`` takes integer values, and the element
 spacings increase monotonically from `dz_surface` to `dz_top`. The resulting
 `faces` are reference heights without terrain warping.
 
-`nelems` is bounded on both sides. The constructor throws an `ArgumentError`
-naming the admissible range when `nelems` lies outside it.
+`nelems` has a lower and an upper bound. Outside them, the constructor throws
+an `ArgumentError` that names the admissible range.
 
 # Fields
 
@@ -671,8 +671,8 @@ and `dz_top`; at it, the boundary-layer weight ``N - n_{\\text{bg}}`` is zero.
 The upper bound is the count beyond which the boundary-layer profile, which
 receives the levels the background profile does not, places the first face
 below `dz_surface` for every ``\\gamma``. In between, up to two values of
-``\\gamma`` satisfy the surface condition; the larger is used, which assigns the
-most levels to the background profile.
+``\\gamma`` satisfy the surface condition. The constructor takes the larger,
+which assigns the most levels to the background profile.
 
 Since ``n_{\\text{bg}}`` increases with ``\\gamma``, ``N \\ge n_{\\text{bg}}(\\gamma)``
 holds for every admissible ``\\gamma``, so ``k'(u) > 0`` and ``k''(u) < 0`` on
