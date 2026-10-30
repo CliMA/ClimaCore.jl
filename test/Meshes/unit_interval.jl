@@ -315,6 +315,11 @@ end
         stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
         nelems = 1,
     )
+    # A surface spacing of at least `H / nelems` has no stretched solution.
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(1 / 20),
+        nelems = 20,
+    )
     # Test a gcm like configuration
     nelems = 75
     dom, mesh = unit_intervalmesh(
@@ -463,6 +468,45 @@ end
         @test isapprox(z32[2] - z32[1], dz_bottom; rtol = 1e-4)
         @test isapprox(z32[end] - z32[end - 1], dz_top; rtol = 1e-4)
     end
+
+    # Faces solved in Float32 on a Float64 domain end at the domain bounds,
+    # which Float32 does not represent.
+    offset = Domains.IntervalDomain(
+        Geometry.ZPoint(0.1),
+        Geometry.ZPoint(60000.1);
+        boundary_names = (:bottom, :top),
+    )
+    bl_stretch =
+        Meshes.BoundaryLayerHyperbolicTangentStretching(28.0, 3000.0, 2200.0)
+    for (stretch, nelems, reverse_mode) in (
+        (Meshes.HyperbolicTangentStretching(30.0), 45, false),
+        (Meshes.HyperbolicTangentStretching(30.0), 45, true),
+        (Meshes.GeneralizedExponentialStretching(30.0, 5000.0), 45, false),
+        (Meshes.GeneralizedExponentialStretching(5000.0, 30.0), 45, true),
+        (bl_stretch, 75, false),
+        (bl_stretch, 75, true),
+    )
+        mesh = Meshes.IntervalMesh(
+            offset,
+            stretch;
+            nelems,
+            FT_solve = Float32,
+            reverse_mode,
+        )
+        @test mesh.faces[1] == offset.coord_min
+        @test mesh.faces[end] == offset.coord_max
+    end
+end
+
+@testset "IntervalMesh from explicit faces" begin
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_names = (:bottom, :top),
+    )
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, [Geometry.ZPoint(0.0)])
+    mesh = Meshes.IntervalMesh(domain, Geometry.ZPoint.([0.0, 1000.0]))
+    @test Meshes.nelements(mesh) == 1
 end
 
 @testset "IntervalMesh BoundaryLayerHyperbolicTangentStretching" begin
@@ -569,6 +613,31 @@ end
         rtol = 1e-3,
     )
 
+    # A surface-to-top spacing ratio of 3e-8, for which `atanh` of the bound
+    # on `tanh γ` overflows in Float32.
+    tiny_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        1.0f-4,
+        3000.0f0,
+        2200.0f0,
+    )
+    domain32 = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0f0),
+        Geometry.ZPoint(60000.0f0);
+        boundary_names = (:bottom, :top),
+    )
+    mesh32 = Meshes.IntervalMesh(
+        domain32,
+        tiny_stretch;
+        nelems = 200,
+        FT_solve = Float32,
+    )
+    @test isapprox(mesh32.faces[2].z, 1.0f-4; rtol = 1e-4)
+
+    # The argmin of a monotonic function is the end of the interval.
+    @test Meshes._golden_section_argmin(identity, 0.0, 1.0) == 0.0
+    @test Meshes._golden_section_argmin(-, 0.0, 1.0) == 1.0
+    @test Meshes._golden_section_argmin(x -> (x - 0.3)^2, 0.0, 1.0) ≈ 0.3
+
     # `reverse_mode` mirrors the profile about the domain midpoint, for a
     # domain whose top is away from zero as well.
     soil_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
@@ -624,6 +693,55 @@ end
     @test Meshes.coordinates(trunc_mesh, 1, 1) == Geometry.ZPoint(z_bottom)
     @test Meshes.coordinates(trunc_mesh, Meshes.nelements(trunc_mesh), 2) ==
           Geometry.ZPoint(z_top)
+
+    # A raised bottom keeps the parent's faces and spacings between the bounds.
+    faces_z(mesh) = [f.z for f in mesh.faces]
+    z_parent = faces_z(parent_mesh)
+    raised_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(1000),
+        Geometry.ZPoint{FT}(10000),
+        boundary_names = (:bottom, :top),
+    )
+    raised = faces_z(Meshes.truncate_mesh(parent_mesh, raised_domain))
+    k_bottom = findlast(≤(1000), z_parent)
+    k_top = findfirst(≥(10000), z_parent)
+    @test length(raised) == k_top - k_bottom + 1
+    @test (raised[1], raised[end]) == (1000, 10000)
+    @test isapprox(
+        raised[2] - raised[1],
+        z_parent[k_bottom + 1] - z_parent[k_bottom];
+        rtol = 1e-6,
+    )
+
+    # A land mesh, with its fine end at the top, truncates from below the
+    # surface.
+    land_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(-10),
+        Geometry.ZPoint{FT}(0),
+        boundary_names = (:bottom, :top),
+    )
+    land_mesh = Meshes.IntervalMesh(
+        land_domain,
+        Meshes.GeneralizedExponentialStretching(FT(1.5), FT(0.1));
+        nelems = 20,
+        reverse_mode = true,
+    )
+    trunc_land_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(-10),
+        Geometry.ZPoint{FT}(-2),
+        boundary_names = (:bottom, :top),
+    )
+    trunc_land = Meshes.truncate_mesh(land_mesh, trunc_land_domain)
+    z_land = faces_z(land_mesh)
+    z_trunc = faces_z(trunc_land)
+    k_top = findfirst(≥(-2), z_land)
+    @test trunc_land.reverse_mode
+    @test length(z_trunc) == k_top
+    @test isapprox(
+        z_trunc[end] - z_trunc[end - 1],
+        z_land[k_top] - z_land[k_top - 1];
+        rtol = 1e-3,
+    )
 end
 
 @testset "IntervalMesh stretching parameter promotion" begin

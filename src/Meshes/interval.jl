@@ -181,7 +181,7 @@ It is not a [`StretchingRule`](@ref), since no constructor builds faces from it.
 struct UnknownStretch end
 
 function IntervalMesh(domain::IntervalDomain, faces::AbstractArray)
-    nelems = length(faces)
+    nelems = length(faces) - 1
     nelems < 1 && throw(ArgumentError("`nelems` must be ≥ 1"))
     monotonic_check(faces)
     reverse_mode = false
@@ -209,21 +209,22 @@ _convert_stretch(::Type{FT}, stretch::Uniform) where {FT} = stretch
 Place faces at the heights `u_faces` above the surface, increasing from `0` to
 the domain height. The surface is `coord_min` and heights count upward; in
 `reverse_mode` the surface is `coord_max` and heights count downward, which
-mirrors the profile about the domain midpoint. The end faces are pinned to the
-domain bounds. Called from the [`StretchingRule`](@ref) constructors of
-`IntervalMesh`.
+mirrors the profile about the domain midpoint. The faces are points of the
+domain's coordinate type, and the end faces equal the domain bounds whatever
+the float type of `u_faces`. Called from the [`StretchingRule`](@ref)
+constructors of `IntervalMesh`.
 """
 function _faces_from_surface(
-    domain::IntervalDomain,
-    u_faces::AbstractVector{FT_solve},
+    domain::IntervalDomain{CT},
+    u_faces::AbstractVector,
     reverse_mode::Bool,
-) where {FT_solve}
-    z_min = FT_solve(Geometry.component(domain.coord_min, 1))
-    z_max = FT_solve(Geometry.component(domain.coord_max, 1))
+) where {CT}
+    z_min = Geometry.component(domain.coord_min, 1)
+    z_max = Geometry.component(domain.coord_max, 1)
     faces = reverse_mode ? z_max .- reverse(u_faces) : z_min .+ u_faces
     faces[1] = z_min
     faces[end] = z_max
-    return faces
+    return CT.(faces)
 end
 
 function IntervalMesh(
@@ -306,7 +307,7 @@ function IntervalMesh(
 
     η(ζ) = ζ == 1 ? ζ : (-h) * log1p((expm1(-1 / h)) * ζ)
     u_faces = [R * η(ζ) for ζ in range(FT(0), FT(1); length = nelems + 1)]
-    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
+    faces = _faces_from_surface(domain, u_faces, reverse_mode)
     monotonic_check(faces)
     IntervalMesh(stretch, domain, faces, nothing, reverse_mode)
 end
@@ -418,6 +419,7 @@ function IntervalMesh(
     z_min = Geometry.component(domain.coord_min, 1)
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
+    tol_solve = FT_solve(tol)
 
     # The stretching function η(ζ, h) and its complement 1 - η, written
     # without the subtraction, which cancels near the top and keeps the Float32
@@ -437,7 +439,7 @@ function IntervalMesh(
         find_bottom,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT_solve(tol)),
+        RootSolvers.ResidualTolerance(tol_solve),
     )
     if h_bottom_sol.converged !== true
         error(
@@ -455,7 +457,7 @@ function IntervalMesh(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT_solve(tol)),
+        RootSolvers.ResidualTolerance(tol_solve),
     )
     if h_top_sol.converged !== true
         error(
@@ -469,7 +471,7 @@ function IntervalMesh(
         h_bottom .+
         (ζ_n .- ζ_n[1]) * (h_top - h_bottom) / (ζ_n[end - 1] - ζ_n[1])
     u_faces = FT_solve[zero(FT_solve); (H * exp_stretch.(ζ_n, h))...]
-    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
+    faces = _faces_from_surface(domain, u_faces, reverse_mode)
     monotonic_check(faces)
     IntervalMesh(stretch, domain, faces, (; h_top), reverse_mode)
 end
@@ -548,7 +550,14 @@ function IntervalMesh(
     z_min = Geometry.component(domain.coord_min, 1)
     z_max = Geometry.component(domain.coord_max, 1)
     H = FT_solve(z_max - z_min)
-    tol === nothing && (tol = dz_surface * FT_solve(1e-6))
+    if !(zero(FT_solve) < dz_surface < H / nelems)
+        throw(
+            ArgumentError(
+                "HyperbolicTangentStretching requires 0 < dz_surface < (z_max - z_min) / nelems; got dz_surface = $dz_surface on a domain of height $H with nelems = $nelems",
+            ),
+        )
+    end
+    tol_solve = isnothing(tol) ? FT_solve(1e-6) * dz_surface : FT_solve(tol)
 
     # The stretching function η = 1 - tanh(γ (1 - ζ)) / tanh(γ), rewritten
     # with tanh a - tanh b = sinh(a - b) / (cosh a cosh b) so that it has no
@@ -566,7 +575,7 @@ function IntervalMesh(
         find_surface,
         RootSolvers.NewtonsMethodAD(FT_solve(1.0)),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT_solve(tol)),
+        RootSolvers.ResidualTolerance(tol_solve),
     )
     if γ_sol.converged !== true
         error(
@@ -575,7 +584,7 @@ function IntervalMesh(
     end
 
     u_faces = FT_solve[zero(FT_solve); (H * tanh_stretch.(ζ_n, γ_sol.root))...]
-    faces = CT.(_faces_from_surface(domain, u_faces, reverse_mode))
+    faces = _faces_from_surface(domain, u_faces, reverse_mode)
     monotonic_check(faces)
     IntervalMesh(
         stretch,
@@ -699,10 +708,13 @@ _convert_stretch(
     _golden_section_argmin(f, a, b)
 
 Minimizer of a unimodal function `f` on `[a, b]`, located by golden-section
-search to a relative width of `sqrt(eps)`. Called from the
-[`BoundaryLayerHyperbolicTangentStretching`](@ref) constructor.
+search to a relative width of `sqrt(eps)`. The search brackets interior points
+only, so the result is compared with `a` and `b`, where a monotonic `f` has its
+minimum. Called from the [`BoundaryLayerHyperbolicTangentStretching`](@ref)
+constructor.
 """
 function _golden_section_argmin(f, a::FT, b::FT) where {FT}
+    a₀, b₀ = a, b
     r = (sqrt(FT(5)) - 1) / 2
     x1 = b - r * (b - a)
     x2 = a + r * (b - a)
@@ -718,7 +730,10 @@ function _golden_section_argmin(f, a::FT, b::FT) where {FT}
             f2 = f(x2)
         end
     end
-    return f1 ≤ f2 ? x1 : x2
+    x, fx = f1 ≤ f2 ? (x1, f1) : (x2, f2)
+    f(a₀) < fx && return a₀
+    f(b₀) < fx && return b₀
+    return x
 end
 
 function IntervalMesh(
@@ -764,15 +779,14 @@ function IntervalMesh(
     # difference of logarithms. The direct form subtracts two nearly equal
     # numbers near the surface and errs by up to 1e-3 levels in Float32, above
     # the default tolerance. `expm1(2γ)` overflows for γ ≳ 44 in Float32
-    # (≳ 354 in Float64), above the largest finite `γ_max` (≈ 8.7 and ≈ 19,
-    # where `τ_max` rounds to 1).
-    function cumulative_level(u, γ)
+    # (≳ 354 in Float64), which `γ_max` reaches only for surface-to-top
+    # spacing ratios below ~1e-38 (~1e-307). The coefficients that depend on
+    # `γ` alone are computed once per `γ`.
+    level_coeffs(γ) = (n_bg_of_gamma(γ), expm1(2 * γ) / 2, expm1(-2 * γ) / 2)
+    function cumulative_level(u, γ, coeffs = level_coeffs(γ))
+        n_bg, a₊, a₋ = coeffs
         η = u / H
-        n_bg = n_bg_of_gamma(γ)
-        k_bg =
-            n_bg * (
-                log1p(η * expm1(2 * γ) / 2) - log1p(η * expm1(-2 * γ) / 2)
-            ) / (2 * γ)
+        k_bg = n_bg * (log1p(η * a₊) - log1p(η * a₋)) / (2 * γ)
         return k_bg + (N - n_bg) * (tanh(u / z_pbl) / th_pbl)
     end
 
@@ -782,11 +796,16 @@ function IntervalMesh(
     # on that interval, which keeps the boundary-layer weight `N - n_bg`
     # nonnegative and the spacing monotonic.
     find_gamma(γ) = cumulative_level(dz_surface, γ) - one(FT_solve)
+    # `γ_max = atanh(τ_max) = log(1 + τ_max) - log(1 - τ_max²) / 2`, with
+    # 1 - τ_max² = `δ_max` in closed form. `τ_max` itself rounds to 1, and
+    # `atanh(τ_max)` to infinity, for surface-to-top spacing ratios below
+    # ~6e-8 in Float32.
     η_surface = dz_surface / H
     η_top = dz_top / H
     τ_max = sqrt((η_top - η_surface) / ((one(FT_solve) - η_surface) * η_top))
+    δ_max = η_surface * (one(FT_solve) - η_top) / ((one(FT_solve) - η_surface) * η_top)
     γ_min = FT_solve(1e-6)
-    γ_max = atanh(τ_max)
+    γ_max = log1p(τ_max) - log(δ_max) / 2
     # `find_gamma` first decreases and then increases in `γ` (in all 2880
     # configurations of a parameter sweep), so it can have two roots. The
     # solve brackets the root on the increasing branch, between the minimizer
@@ -826,9 +845,10 @@ function IntervalMesh(
     u_faces = Vector{FT_solve}(undef, nelems + 1)
     u_faces[1] = zero(FT_solve)
     u_faces[nelems + 1] = H
+    coeffs = level_coeffs(γ)
     for m in 1:(nelems - 1)
         target_m = FT_solve(m)
-        find_face(u) = cumulative_level(u, γ) - target_m
+        find_face(u) = cumulative_level(u, γ, coeffs) - target_m
         u_sol = RootSolvers.find_zero(
             find_face,
             RootSolvers.BrentsMethod(u_faces[m], H),
@@ -845,43 +865,30 @@ function IntervalMesh(
 
     faces = _faces_from_surface(domain, u_faces, reverse_mode)
     monotonic_check(faces)
-    return IntervalMesh(
-        stretch,
-        domain,
-        CT.(faces),
-        (; γ_sol = γ),
-        reverse_mode,
-    )
+    return IntervalMesh(stretch, domain, faces, (; γ_sol = γ), reverse_mode)
 end
 
 """
     truncate_mesh(parent_mesh::IntervalMesh, trunc_domain::IntervalDomain)
 
 Construct an `IntervalMesh` on `trunc_domain` by truncating `parent_mesh`. The
-result has as many elements as `parent_mesh` has faces below the top of
-`trunc_domain`, and uses a `GeneralizedExponentialStretching` with the bottom and
-top spacings of the truncated parent faces.
+truncated parent faces run from the last parent face at or below the bottom of
+`trunc_domain` to the first at or above its top. The result has as many
+elements as these faces span, and uses a `GeneralizedExponentialStretching`
+with their bottom and top spacings; `reverse_mode` is set when the bottom
+spacing is the larger, as in land model meshes.
 """
 function truncate_mesh(
     parent_mesh::IntervalMesh,
     trunc_domain::IntervalDomain{CT},
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-
-    # The first parent face at or above the top of `trunc_domain` closes the
-    # truncated mesh.
     faces = parent_mesh.faces
-    k_top = length(faces)
-    z_top = trunc_domain.coord_max
     z_bottom = trunc_domain.coord_min
+    z_top = trunc_domain.coord_max
+    k_bottom = something(findlast(face -> face.z ≤ z_bottom.z, faces), 1)
+    k_top = something(findfirst(face -> face.z ≥ z_top.z, faces), length(faces))
 
-    for (k_f, face) in enumerate(faces)
-        if face.z ≥ z_top.z
-            k_top = k_f
-            break
-        end
-    end
-
-    trunc_faces = faces[1:k_top]
+    trunc_faces = faces[k_bottom:k_top]
     new_nelems = length(trunc_faces) - 1
 
     Δz_top = trunc_faces[end].z - trunc_faces[end - 1].z
@@ -893,5 +900,10 @@ function truncate_mesh(
         Geometry.ZPoint{FT}(z_top),
         boundary_names = trunc_domain.boundary_names,
     )
-    return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
+    return IntervalMesh(
+        new_domain,
+        new_stretch;
+        nelems = new_nelems,
+        reverse_mode = Δz_bottom > Δz_top,
+    )
 end
