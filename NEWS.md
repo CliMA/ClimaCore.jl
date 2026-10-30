@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Every argument of `DataLayouts.foreach_slice`
+  and its variants can be a `Tuple` or `NamedTuple` of arguments, or a nested
+  container of them, whose slices are passed to the loop's function in the same
+  container, so that GPU loops can have more than 31 arguments.
+
 v1.0.6
 -------
 

@@ -2,6 +2,7 @@ module Utilities
 
 using UnrolledUtilities
 
+import Adapt
 import ForwardDiff
 import InteractiveUtils
 

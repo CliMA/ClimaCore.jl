@@ -76,8 +76,9 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
 @inline shared_space(_) = nothing
 @inline shared_space(field::Field) = axes(field)
 @inline shared_space(bc::LazyField) =
-    !isnothing(bc.axes) ? bc.axes :
-    unrolled_reduce(bc.args; init = nothing) do space, arg
+    !isnothing(bc.axes) ? bc.axes : largest_space(bc.args)
+@inline largest_space(args) =
+    unrolled_reduce(args; init = nothing) do space, arg
         !isnothing(shared_space(arg)) &&
         (isnothing(space) || Spaces.maybe_issubspace(space, shared_space(arg))) ?
         shared_space(arg) : space
@@ -220,11 +221,20 @@ end
     return Broadcast.Broadcasted(bc.style, bc.f, args, bc.axes)
 end
 
-# Duplicate grid pointers in Fields and LazyFields are toggled off before
-# launching a kernel, then toggled back on when the kernel starts executing.
-# Note that this could be optimized further by dropping grid pointers from arg1.
-Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
-    (arg1, unrolled_map(arg -> Grids.toggle_placeholder_grid(arg, axes(arg1)), args)...)
+# Duplicate grid pointers in Fields and LazyFields are toggled off before launching a kernel,
+# then toggled back on when the kernel starts executing. The grid of the largest space among
+# the Fields of the arguments and of their containers (see DataLayouts.foreach_slice), which
+# usually has most of them, is passed to the kernel once, before the arguments.
+function Grids.toggle_compact_args(arg1::Union{MaybeLazyField, Tuple, NamedTuple}, args...)
+    space = largest_space(DataLayouts.leaves((arg1, args...)))
+    space isa Union{Nothing, Spaces.PointSpace, Spaces.SpectralElementSpaceSlab} &&
+        return (arg1, args...)
+    grid = Spaces.grid(space)
+    full_grid = grid isa Union{Grids.LevelGrid, Grids.ColumnGrid} ? grid.full_grid : grid
+    toggled_args =
+        unrolled_map(Base.Fix2(Grids.toggle_placeholder_grid, full_grid), (arg1, args...))
+    return (full_grid, toggled_args...)
+end
 
 # Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
 # broadcast expression from slices of their arguments, skipping the

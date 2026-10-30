@@ -319,6 +319,86 @@ end
 end
 
 
+# A Tuple or NamedTuple argument of a slice loop is a container of arguments, which can be
+# nested or empty, and its slice is the same container of their slices. Every argument in a
+# container is scoped, masked, and checked for compatible dimensions like the other arguments,
+# and a container can hold more arguments than a call can splat.
+@testset "containers of loop arguments [$FT]" for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    (a, b, c, dest) = ntuple(_ -> test_data(device, FT, 1, 10), 4)
+    (a_array, b_array, c_array) = map(data -> Array(parent(data)), (a, b, c))
+
+    nested_args = (a, (; b, c = (c,), e = ((),)))
+    DataLayouts.foreach_column((), dest, nested_args) do e1, dest, (a, (; b, c, e))
+        n = length(e1) + length(e[1])
+        @. dest = a + b * c[1] + n
+    end
+    @test Array(parent(dest)) == a_array .+ b_array .* c_array
+    DataLayouts.foreach_point((; dest, args = (a, b))) do (; dest, args)
+        dest[] = args[1][] - args[2][]
+    end
+    @test Array(parent(dest)) == a_array .- b_array
+
+    # Level slices need a static number of elements.
+    (a_levels, dest_levels) =
+        map(data -> DataLayouts.VIJFH{FT, 10, 4, 4, 5}(parent(data)), (a, dest))
+    DataLayouts.foreach_level(
+        (dest_levels, (a_levels,));
+        enumerate = Val(true),
+    ) do v, (dest, (a,))
+        @. dest = a * v[1]
+    end
+    @test Array(parent(dest)) == a_array .* (1:10)
+    DataLayouts.foreach_column((; dest, a); enumerate = Val(true)) do index, (; dest, a)
+        fill!(dest, sum(a) + index[3])
+    end
+    @test Array(parent(dest)) ==
+          repeat(sum(a_array; dims = 1), 10) .+ reshape(1:5, 1, 1, 1, 1, 5)
+
+    mask = DataLayouts.IJHMask(dest)
+    is_active = Array(parent(DataLayouts.is_active(mask)))
+    is_active[1, 1, 1, 1, 1] = false
+    copyto!(parent(DataLayouts.is_active(mask)), is_active)
+    DataLayouts.set_mask_maps!(mask)
+    fill!(parent(dest), 0)
+    DataLayouts.foreach_column((dest, (a,)), (;); mask) do (dest, (a,)), e
+        n = length(e)
+        @. dest = a + n
+    end
+    DataLayouts.foreach_point(((),), (; a, dest); mask) do e, (; a, dest)
+        dest[] += a[] + length(e[1])
+    end
+    masked_array = 2 .* a_array
+    masked_array[:, 1, 1, :, 1] .= 0
+    @test Array(parent(dest)) == masked_array
+
+    # Point loops over containers use linear indices like loops over the same arguments, and a
+    # NamedTuple of more values than a call can splat is sliced without allocating.
+    @test DataLayouts.each_maskable_slice_index(DataLayouts.NoMask(), view, dest, (a, b)) ==
+          eachindex(dest, a, b)
+    names = ntuple(n -> Symbol(:x, n), 40)
+    args = NamedTuple{names}(ntuple(_ -> test_data(device, FT, 1, 4), 40))
+    sums = test_data(device, FT, 1, 4)
+    sum_args!(sums, args) = DataLayouts.foreach_column(sums, args) do sums, args
+        fill!(sums, 0)
+        for n in 1:40
+            @. sums += n * args[n]
+        end
+    end
+    sum_args!(sums, args)
+    @test Array(parent(sums)) == sum(n -> n .* Array(parent(args[n])), 1:40)
+    if device isa ClimaComms.CPUSingleThreaded && TU.allocation_checks_meaningful()
+        @test measured_allocations(Base.Fix2(sum_args!, args), sums) == 0
+    end
+
+    @test_throws DimensionMismatch DataLayouts.foreach_point(
+        Returns(nothing),
+        dest,
+        (a, test_data(device, FT, 1, 1)),
+    )
+    @test_throws ArgumentError DataLayouts.foreach_column(Returns(nothing), (), ((;),))
+end
+
 @testset "thread pool resolution and sharing" begin
     device = ClimaComms.device()
     if device isa ClimaComms.AbstractCPUDevice

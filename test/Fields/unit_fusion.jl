@@ -268,6 +268,37 @@ end
     @test correct()
 end
 
+# A loop over containers of Fields, which can be empty, slices every Field in them, and a GPU
+# kernel gets the grid of the largest space of its Fields once (here, not the space of the
+# first Field), so that it can take more Fields than a call can splat.
+@testset "fused loops over containers of fields" begin
+    FT = Float64
+    context = ClimaComms.context(ClimaComms.device())
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 63, helem = 2, context)
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜz = Fields.coordinate_field(space).z
+    ᶠz = Fields.coordinate_field(Spaces.face_space(space)).z
+    surface = Fields.coordinate_field(Spaces.horizontal_space(space)).lat
+    inputs = ntuple(n -> n .* ᶜz, 16)
+    outputs = map(similar, inputs)
+    args = ((surface, outputs), (; inputs, empty = ((),), ᶠz))
+    foreach_column(args...) do (surface, outputs), (; inputs, ᶠz)
+        @. outputs[1] = ᶜinterp(ᶠinterp(inputs[1]) * ᶠz)
+        ntuple(Val(15)) do n
+            (output, input) = (outputs[n + 1], inputs[n + 1])
+            @. output = input * surface
+            return nothing
+        end
+        return nothing
+    end
+    @test parent(outputs[1]) ≈ parent(@. ᶜinterp(ᶠinterp(inputs[1]) * ᶠz))
+    @test all(n -> parent(outputs[n]) ≈ parent(inputs[n] .* surface), 2:16)
+end
+
 # Temporaries of a fused loop body are in registers on GPUs (see register_similar), stored
 # in MArrays that GPU kernels would allocate on the heap if they were passed to a function
 # that is not inlined, like a separately compiled statement or operator.

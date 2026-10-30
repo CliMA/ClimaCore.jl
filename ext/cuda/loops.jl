@@ -3,6 +3,8 @@ has_inferred_slice_size(op::O, arg) where {O} =
         slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
         Val(DataLayouts.has_inferred_size(slice))
     end
+has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
+    unrolled_all(Base.Fix1(has_inferred_slice_size, op), DataLayouts.leaves(arg))
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
 
@@ -18,15 +20,16 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 ) where {L, R, O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
         DataLayouts.unfused_slice_loop(scope, op, f, args...; mask, enumerate)
-    elseif !isempty(DataLayouts.each_slice_index(op, first(args)))
+    elseif !isempty(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
         check_device_assumptions()
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
         kernel_subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
         subscope = slice_subscope_at_level(kernel_subscope, Val(L), op, f, args...)
-        max_slices = length(DataLayouts.each_slice_index(op, first(args)))
+        max_slices =
+            length(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
         check_index_count(max_slices)
-        compact_args = Grids.toggle_compact_args(args...)
+        compact_args = kernel_parameters(Grids.toggle_compact_args(args...))
         launch_slice_loop(
             subscope,
             can_exceed_level(kernel_subscope, Val(L), op, f, args...),
@@ -43,8 +46,11 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
 # The kernel of a slice loop whose slices are assigned to subscope, a closure whose type names
 # the subscope and the body (see launch_slice_loop and SHMEM_LEVEL_CACHE).
 slice_loop_kernel(subscope, op::O, f::F, mask, enumerate) where {O, F} =
-    function (compact_kernel_args...)
-        kernel_args = Grids.toggle_compact_args(compact_kernel_args...)
+    function (parameters...)
+        args =
+            parameters isa Tuple{Utilities.AutoBroadcaster} ?
+            Utilities.drop_auto_broadcasters(parameters[1]) : parameters
+        kernel_args = Grids.toggle_compact_args(args...)
         DataLayouts.scoped_slice_loop(
             subscope,
             ThisKernel(),
@@ -56,6 +62,15 @@ slice_loop_kernel(subscope, op::O, f::F, mask, enumerate) where {O, F} =
         )
         return nothing
     end
+
+# Every argument of a slice loop is a parameter of its kernel, unless the loop has containers
+# of arguments (see DataLayouts.foreach_slice), which Adapt maps with calls that Julia does not
+# infer for more than 31 values: the arguments are then one AutoBroadcaster, which Adapt
+# converts value by value.
+kernel_parameters(args) =
+    unrolled_any(DataLayouts.is_container, args) ?
+    (Utilities.add_auto_broadcasters(args),) :
+    args
 
 # Whether the kernel of a slice loop at a level of shared memory compiles, by the types of
 # the kernel (which names its subscope; see slice_loop_kernel) and of its arguments (see
@@ -284,7 +299,8 @@ next_shmem_level(::ThisSubBlock{N, B}) where {N, B} =
 slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
     val_value(
         Utilities.return_type(Tuple{F, typeof(args)}) do f, args
-            index = first(DataLayouts.each_slice_index(op, first(args)))
+            index =
+                first(DataLayouts.each_slice_index(op, first(DataLayouts.leaves(args))))
             slices = DataLayouts.slice_every_arg(op, index, args...)
             scoped_slices = unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)
             bytes = DataLayouts.required_shared_memory(f, scoped_slices...)

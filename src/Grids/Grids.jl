@@ -7,7 +7,7 @@ import ..Utilities: PlusHalf, half, Cache
 import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 
-using StaticArrays
+using StaticArrays, UnrolledUtilities
 
 """
     Grids.AbstractGrid

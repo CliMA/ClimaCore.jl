@@ -22,17 +22,22 @@ end
 # need no divisions when only one axis is longer than 1, and only shifts when
 # every axis is a power of two; loops over other static sizes (e.g., the slabs of
 # spectral operators with 3 quadrature points) are faster with Cartesian indices
-# on CPUs, and they compile to smaller GPU kernels.
+# on CPUs, and they compile to smaller GPU kernels. Loops over containers of more
+# arguments than a call can splat use Cartesian indices.
 @inline each_maskable_slice_index(_, op::O, args...) where {O} =
-    each_slice_index(op, first(args))
-@inline each_maskable_slice_index(::NoMask, ::typeof(view), args...) =
-    has_inferred_size(first(args)) && !has_one_inferred_axis(first(args)) &&
-    !unrolled_all(ispow2, inferred_size(first(args))) ?
-    each_slice_index(view, first(args)) : eachindex(args...)
+    each_slice_index(op, first(leaves(args)))
+@inline function each_maskable_slice_index(::NoMask, ::typeof(view), args...)
+    all_leaves = leaves(args)
+    arg = first(all_leaves)
+    return length(all_leaves) > 32 ||
+           has_inferred_size(arg) && !has_one_inferred_axis(arg) &&
+           !unrolled_all(ispow2, inferred_size(arg)) ? each_slice_index(view, arg) :
+           eachindex(all_leaves...)
+end
 @inline each_maskable_slice_index(mask::IJHMask, ::typeof(column), args...) =
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(mask::IJHMask, ::typeof(view), args...) =
-    ActivePointIndices{nlevels(first(args))}(mask)
+    ActivePointIndices{nlevels(first(leaves(args)))}(mask)
 
 # Every valid mask and slice operator combination has indexable slice indices:
 # NoMask uses the full index ranges, and IJHMask (which only supports column
@@ -84,7 +89,7 @@ slice a scope with a statically known number of threads.
 """
 @inline function slice_subscope(scope, op::O, args...) where {O}
     partition(scope) == ThisThread() && return ThisThread()
-    max_slice_points = unrolled_maximum(Base.Fix1(num_slice_points, op), args)
+    max_slice_points = unrolled_maximum(Base.Fix1(num_slice_points, op), leaves(args))
     return points_subscope(scope, max_slice_points)
 end
 
@@ -190,6 +195,26 @@ in registers.
 """
 uses_shared_memory(f::F, slices...) where {F} = true
 
+# A Tuple or NamedTuple argument of a slice loop is a container of other arguments (see
+# foreach_slice), which can be empty, and the slices, scope, and sizes of a loop are those of
+# the arguments in its containers and of its other arguments (its leaves). Functions are
+# mapped over the leaves of a container like over the values of AutoBroadcasters (see
+# add_auto_broadcasters).
+@inline is_container(arg) = arg isa Union{Tuple, NamedTuple}
+
+@inline leaves(arg) = (arg,)
+@inline leaves(arg::Tuple) =
+    unrolled_any(is_container, arg) ? unrolled_flatmap(leaves, arg) : arg
+@inline leaves(arg::NamedTuple) = unrolled_flatmap(leaves, arg)
+@inline leaves(::NamedTuple{()}) = ()
+
+@inline map_leaves(f::F, arg) where {F} = f(arg)
+@inline map_leaves(f::F, arg::Union{Tuple, NamedTuple}) where {F} =
+    unrolled_map(Base.Fix1(map_leaves, f), arg)
+
+@inline reassign(arg::Union{Tuple, NamedTuple}, scope) =
+    map_leaves(Base.Fix2(reassign, scope), arg)
+
 """
     foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
     foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
@@ -205,9 +230,7 @@ of the following:
 Each slice is assigned to a [`slice_subscope`](@ref) of `scope`, by default the
 largest available [`DataScope`](@ref) that can access every argument, and a
 [`DataMask`](@ref) may be used to skip a particular subset of slices. On CUDA
-devices, `foreach_slice` supports at most `2^31 - 1` slices and 31 arguments
-after `f`, since Julia does not infer calls that splat more than 32 values,
-which would leave dynamic calls in the kernel.
+devices, `foreach_slice` supports at most `2^31 - 1` slices.
 
 Statements in `f` execute in order at the slice's scope: same-shaped pointwise
 broadcasts assign every point to the same thread in each statement, and
@@ -216,6 +239,21 @@ buffers, so each statement may read the results of the statements before it.
 
 By default, `f` is called as `f(slices...)`. Setting `enumerate` to `Val(true)`
 makes this `f(index, slices...)`, like in a loop over `Base.enumerate(arg)`.
+
+An argument can also be a `Tuple` or `NamedTuple` of arguments, or a nested container of
+them, whose slice is the same container of their slices. Every argument in a container is
+scoped, masked, and checked for compatible dimensions like the other arguments. Containers
+can be empty, as long as some argument is not. For example, this sets every column of `a`
+to the sum of the columns of `b` and `c`:
+
+```julia
+foreach_column(a, (; b, c)) do a_column, (; b, c)
+    @. a_column = b + c
+end
+```
+
+Julia does not infer calls that splat more than 32 values, which would leave dynamic calls
+in GPU kernels, so a loop over more than 31 arguments should group them into containers.
 
 On GPUs, `shmem` sets how much of a block's shared memory each slice can use for the
 buffers of the operators in `f` (see `Operators.apply_operator`), per thread of the slice.
@@ -281,9 +319,15 @@ end
     enumerate,
     args...,
 ) where {O, F}
-    unrolled_allequal(Base.Fix1(each_slice_index, op), args) ||
+    all_leaves = leaves(args)
+    isempty(all_leaves) &&
+        throw(ArgumentError("Inputs to foreach_slice cannot all be empty containers"))
+    unrolled_allequal(Base.Fix1(each_slice_index, op), all_leaves) ||
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
-    scope = with_register_cap(with_shared_memory(DataScope(args...), shmem), maxregs)
+    data_scope =
+        isone(length(all_leaves)) ? DataScope(all_leaves[1]) :
+        unrolled_mapreduce(DataScope, DataScope, all_leaves)
+    scope = with_register_cap(with_shared_memory(data_scope, shmem), maxregs)
     # Go straight onto the loop barrier for scopes without setup: every
     # forwarding layer adds a method instance per loop, inferred with the whole
     # loop inlined into it.
@@ -434,16 +478,24 @@ Base.@propagate_inbounds slice_index(indices::CartesianIndices, i) =
         indices.indices[1][i], unrolled_map(first, Base.tail(indices.indices))...,
     ) : indices[i]
 
-# One slice of every argument. A generated function rather than an unrolled_map
-# over a closure (two method instances per slice loop per argument-type
-# combination); level/slab/column take a splatted Cartesian index, view takes
-# the index itself, and the singleton operator leaves one inferred branch.
-@generated slice_every_arg(op::O, index, args::Vararg{Any, N}) where {O, N} = quote
+# One slice of every argument, and of every argument in a container (see foreach_slice). A
+# generated function rather than an unrolled_map over a closure (two method instances per
+# slice loop per argument-type combination); level/slab/column take a splatted Cartesian
+# index, view takes the index itself, and the singleton operator leaves one inferred branch.
+# The expression of the slice of an argument of type T is defined before the generator that
+# calls it, which only sees methods defined before it.
+function slice_expr(O, T, arg)
+    T <: Union{Tuple, NamedTuple} || return O === typeof(view) ? :(view($arg, index)) :
+           :(slice_arg(op, $arg, Tuple(index)...))
+    slices = Expr(:tuple)
+    for n in 1:fieldcount(T)
+        push!(slices.args, slice_expr(O, fieldtype(T, n), :(getfield($arg, $n))))
+    end
+    return T <: Tuple ? slices : :(NamedTuple{$(fieldnames(T))}($slices))
+end
+@generated slice_every_arg(op::O, index, args...) where {O} = quote
     Base.@_propagate_inbounds_meta
-    return Base.Cartesian.@ntuple $N n -> $(
-        O === typeof(view) ? :(view(getfield(args, n), index)) :
-        :(slice_arg(op, getfield(args, n), Tuple(index)...))
-    )
+    return $(slice_expr(O, Tuple{args...}, :args))
 end
 
 # Slices at a slice loop's own (valid) indices, so that types can skip their own checks
@@ -486,7 +538,7 @@ end
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
     (mask, enumerate, _, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
-        slices = map(arg -> (@inbounds op(arg, Tuple(index)...)), args)
+        slices = @inbounds slice_every_arg(op, index, args...)
         enumerate isa Val{true} ? f(index, slices...) : f(slices...)
     end
 end
