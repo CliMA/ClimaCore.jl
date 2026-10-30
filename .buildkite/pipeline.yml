@@ -1362,7 +1362,7 @@ steps:
         soft_fail: true # downstream test failures don't block a merge
 
       - label: ":rocket: Downstream: trigger ClimaLand CI"
-        trigger: "climaland-ci"
+        trigger: "climaland-downstream"
         build:
           branch: "main"
           message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
