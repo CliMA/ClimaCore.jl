@@ -105,7 +105,9 @@ end
 # A similar recursive method takes the place of Base's check_broadcast_shape,
 # with an only_check_size flag used when checking broadcast destination spaces.
 # Its closure is only inlined into the recursion of axes (only_check_size is
-# false), which keeps operator broadcasts over columns fast.
+# false), which keeps operator broadcasts over columns fast, and into broadcasts in
+# a thread's own scope (as in a loop over slices on CPUs), whose temporaries would be
+# put on the heap by a function that is not inlined (see register_similar).
 @inline check_broadcast_space(_, _, _) = nothing
 @inline check_broadcast_space(space, field::Field, ::Val{true}) =
     Base.Broadcast.check_broadcast_axes(
@@ -118,7 +120,8 @@ end
     only_check_size == Val(false) && !isnothing(bc.axes) ?
     check_subspace(space, bc.axes) :
     unrolled_foreach(
-        only_check_size == Val(false) ?
+        only_check_size == Val(false) ||
+        DataLayouts.DataScope(bc) == DataLayouts.ThisThread() ?
         @inline(arg -> check_broadcast_space(space, arg, only_check_size)) :
         (arg -> check_broadcast_space(space, arg, only_check_size)),
         bc.args,
@@ -180,9 +183,11 @@ Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
 
 Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
-Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
+@inline Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
+# A slice loop body inlines this, since a function that is not inlined would return the
+# registers or private buffer of its result (see register_similar) in an MArray on the heap.
+@inline Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
 field_values(bc::LazyField{S}) where {S} =
@@ -313,7 +318,7 @@ Base.similar(bc::LazyField, ::Type{T}) where {T} =
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view
 # even when the broadcast's layout shape is static.
-Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
+@inline Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the
@@ -353,7 +358,7 @@ Base.Broadcast.broadcasted(
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
 
 # Specialize vector-based functions to add LocalGeometry information.
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(LinearAlgebra.norm),
     arg,
@@ -368,7 +373,7 @@ function Base.Broadcast.broadcasted(
         local_geometry_field(space),
     )
 end
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(LinearAlgebra.norm_sqr),
     arg,
@@ -384,7 +389,7 @@ function Base.Broadcast.broadcasted(
     )
 end
 
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(LinearAlgebra.cross),
     arg1,
@@ -401,7 +406,7 @@ function Base.Broadcast.broadcasted(
         local_geometry_field(space),
     )
 end
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(Geometry.transform),
     arg1,
@@ -418,7 +423,7 @@ function Base.Broadcast.broadcasted(
         local_geometry_field(space),
     )
 end
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::typeof(Geometry.project),
     arg1,
@@ -436,7 +441,7 @@ function Base.Broadcast.broadcasted(
     )
 end
 
-function Base.Broadcast.broadcasted(
+@inline function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::Type{V},
     arg,
