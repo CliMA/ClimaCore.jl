@@ -31,6 +31,8 @@ main
   and count as unconverged on every call. `apply_limiter!` warns only when some
   slab fails to converge, and its `min_tracer_mass` statistic is the minimum
   over slabs.
+- ![][badge-🐛bugfix] `Utilities.linear_ind` is defined again; the ClimaCore
+  extension of ConservativeRegridding.jl up to v0.2.19 imports it.
 - ![][badge-🔥behavioralΔ] The default `tol` of `IntervalMesh` with
   `GeneralizedExponentialStretching` is
   `sqrt(eps(FT_solve)) * min(dz_bottom, dz_top)`, which places the end
