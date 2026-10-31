@@ -284,7 +284,9 @@ function copyto_by_slices!(dest, bc)
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
     scope = DataLayouts.DataScope(dest, bc)
     if DataLayouts.needs_loop_setup(scope)
-        DataLayouts._foreach_slice(scope, op, apply_operators!, mask, Val(false), dest, bc)
+        DataLayouts._foreach_slice(
+            scope, op, apply_operators!, mask, Val(false), Val(false), dest, bc,
+        )
     else
         # Every statement of a slice loop body is compiled into the same function, and the
         # buffers of different statements are never live at once, so they share memory. A
@@ -324,8 +326,7 @@ which holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
 memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
 
 Private buffers are used on CPUs, and on GPUs when one thread evaluates a whole
-slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point) or a
-whole column (e.g., in [`column_reduce!`](@ref)).
+slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point).
 """
 @inline has_private_buffers(arg) = DataLayouts.DataScope(arg) == DataLayouts.ThisThread()
 

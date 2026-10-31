@@ -80,6 +80,19 @@ macro drop_constprop(fs...)
 end
 
 """
+    @inline_types_only definition
+
+Inline a function or closure definition and infer it from the types of its arguments
+alone, without constant propagation; the same as `@inline Base.@constprop :none`. Use this
+for a definition whose compiled code does not depend on constant arguments (e.g., the
+bounds of an index range), which constant propagation would otherwise infer again for
+every distinct constant at every inlined call.
+"""
+macro inline_types_only(definition)
+    return esc(:(Base.@inline Base.@constprop :none $definition))
+end
+
+"""
     ConvertTo{T}()
 
 GPU-compatible callable that converts its argument to type `T`, equivalent to
@@ -162,6 +175,10 @@ check, whose code Julia 1.10 keeps in the optimized IR of callers even under `@i
     converted...,
 )
 
+# Constant ranges (e.g., the k:k of a field view) would re-infer Base's view machinery once
+# per constant, without changing the inferred view type.
+@drop_constprop stable_view
+
 """
     linear_index_and_stride(I, array, index, Val(F))
 
@@ -199,12 +216,8 @@ conversion.
     return (dense_array, (Int(signed(offset)) + Int(f_offset % I * stride) + 1, stride))
 end
 
-const UnitRangeSubArray{A} = SubArray{
-    <:Any,
-    <:Any,
-    A,
-    <:Tuple{Vararg{Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}}},
-}
+const UnitRangeSubArray{A} =
+    SubArray{<:Any, <:Any, A, <:Tuple{Vararg{AbstractUnitRange{Int}}}}
 
 # The offset along dimension d of the views stacked on an array (0 for the array itself).
 @inline view_offset(array::UnitRangeSubArray, ::Val{d}) where {d} =
