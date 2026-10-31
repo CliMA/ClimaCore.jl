@@ -269,6 +269,11 @@ num_threads(::ThisThread) = 1
 static_num_threads(::ThisThread) = 1
 thread_rank(::ThisThread) = 1
 
+# The most bytes that a thread of a loop over the columns of a scope keeps in its own memory
+# for every column (e.g., the factors of MatrixFields solves), which only limits DataScopes
+# whose threads can share the work of a column.
+max_bytes_per_thread(_) = typemax(Int)
+
 """
     total_buffer_limit(scope)
 

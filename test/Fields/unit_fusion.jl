@@ -303,9 +303,9 @@ end
 # threads: Fields of the loop and buffers that statements write pointwise and that operators
 # read at other threads' points or as boundary values, or that a statement overwrites after
 # an operator reads them, single points of Fields of the loop that every thread reads or one
-# thread writes, and point temporaries written pointwise or by an operator, and read by every
-# thread, like a level of a temporary. With 64 centers, the statements on centers have half as
-# many points as the threads of the loop's columns of faces.
+# thread writes, and point temporaries written pointwise, by an operator, or by a column
+# reduction, and read by every thread, like a level of a temporary. With 64 centers, the
+# statements on centers have half as many points as the threads of the loop's columns of faces.
 @testset "fused loops with values that cross threads" begin
     FT = Float64
     context = ClimaComms.context(ClimaComms.device())
@@ -332,7 +332,9 @@ end
         @. ᶜf = 1000 * ᶜz
         ᶜtemp = @. 10 * ᶜz
         ᶜtemp_bottom = Fields.level(ᶜtemp, 1)
-        @. ᶜr2 = ᶜt * ᶜs + ᶜtemp_bottom
+        ᶜsum = @. 0 * ᶜtemp_bottom
+        Operators.column_reduce!(+, ᶜsum, ᶜz)
+        @. ᶜr2 = ᶜt * ᶜs + ᶜtemp_bottom + ᶜsum
         @. ᶜv = ᶜz + 100
         setbc = Operators.SetBoundaryOperator(;
             bottom = Operators.SetValue(ᶜv),
@@ -351,7 +353,7 @@ end
     face_products = 2 .* z_faces .* cat(z_bottom, z_interior_faces, z_top; dims = 1)
     @test Array(parent(ᶜr1)) ≈
           (levels(face_products, 1:64) .+ levels(face_products, 2:65)) ./ 2
-    @test Array(parent(ᶜr2)) ≈ 12 .* z .* z_bottom .+ 10 .* z_bottom
+    @test Array(parent(ᶜr2)) ≈ 12 .* z .* z_bottom .+ 10 .* z_bottom .+ sum(z; dims = 1)
     @test Array(parent(ᶜf)) ≈ 1000 .* z
     @test Array(parent(ᶠf)) ≈ cat(3 .* levels(z_faces, 1:64), 7 .+ 0 .* z_top; dims = 1)
     @test Array(parent(ᶠr1)) ≈

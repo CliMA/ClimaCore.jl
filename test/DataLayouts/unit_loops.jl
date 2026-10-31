@@ -14,6 +14,24 @@ Random.seed!(1234)
 
 device_array(device, array) = ClimaComms.array_type(device)(array)
 
+column_accumulate!(
+    op::O,
+    dest,
+    arg;
+    reverse = false,
+    init = DataLayouts.NoInit(),
+) where {O} =
+    DataLayouts.foreach_column(dest, arg) do dest_column, arg_column
+        DataLayouts.scan_points(op, arg_column, reverse, init) do index, value
+            @inbounds dest_column[index] = value
+        end
+    end
+
+column_reduce!(op::O, dest, arg; reverse = false, init = DataLayouts.NoInit()) where {O} =
+    DataLayouts.foreach_column(dest, arg) do dest_column, arg_column
+        fill!(dest_column, DataLayouts.fold_points(op, arg_column, reverse, init))
+    end
+
 # Use integer values so that sums are exact regardless of iteration order,
 # which makes comparisons insensitive to how threads partition the data.
 function test_data(
@@ -28,7 +46,7 @@ function test_data(
     return DataLayouts.VIJFH{T, Nv, Ni, Nj, nothing}(array)
 end
 
-sum_of_columns!(dest, arg) = DataLayouts.column_reduce!(+, dest, arg)
+sum_of_columns!(dest, arg) = column_reduce!(+, dest, arg)
 function manual_sum_of_columns!(dest, arg)
     for h in 1:size(arg, 4), j in 1:size(arg, 3), i in 1:size(arg, 2)
         fill!(
@@ -46,7 +64,7 @@ end
     reference_dest = test_data(device, FT, 1, 1)
 
     # Nest fill!, sum, and mapreduce within the function passed to a slice
-    # iterator, as in DataLayouts.column_reduce!.
+    # iterator, as in column_reduce!.
     sum_of_columns!(dest, arg)
     manual_sum_of_columns!(reference_dest, arg)
     @test dest == reference_dest
@@ -65,7 +83,7 @@ end
 end
 
 # Pairwise sum with the same structure as safe_mapreduce (sequential blocks of
-# up to 1024 values, midpoint splits), but with no @simd reassociation.
+# up to 1024 values, midpoint splits), but with one accumulator per block.
 function strict_pairwise_sum(values, ifirst, ilast)
     if ilast - ifirst >= 1024
         imid = (ifirst + ilast) >> 1
@@ -116,9 +134,9 @@ end
     # points like a strict pairwise reduction over positions (Base's mapreduce
     # falls back to a sequential fold for CartesianIndices, whose roundoff error
     # grows linearly with the number of points, while the roundoff error of a
-    # pairwise reduction only grows logarithmically), but the @simd loops in
-    # safe_mapreduce reassociate the values in each block, so they only match the
-    # reference to a few ulps. Multithreaded and GPU reductions partition the
+    # pairwise reduction only grows logarithmically), but safe_mapreduce interleaves
+    # several accumulators in each block, so it only matches the reference to a few
+    # ulps. Multithreaded and GPU reductions partition the
     # points across threads, and they require a looser error bound.
     (Ni, Nj, Nh) = (4, 4, 5)
     array = Float32.(rand(64, Ni, Nj, 2, Nh)) ./ 3
@@ -151,6 +169,68 @@ end
     data = DataLayouts.VIJFH{T, 64, Ni, Nj, nothing}(device_array(device, array))
     result = @inferred reduce(+, data; init = (0.0f0, 0.0f0))
     @test collect(result) ≈ [sum(array[:, :, :, f, :]) for f in 1:2]
+end
+
+# Commutative folds and reductions apply op to NamedTuples and Tuples (read as
+# AutoBroadcasters) like they apply it to each of their components, but CPU column sums of
+# floats use @simd loops, which LLVM can reassociate, while CPU column sums of containers
+# interleave accumulators, so their results only match up to roundoff. For 63 values in
+# [0, 1), any two accumulator counts from 1 to 32 give relative differences of at most
+# about 5 eps. CPU sums over whole layouts add the values of containers and of their
+# components in the same order, so their results match exactly.
+@testset "reductions of containers match reductions of their components" begin
+    device = ClimaComms.device()
+    (Nv, Ni, Nj, Nh) = (63, 4, 4, 5)
+    # Containers with more values than the accumulators of a sequential reduction, and
+    # nested containers, are also reduced like each of their components.
+    for T in (
+        Tuple{Float64, Float64},
+        @NamedTuple{a::Float64, b::Float64},
+        NTuple{12, Float64},
+        @NamedTuple{a::Float64, b::Tuple{Float64, Float64}, c::@NamedTuple{d::Float64}},
+    )
+        Nf = sizeof(T) ÷ sizeof(Float64)
+        array = rand(Nv, Ni, Nj, Nf, Nh)
+        components = map(1:Nf) do f
+            DataLayouts.VIJFH{Float64, Nv, Ni, Nj, nothing}(
+                device_array(device, array[:, :, :, f:f, :]),
+            )
+        end
+        component_dest = test_data(device, Float64, 1, 1)
+        data = DataLayouts.VIJFH{T, Nv, Ni, Nj, nothing}(device_array(device, array))
+        dest = Base.Broadcast.broadcastable(test_data(device, T, Nf, 1))
+        for reverse in (false, true), init in (DataLayouts.NoInit(), 0.5)
+            container_init =
+                init isa DataLayouts.NoInit ? init :
+                DataLayouts.bitcast_struct(T, ntuple(_ -> init, Nf))
+            column_reduce!(
+                +,
+                dest,
+                Base.Broadcast.broadcastable(data);
+                reverse,
+                init = container_init,
+            )
+            for f in 1:Nf
+                column_reduce!(+, component_dest, components[f]; reverse, init)
+                container_values = Array(parent(dest))[:, :, :, f:f, :]
+                component_values = Array(parent(component_dest))
+                if device isa ClimaComms.AbstractCPUDevice
+                    rtol = 16 * eps(Float64)
+                    @test all(isapprox.(container_values, component_values; rtol))
+                else
+                    @test container_values == component_values
+                end
+            end
+        end
+        # Partitions of whole-layout GPU reductions depend on the registers of each kernel.
+        device isa ClimaComms.AbstractCPUDevice || continue
+        values(x) = DataLayouts.bitcast_struct(NTuple{Nf, Float64}, x)
+        @test collect(values(reduce(+, data))) ==
+              map(component -> reduce(+, component), components)
+        container_init = DataLayouts.bitcast_struct(T, ntuple(_ -> 0.5, Nf))
+        @test collect(values(reduce(+, data; init = container_init))) ==
+              map(component -> reduce(+, component; init = 0.5), components)
+    end
 end
 
 @testset "0-dimensional data in broadcast expressions [$FT]" for FT in (Float32, Float64)
@@ -325,6 +405,60 @@ end
     end
 end
 
+
+# Column accumulations over a warp (Nv <= 32), several warps (Nv <= 128), and several points
+# per thread (Nv > 128) on GPUs, with operators that the threads of a column can reorder and
+# operators that one thread must apply in order.
+@testset "column accumulations and reductions in order [$FT]" for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    for Nv in (20, 63, 200)
+        arg = test_data(device, FT, 1, Nv)
+        dest = test_data(device, FT, 1, Nv)
+        dest_level = test_data(device, FT, 1, 1)
+        column_array = Array(parent(arg))
+        reversed_array = reverse(column_array; dims = 1)
+        column_accumulate!(+, dest, arg)
+        @test Array(parent(dest)) == cumsum(column_array; dims = 1)
+        column_accumulate!(max, dest, arg; reverse = true, init = FT(500))
+        @test Array(parent(dest)) ==
+              reverse(accumulate(max, reversed_array; dims = 1, init = FT(500)); dims = 1)
+        column_accumulate!((a, b) -> a - b, dest, arg; init = FT(1))
+        @test Array(parent(dest)) == accumulate(-, column_array; dims = 1, init = FT(1))
+        column_reduce!((a, b) -> a - b, dest_level, arg; reverse = true)
+        @test Array(parent(dest_level)) ==
+              mapslices(c -> foldl(-, c), reversed_array; dims = 1)
+        # In place, one thread reads every point of the column before overwriting it.
+        copyto!(dest, arg)
+        column_accumulate!((a, b) -> a - b, dest, dest; init = FT(1))
+        @test Array(parent(dest)) == accumulate(-, column_array; dims = 1, init = FT(1))
+        copyto!(dest, arg)
+        DataLayouts.foreach_column(dest) do dest_column
+            fill!(dest_column, DataLayouts.fold_points((a, b) -> a - b, dest_column, true))
+        end
+        @test Array(parent(dest)) ==
+              repeat(mapslices(c -> foldl(-, c), reversed_array; dims = 1), Nv)
+
+        # Products of matrices are associative but do not commute, so the threads of a
+        # column must combine them in order.
+        M = StaticArrays.SMatrix{2, 2, FT, 4}
+        matrices = DataLayouts.VIJFH{M, Nv, 4, 4, nothing}(
+            device_array(device, 1 .+ (rand(FT, Nv, 4, 4, 4, 5) .- FT(0.5)) ./ 10),
+        )
+        products = DataLayouts.VIJFH{M, 1, 4, 4, nothing}(
+            device_array(device, zeros(FT, 1, 4, 4, 4, 5)),
+        )
+        matrix_array = Array(parent(matrices))
+        column_matrices(i, j, h) = map(v -> M(matrix_array[v, i, j, :, h]), 1:Nv)
+        for reverse_order in (false, true)
+            column_reduce!(*, products, matrices; reverse = reverse_order)
+            maybe_reverse = reverse_order ? reverse : identity
+            @test all(Iterators.product(1:4, 1:4, 1:5)) do (i, j, h)
+                product = M(Array(parent(products))[1, i, j, :, h])
+                product ≈ foldl(*, maybe_reverse(column_matrices(i, j, h)))
+            end
+        end
+    end
+end
 
 # A Tuple or NamedTuple argument of a slice loop is a container of arguments, which can be
 # nested or empty, and its slice is the same container of their slices. Every argument in a
