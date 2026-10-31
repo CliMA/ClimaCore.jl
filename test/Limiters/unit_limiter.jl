@@ -186,6 +186,31 @@ end
     end
 end
 
+@testset "Limiting a slab with no tracer mass" begin
+    for FT in (Float64, Float32)
+        ρq = DataLayouts.VIJFH{FT, 1, 4, 4, 1}(zeros(FT, 1, 4, 4, 1, 1))
+        ρ = DataLayouts.VIJFH{FT, 1, 4, 4, 1}(ones(FT, 1, 4, 4, 1, 1))
+        WJ = DataLayouts.VIJFH{FT, 1, 4, 4, 1}(ones(FT, 1, 4, 4, 1, 1))
+        q_bounds = DataLayouts.VIJFH{FT, 1, 2, 1, 1}(zeros(FT, 1, 2, 1, 1, 1))
+        @test Limiters.apply_limit_slab!(ρq, ρ, WJ, q_bounds, eps(FT)) ==
+              (true, zero(FT), zero(FT))
+        @test all(iszero, parent(ρq))
+    end
+
+    # A tracer that is zero everywhere converges, so the limiter records no
+    # failure and does not warn.
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.SingletonCommsContext(device)
+    space = rectangular_mesh_space(2, 2, false, false; Nij = 3, comms_ctx)
+    ρ = ones(Float32, space)
+    ρq = zeros(Float32, space)
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
+    Limiters.compute_bounds!(limiter, ρq, ρ)
+    @test_logs Limiters.apply_limiter!(ρq, ρ, limiter)
+    @test limiter.convergence_stats.n_times_unconverged == 0
+    @test all(iszero, Array(parent(ρq)))
+end
+
 @testset "Optimization-based limiter on a 1×1 elem 2D domain space" begin
 
     Nij = 2
