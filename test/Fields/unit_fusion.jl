@@ -12,6 +12,7 @@ import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts:
     foreach_point, foreach_level, foreach_slab, foreach_column
 import ClimaCore: Fields, Operators, Spaces, Geometry
+import InteractiveUtils
 
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -320,7 +321,7 @@ end
     (ᶜr1, ᶜr2, ᶜf, ᶜv) = ntuple(_ -> similar(ᶜz), 4)
     (ᶠr1, ᶠr2, ᶠf) = ntuple(_ -> similar(ᶠz), 3)
     args = (ᶜr1, ᶜr2, ᶜf, ᶜv, ᶠr1, ᶠr2, ᶠf, ᶜz, ᶠz)
-    foreach_column(args...) do ᶜr1, ᶜr2, ᶜf, ᶜv, ᶠr1, ᶠr2, ᶠf, ᶜz, ᶠz
+    debug_loop() = foreach_column(args...) do ᶜr1, ᶜr2, ᶜf, ᶜv, ᶠr1, ᶠr2, ᶠf, ᶜz, ᶠz
         @. ᶠf = 2 * ᶠz
         @. ᶜr1 = ᶜinterp(ᶠf * ᶠinterp(ᶜz))
         ᶜt = @. ᶜinterp(ᶠf)
@@ -345,6 +346,24 @@ end
         @. buffer = 3 * ᶜz
         @. ᶠr2 = ᶠinterp(buffer)
         return nothing
+    end
+    try
+        debug_loop()
+    catch err
+        println("DEBUG caught ", typeof(err))
+        if hasproperty(err, :job)
+            println("DEBUG kernel ", err.job.source.specTypes)
+            for (ci, rt) in InteractiveUtils.code_typed(err)
+                text = sprint(show, MIME("text/plain"), ci)
+                for line in split(text, '\n')
+                    occursin("invoke", line) && println("DEBUG invoke ", line)
+                end
+                println("DEBUG typed IR begin")
+                println(text)
+                println("DEBUG typed IR end")
+            end
+        end
+        rethrow()
     end
     (z, z_faces) = (Array(parent(ᶜz)), Array(parent(ᶠz)))
     levels(array, range) = selectdim(array, 1, range)
