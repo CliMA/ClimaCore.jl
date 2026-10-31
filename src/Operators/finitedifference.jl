@@ -684,9 +684,37 @@ neighbor_allocates_shared_buffer(arg, reads) =
         unrolled_map(allocates_shared_buffer, arg.args, nested_reads(reads, arg)),
     ) : false
 
+# Whether a statement reads Fields that are not in registers at the points of other threads,
+# which can have written them in the statements of a slice loop before it: a Field read at
+# neighboring points, directly or through an expression recomputed where it is read (a cached
+# expression is evaluated at its own points, where its operators read their arguments), or a
+# single point that every thread reads, like a level of a column (see reads_shared_points).
+reads_fields_at_neighbors(_, _) = false
+reads_fields_at_neighbors(field::Field, reads) =
+    reads_neighbor(reads) && !DataLayouts.stored_in_registers(Fields.field_values(field)) ||
+    DataLayouts.reads_shared_points(Fields.field_values(field))
+reads_fields_at_neighbors(bc::LazyField, reads) =
+    reads_fields_at_neighbors(bc.f, reads) || unrolled_any(
+        identity,
+        unrolled_map(
+            reads_fields_at_neighbors,
+            bc.args,
+            nested_reads(
+                reads_neighbor(reads) && is_cached_arg(bc) ? Val(false) : reads,
+                bc,
+            ),
+        ),
+    )
+
+# The boundary values of an operator are read by the threads at the boundaries.
+reads_fields_at_neighbors(op::FiniteDifferenceOperator, _) =
+    hasfield(typeof(op), :bcs) && unrolled_any(op.bcs) do bc
+        hasfield(typeof(bc), :val) && reads_fields_at_neighbors(bc.val, Val(true))
+    end
+
 @drop_recursion_limits has_stencils, recomputable, is_cached_arg, caches_at_neighbors,
-nested_reads, operator_arg, fused_stencil, pointwise_stencil, pointwise_arg,
-num_caching_operators, uses_shared_buffers, allocates_shared_buffer,
+reads_fields_at_neighbors, nested_reads, operator_arg, fused_stencil, pointwise_stencil,
+pointwise_arg, num_caching_operators, uses_shared_buffers, allocates_shared_buffer,
 neighbor_allocates_shared_buffer
 
 # Value of an argument or boundary value at idx, with newindex to handle

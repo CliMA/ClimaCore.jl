@@ -528,6 +528,8 @@ steps:
         env:
           CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          # On L40S nodes, UCX's cuda_ipc transport drops messages above its rendezvous threshold.
+          UCX_TLS: "^cuda_ipc"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -558,6 +560,8 @@ steps:
         env:
           CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          # On L40S nodes, UCX's cuda_ipc transport drops messages above its rendezvous threshold.
+          UCX_TLS: "^cuda_ipc"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -1376,6 +1380,7 @@ steps:
           message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
           env:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+        soft_fail: true # temporary, until the ClimaCoupler PR that fixes its failures (which waits on this PR) is merged
 
   - wait
 

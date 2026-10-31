@@ -323,7 +323,7 @@ end
 Base.@nospecializeinfer @noinline function launch_pool_threads(@nospecialize(f), n::Int)
     tasks = Vector{Task}(undef, n)
     for rank in Base.OneTo(n)
-        @inbounds tasks[rank] = Threads.@spawn :default begin
+        @inbounds tasks[rank] = @inline Threads.@spawn :default begin
             task_local_storage(:climacore_pool_threads, ($rank, $n))
             f()
         end

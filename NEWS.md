@@ -4,6 +4,57 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.7
+-------
+
+- ![][badge-✨feature/enhancement] Every argument of `DataLayouts.foreach_slice`
+  and its variants can be a `Tuple` or `NamedTuple` of arguments, or a nested
+  container of them, whose slices are passed to the loop's function in the same
+  container, so that GPU loops can have more than 31 arguments.
+- ![][badge-🐛bugfix] On GPUs, a reduction inside a loop over columns (e.g.,
+  `sum` of a column in `foreach_column`) gives its result to every thread of the
+  column; when the number of levels was not a power of two, some threads got a
+  partial result.
+- ![][badge-🐛bugfix] Inside a GPU loop over columns, a temporary with a single
+  point (e.g., `@. 2 * ᶜbottom` with `ᶜbottom = Fields.level(ᶜtemp, 1)`, or the
+  result of an operator on a column with one cell) is stored by every thread of
+  the column, and every thread's copy is written, so that every thread reads its
+  value; only the thread that owned the point used to write it.
+- ![][badge-🐛bugfix] In a GPU loop over columns, a statement whose operators read
+  a Field at neighboring levels (a Field of the loop or a buffer from `similar`)
+  waits for the statements before it, which may have written the Field
+  pointwise; it used to read the values of other threads without synchronizing.
+  When its result is in registers, the statements after it also wait for its
+  reads, so that they cannot overwrite the Field while other threads read it.
+  Likewise, a statement that reads or writes a single point outside of
+  registers (e.g., a level of a Field of the loop), or whose operators read a
+  Field as a boundary value, waits for the statements before it, and the
+  statements after it wait for it.
+- ![][badge-🐛bugfix] The keys of `Utilities.Cache.OBJECT_CACHE` have one
+  concrete type (`Utilities.Cache.ObjectKey`), so that looking up a memoized
+  object (e.g., the rotation and DSS buffer of `cartesian_tensor_divergence!`,
+  the scratch Fields of the DG Laplacian, or the DG connectivity and staging
+  buffers) never allocates; a lookup with a `Tuple` key allocated when it met a
+  different key with the same short hash.
+- ![][badge-🔥behavioralΔ] `Utilities.Cache.clean_cache!(object)` also releases
+  the objects that were cached for `object` (e.g., the buffers of operators on a
+  grid).
+- ![][badge-🚀performance] On GPUs, masked loops with one thread per slice deal
+  their slices out to the warps of all blocks, so that the active slices of a
+  mask run on every multiprocessor.
+- ![][badge-🚀performance] On GPUs, the point views of a `DataLayout` have `Int`
+  offsets, so that the offsets of the struct field views a kernel takes (e.g.,
+  the entries of a `FieldVector`) fold into the immediate offsets of memory
+  accesses, and the fields of a point share one address, which saves registers
+  in kernels that read many fields.
+- ![][badge-🚀performance] On GPUs, a fused loop whose shared buffers are known
+  and exceed the `:medium` level (see the `shmem` keyword of
+  `DataLayouts.foreach_slice`) gets exactly the shared memory that they need,
+  instead of the `:large` or `:max` level, which leaves the rest of the shared
+  memory of a multiprocessor to more blocks and the L1 cache. The buffers of
+  spectral element operators on lower-precision data are sized for their values
+  in the precision of the space.
+
 v1.0.6
 -------
 

@@ -135,10 +135,8 @@ end
 # It is memoized because `local_to_cartesian` costs four `sind`/`cosd` per node
 # and the operator needs it twice per call: a CG call at that resolution takes
 # 8.9 ms with the cache and 17.7 ms without. The nine numbers per node are
-# released by `Utilities.Cache.clean_cache!()`. `clean_cache!(grid)` does not
-# release them: it filters on the cached value, and the grid appears here in the
-# key, so a sweep over many grids has to call the no-argument form (the same
-# holds for `dg_connectivity` and `_momentum_dss_buffer`). The key omits the
+# released by `Utilities.Cache.clean_cache!(grid)` or `clean_cache!()` (like
+# `dg_connectivity` and `_momentum_dss_buffer`). The key omits the
 # global geometry, which holds while `local_to_cartesian` resolves to a single
 # method for spherical geometries; a geometry whose local vertical departs from
 # the radial direction would need its own key.
@@ -163,7 +161,7 @@ function _momentum_rotation(
     )
     rotation = get!(
         Cache.OBJECT_CACHE,
-        (:MomentumRotation, Spaces.grid(hspace), typeof(hspace)),
+        Cache.ObjectKey(:MomentumRotation, Spaces.grid(hspace), typeof(hspace)),
     ) do
         field = Fields.Field(RT, hspace)
         field .= Geometry.local_to_cartesian.(Ref(global_geometry), coords)
@@ -273,7 +271,11 @@ function _momentum_dss_buffer(out)
     buffer = get!(
         () -> Spaces.create_dss_buffer(out),
         Cache.OBJECT_CACHE,
-        (:MomentumDSSBuffer, Spaces.grid(space), typeof(space), eltype(out)),
+        Cache.ObjectKey(
+            :MomentumDSSBuffer,
+            Spaces.grid(space),
+            Tuple{typeof(space), eltype(out)},
+        ),
     )
     return buffer::Utilities.return_type(
         Spaces.create_dss_buffer,

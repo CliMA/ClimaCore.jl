@@ -17,7 +17,28 @@ Objects in the cache are never garbage collected, so the module provides
 module Cache
 
 
-const OBJECT_CACHE = Dict()
+# Key of an object in OBJECT_CACHE: a tag, the object that the cached object is built from
+# (compared with isequal), and optionally a type and an integer. The hash is computed from the
+# concrete types of the fields when the key is constructed, so that a lookup never allocates,
+# as long as the owner is already on the heap (like a grid): a lookup only compares the owners
+# of keys that have the same hash, by dynamic dispatch on values that need no boxing.
+struct ObjectKey
+    tag::Symbol
+    owner::Any
+    type::Type
+    index::Int
+    hash::UInt
+    ObjectKey(tag, owner, type = Nothing, index = 0) =
+        new(tag, owner, type, index, hash((tag, owner, type, index)))
+end
+
+Base.hash(key::ObjectKey, h::UInt) = hash(key.hash, h)
+
+Base.isequal(key1::ObjectKey, key2::ObjectKey) =
+    key1.hash == key2.hash && key1.tag === key2.tag && key1.type === key2.type &&
+    key1.index == key2.index && isequal(key1.owner, key2.owner)
+
+const OBJECT_CACHE = Dict{ObjectKey, Any}()
 
 """
     cached_objects()
@@ -32,14 +53,16 @@ end
 """
     clean_cache!(object)
 
-Remove `object` from the cache of created objects and return `nothing`.
+Remove `object` from the cache of created objects, along with the objects that
+were cached for it (e.g., the buffers of operators on a grid), and return
+`nothing`.
 
 This function only needs to be called when constructing many grid objects, for
 example during a sweep over grid parameters.
 """
 function clean_cache!(object)
     filter!(OBJECT_CACHE) do (cache_key, cache_obj)
-        cache_obj !== object
+        cache_obj !== object && cache_key.owner !== object
     end
     return nothing
 end

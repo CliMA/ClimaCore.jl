@@ -111,6 +111,12 @@ Base.@propagate_inbounds round_point_index(indices, position) = indices[position
     return data
 end
 
+# Sub-warps share a level of a column in registers with a shuffle from its owner.
+@inline DataLayouts.shared_level_value(scope::ThisSubBlock, column, v) =
+    shuffles_in_warp(scope) ?
+    shuffle_point_value(scope, @inbounds(column[CartesianIndex(v, 1, 1, 1)]), v) :
+    Base.@invoke DataLayouts.shared_level_value(scope::Any, column, v)
+
 # Arguments read without branching stay in registers if no thread owns more than one point.
 @inline Operators.caches_in_registers(scope::ThisSubBlock, arg, ::Val{true}) =
     shuffles_in_warp(scope) &&

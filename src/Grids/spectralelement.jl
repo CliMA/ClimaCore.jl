@@ -83,7 +83,10 @@ function SpectralElementGrid1D(
     discretization = resolve_discretization(discretization, quadrature_style)
     get!(
         Cache.OBJECT_CACHE,
-        (SpectralElementGrid1D, topology, quadrature_style, discretization),
+        Cache.ObjectKey(
+            :SpectralElementGrid1D,
+            (topology, quadrature_style, discretization),
+        ),
     ) do
         _SpectralElementGrid1D(
             topology,
@@ -276,15 +279,17 @@ function SpectralElementGrid2D(
     discretization = resolve_discretization(discretization, quadrature_style)
     get!(
         Cache.OBJECT_CACHE,
-        (
-            SpectralElementGrid2D,
-            topology,
-            quadrature_style,
-            enable_bubble,
-            autodiff_metric,
-            VIJH,
-            enable_mask,
-            discretization,
+        Cache.ObjectKey(
+            :SpectralElementGrid2D,
+            (
+                topology,
+                quadrature_style,
+                enable_bubble,
+                autodiff_metric,
+                VIJH,
+                enable_mask,
+                discretization,
+            ),
         ),
     ) do
         _SpectralElementGrid2D(

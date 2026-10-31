@@ -42,7 +42,7 @@ end
 Adapt.@adapt_structure FiniteDifferenceGrid
 
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
-    get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do
+    get!(Cache.OBJECT_CACHE, Cache.ObjectKey(:FiniteDifferenceGrid, topology)) do
         _FiniteDifferenceGrid(topology)
     end
 end

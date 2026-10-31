@@ -268,6 +268,112 @@ end
     @test correct()
 end
 
+# A loop over containers of Fields, which can be empty, slices every Field in them, and a GPU
+# kernel gets the grid of the largest space of its Fields once (here, not the space of the
+# first Field), so that it can take more Fields than a call can splat.
+@testset "fused loops over containers of fields" begin
+    FT = Float64
+    context = ClimaComms.context(ClimaComms.device())
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 63, helem = 2, context)
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶜz = Fields.coordinate_field(space).z
+    ᶠz = Fields.coordinate_field(Spaces.face_space(space)).z
+    surface = Fields.coordinate_field(Spaces.horizontal_space(space)).lat
+    inputs = ntuple(n -> n .* ᶜz, 16)
+    outputs = map(similar, inputs)
+    args = ((surface, outputs), (; inputs, empty = ((),), ᶠz))
+    foreach_column(args...) do (surface, outputs), (; inputs, ᶠz)
+        @. outputs[1] = ᶜinterp(ᶠinterp(inputs[1]) * ᶠz)
+        ntuple(Val(15)) do n
+            (output, input) = (outputs[n + 1], inputs[n + 1])
+            @. output = input * surface
+            return nothing
+        end
+        return nothing
+    end
+    @test parent(outputs[1]) ≈ parent(@. ᶜinterp(ᶠinterp(inputs[1]) * ᶠz))
+    @test all(n -> parent(outputs[n]) ≈ parent(inputs[n] .* surface), 2:16)
+end
+
+# Values that cross the threads of a GPU column loop, which need barriers or copies between
+# threads: Fields of the loop and buffers that statements write pointwise and that operators
+# read at other threads' points or as boundary values, or that a statement overwrites after
+# an operator reads them, single points of Fields of the loop that every thread reads or one
+# thread writes, and point temporaries written pointwise or by an operator, and read by every
+# thread, like a level of a temporary. With 64 centers, the statements on centers have half as
+# many points as the threads of the loop's columns of faces.
+@testset "fused loops with values that cross threads" begin
+    FT = Float64
+    context = ClimaComms.context(ClimaComms.device())
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(;
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 64, helem = 2, context)
+    ᶜz = Fields.coordinate_field(space).z
+    ᶠz = Fields.coordinate_field(Spaces.face_space(space)).z
+    (ᶜr1, ᶜr2, ᶜf, ᶜv) = ntuple(_ -> similar(ᶜz), 4)
+    (ᶠr1, ᶠr2, ᶠf) = ntuple(_ -> similar(ᶠz), 3)
+    args = (ᶜr1, ᶜr2, ᶜf, ᶜv, ᶠr1, ᶠr2, ᶠf, ᶜz, ᶠz)
+    foreach_column(args...) do ᶜr1, ᶜr2, ᶜf, ᶜv, ᶠr1, ᶠr2, ᶠf, ᶜz, ᶠz
+        @. ᶠf = 2 * ᶠz
+        @. ᶜr1 = ᶜinterp(ᶠf * ᶠinterp(ᶜz))
+        ᶜt = @. ᶜinterp(ᶠf)
+        @. ᶠf = 3 * ᶠz
+        Fields.level(ᶠf, ClimaCore.Utilities.PlusHalf(64)) .= 7
+        @. ᶜf = 2 * ᶜz
+        ᶜf_bottom = Fields.level(ᶜf, 1)
+        ᶜs = @. 3 * ᶜf_bottom
+        @. ᶜf = 1000 * ᶜz
+        ᶜtemp = @. 10 * ᶜz
+        ᶜtemp_bottom = Fields.level(ᶜtemp, 1)
+        @. ᶜr2 = ᶜt * ᶜs + ᶜtemp_bottom
+        @. ᶜv = ᶜz + 100
+        setbc = Operators.SetBoundaryOperator(;
+            bottom = Operators.SetValue(ᶜv),
+            top = Operators.SetValue(ᶜv),
+        )
+        @. ᶠr1 = setbc(ᶠz)
+        buffer = similar(ᶜz)
+        @. buffer = 3 * ᶜz
+        @. ᶠr2 = ᶠinterp(buffer)
+        return nothing
+    end
+    (z, z_faces) = (Array(parent(ᶜz)), Array(parent(ᶠz)))
+    levels(array, range) = selectdim(array, 1, range)
+    (z_bottom, z_top, z_interior_faces) =
+        (levels(z, 1:1), levels(z, 64:64), levels(z_faces, 2:64))
+    face_products = 2 .* z_faces .* cat(z_bottom, z_interior_faces, z_top; dims = 1)
+    @test Array(parent(ᶜr1)) ≈
+          (levels(face_products, 1:64) .+ levels(face_products, 2:65)) ./ 2
+    @test Array(parent(ᶜr2)) ≈ 12 .* z .* z_bottom .+ 10 .* z_bottom
+    @test Array(parent(ᶜf)) ≈ 1000 .* z
+    @test Array(parent(ᶠf)) ≈ cat(3 .* levels(z_faces, 1:64), 7 .+ 0 .* z_top; dims = 1)
+    @test Array(parent(ᶠr1)) ≈
+          cat(z_bottom .+ 100, z_interior_faces, z_top .+ 100; dims = 1)
+    @test Array(parent(ᶠr2)) ≈ 3 .* cat(z_bottom, z_interior_faces, z_top; dims = 1)
+
+    # The operator writes the single point of its result in the registers of the thread that
+    # owns it, and both threads of the face column read it.
+    one_cell_space =
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 1, helem = 2, context)
+    ᶠz₁ = Fields.coordinate_field(Spaces.face_space(one_cell_space)).z
+    ᶠresult = similar(ᶠz₁)
+    foreach_column(ᶠresult, ᶠz₁) do ᶠr, ᶠz
+        ᶜt = @. ᶜinterp(ᶠz)
+        ᶜt_bottom = Fields.level(ᶜt, 1)
+        @. ᶠr = ᶠz * ᶜt_bottom
+        return nothing
+    end
+    @test Array(parent(ᶠresult)) ≈
+          Array(parent(ᶠz₁)) .* sum(Array(parent(ᶠz₁)); dims = 1) ./ 2
+end
+
 # Temporaries of a fused loop body are in registers on GPUs (see register_similar), stored
 # in MArrays that GPU kernels would allocate on the heap if they were passed to a function
 # that is not inlined, like a separately compiled statement or operator.

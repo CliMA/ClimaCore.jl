@@ -272,6 +272,12 @@ Base.@propagate_inbounds Base.getindex(x::AutoBroadcaster, index) =
 Base.@propagate_inbounds Base.setindex(x::AutoBroadcaster, value, index) =
     AutoBroadcaster(Base.setindex(unwrap(x), value, index))
 
+# Adapt converts the values of an AutoBroadcaster (e.g., the containers of arguments of a GPU
+# kernel; see DataLayouts.foreach_slice) one by one with an unrolled map, which is inferred
+# for more values than the map that Adapt uses for Tuples and NamedTuples.
+Adapt.adapt_structure(to, x::AutoBroadcaster) =
+    AutoBroadcaster(unrolled_map(Base.Fix1(Adapt.adapt, to), unwrap(x)))
+
 # Broadcasts/maps/reductions are not recursive, unlike the math operations below
 Base.broadcastable(x::AutoBroadcaster) = Base.broadcastable(unwrap(x))
 Base.map(f::F, arg::AutoBroadcaster, args::AutoBroadcaster...) where {F} =

@@ -72,12 +72,14 @@ Base.Broadcast.combine_styles(arg1::MaybeLazyField, arg2, arg3, args...) =
 # must be replaced with a method that recursively combines all broadcast inputs.
 # An instantiated broadcast has already been checked, so its stored axes are
 # used in place of its inputs (whose spaces may not be comparable after slicing,
-# e.g., when a level field is sliced along with an extruded field).
+# e.g., when a level field is sliced along with an extruded field). The space of a
+# container of arguments is the largest space among them.
 @inline shared_space(_) = nothing
 @inline shared_space(field::Field) = axes(field)
 @inline shared_space(bc::LazyField) =
-    !isnothing(bc.axes) ? bc.axes :
-    unrolled_reduce(bc.args; init = nothing) do space, arg
+    !isnothing(bc.axes) ? bc.axes : shared_space(bc.args)
+@inline shared_space(args::Union{Tuple, NamedTuple}) =
+    unrolled_reduce(args; init = nothing) do space, arg
         !isnothing(shared_space(arg)) &&
         (isnothing(space) || Spaces.maybe_issubspace(space, shared_space(arg))) ?
         shared_space(arg) : space
@@ -220,11 +222,21 @@ end
     return Broadcast.Broadcasted(bc.style, bc.f, args, bc.axes)
 end
 
-# Duplicate grid pointers in Fields and LazyFields are toggled off before
-# launching a kernel, then toggled back on when the kernel starts executing.
-# Note that this could be optimized further by dropping grid pointers from arg1.
-Grids.toggle_compact_args(arg1::MaybeLazyField, args...) =
-    (arg1, unrolled_map(arg -> Grids.toggle_placeholder_grid(arg, axes(arg1)), args)...)
+# Duplicate grid pointers in Fields and LazyFields are toggled off before launching a kernel,
+# then toggled back on when the kernel starts executing. The grid of the largest space among
+# the Fields of the arguments and of their containers (see DataLayouts.foreach_slice), which
+# usually has most of them, is passed to the kernel once, before the arguments.
+function Grids.toggle_compact_args(arg1::Union{MaybeLazyField, Tuple, NamedTuple}, args...)
+    space = shared_space((arg1, args...))
+    space isa Union{Nothing, Spaces.PointSpace, Spaces.SpectralElementSpaceSlab} &&
+        return unrolled_map(Grids.toggle_auto_broadcasters, (arg1, args...))
+    grid = Spaces.grid(space)
+    full_grid = grid isa Union{Grids.LevelGrid, Grids.ColumnGrid} ? grid.full_grid : grid
+    toggled_args = unrolled_map((arg1, args...)) do arg
+        Grids.toggle_auto_broadcasters(Grids.toggle_placeholder_grid(arg, full_grid))
+    end
+    return (full_grid, toggled_args...)
+end
 
 # Analogue of Broadcast.broadcasted for rebuilding the nodes of an existing
 # broadcast expression from slices of their arguments, skipping the
@@ -287,12 +299,11 @@ Base.@propagate_inbounds Base.getindex(bc::PointwiseBroadcasted, index::PointInd
 # Extend the DataLayout methods of IndexStyle and eachindex to Field broadcasts.
 const LazyFieldOrData = Union{MaybeLazyField, DataLayouts.IndexableData}
 Base.IndexStyle(bc::LazyField) = IndexStyle(field_values(bc))
-Base.eachindex(arg::LazyFieldOrData, args::LazyFieldOrData...) = eachindex(
-    unrolled_map(
-        arg -> arg isa MaybeLazyField ? field_values(arg) : arg,
-        (arg, args...),
-    )...,
-)
+DataLayouts.first_indexable(arg::MaybeLazyField) = field_values(arg)
+Base.eachindex(arg::LazyFieldOrData, args::LazyFieldOrData...) =
+    DataLayouts.unrolled_eachindex(
+        unrolled_map(DataLayouts.first_indexable, (arg, args...)),
+    )
 
 # Reassign materialized results to the broadcast's scope, since the space is
 # shared by all available threads, but the arguments can have narrower scopes.
