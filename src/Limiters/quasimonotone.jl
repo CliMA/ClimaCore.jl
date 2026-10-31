@@ -338,8 +338,8 @@ tracer mass of each element up to the relative tolerance `limiter.rtol`.
 Each element is processed by [`apply_limit_slab!`](@ref), with the density `ρ` times the
 quadrature weights as the weights of the least-squares redistribution. When some element
 fails to converge, `limiter.convergence_stats` is updated. On CPU devices with
-`warn = true`, the accumulated convergence statistics are printed with `@warn` after each
-call.
+`warn = true`, a call in which some element fails to converge prints the accumulated
+convergence statistics with `@warn`.
 
 Return `ρq` on CPU devices and `nothing` on CUDA devices.
 """
@@ -377,14 +377,14 @@ function apply_limiter!(
                 apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             converged &= _converged
             max_rel_err = max(slab_max_rel_err, max_rel_err)
-            min_tracer_mass = max(min_tracer_mass, slab_min_tracer_mass)
+            min_tracer_mass = min(min_tracer_mass, slab_min_tracer_mass)
         end
     end
     if !converged
         lcs = limiter.convergence_stats
         update_convergence_stats!(lcs, max_rel_err, min_tracer_mass)
     end
-    if warn
+    if warn && !converged
         lcs = limiter.convergence_stats
         msg = convergence_stats_str(lcs)
         msg *= "Use `warn = false` in `Limiters.apply_limiter!` to suppress this message.\n"
@@ -519,7 +519,11 @@ function apply_limit_slab_field!(
             end
         end
 
-        rel_err = abs(Δtracer_mass) / abs(tracer_mass)
+        # Clipping that moves no mass has converged, including in a slab with
+        # no tracer mass, where the ratio would be 0 / 0.
+        rel_err =
+            iszero(Δtracer_mass) ? zero(FT) :
+            abs(Δtracer_mass) / abs(tracer_mass)
         max_rel_err = max(max_rel_err, rel_err)
         min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
         if rel_err <= rtol

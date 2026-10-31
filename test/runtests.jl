@@ -16,6 +16,7 @@ unit_tests = [
     # Utilities
     UnitTest("PlusHalf"                                 ,"Utilities/unit_plushalf.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("Stable views"                             ,"Utilities/unit_stable_view.jl"; tier = :unit, subsystem = :utilities),
+    UnitTest("linear_ind"                               ,"Utilities/unit_linear_ind.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("AutoBroadcaster"                          ,"Utilities/unit_auto_broadcaster.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("DebugOnly"                                ,"Utilities/unit_debug_only.jl"; tier = :unit, subsystem = :utilities),
 
