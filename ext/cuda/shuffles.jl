@@ -198,11 +198,24 @@ end
 end
 
 # A sub-warp reads neighboring rows from their threads' registers, without a buffer. This is
-# only valid when each thread owns one row, as multiple rows would require offsets.
-@inline MatrixFields.pcr_neighbors(scope::ThisSubBlock, (row,)::Tuple{Any}, indices, n, s) =
-    shuffles_in_warp(scope) ?
-    ((shuffle_shift(scope, row, s, false), shuffle_shift(scope, row, s, true)),) :
-    Base.@invoke MatrixFields.pcr_neighbors(scope::Any, (row,), indices, n, s)
+# only valid when each thread owns one row, as multiple rows would require offsets. Rows
+# outside of the matrix are read as the nearest row in it (as from a buffer), since the
+# threads past the last row hold no row of their own when the rows are in registers.
+@inline function MatrixFields.pcr_neighbors(
+    scope::ThisSubBlock,
+    (row,)::Tuple{Any},
+    (i,)::Tuple{Any},
+    n,
+    s,
+)
+    shuffles_in_warp(scope) ||
+        return Base.@invoke MatrixFields.pcr_neighbors(scope::Any, (row,), (i,), n, s)
+    i = min(i, n)
+    return ((
+        shuffle_point_value(scope, row, max(i - s, 1)),
+        shuffle_point_value(scope, row, min(i + s, n)),
+    ),)
+end
 @inline MatrixFields.exchanged_rows_bytes(scope::ThisSubBlock, x, row_bytes) =
     shuffles_in_warp(scope) && owns_one_point_each(x, scope) ? 0 :
     Base.@invoke MatrixFields.exchanged_rows_bytes(scope::Any, x, row_bytes)

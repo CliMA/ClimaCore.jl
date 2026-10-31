@@ -37,7 +37,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
                    $time_ratio_rounded)"
         else
             if alg isa MatrixFields.StationaryIterativeSolve && alg.correlated_solves
-                for _ in 1:30
+                for _ in 1:40
                     ClimaComms.@cuda_sync comms_device ldiv!(x, A′, b)
                 end
             else
@@ -163,17 +163,12 @@ end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
-    # Note: StationaryIterativeSolve updates x in place with an expression that reads x
-    # at neighboring levels, which converges faster when levels are updated one after
-    # another (as on CPUs) than when they are updated concurrently (as on GPUs), so
-    # n_iters often has to be increased when USING_CUDA is true.
-
     for alg in (
         MatrixFields.BlockDiagonalSolve(),
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = 28),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -210,6 +205,55 @@ end
         ),
         b = Fields.FieldVector(; c = ᶜvec, z = random_field(FT, column_space)),
     )
+
+    # As in land models, a scaled identity block on a point space accompanies the column
+    # blocks. On GPUs, the 11 tri-diagonal blocks are solved in one loop.
+    point_space = Spaces.level(Spaces.face_space(column_space), half)
+    column_names = ntuple(n -> Symbol(:z, n), 11)
+    ᶻᶻmat3 = random_field(TridiagonalMatrixRow{FT}, column_space) ./ λ .+ (I,)
+    test_field_matrix_solver(;
+        test_name = "BlockDiagonalSolve for a block diagonal matrix with \
+                     tri-diagonal blocks on a column space and a scaled \
+                     identity block on a point space",
+        alg = MatrixFields.BlockDiagonalSolve(),
+        A = MatrixFields.FieldMatrix(
+            (
+                (MatrixFields.FieldName(name), MatrixFields.FieldName(name)) => ᶻᶻmat3 for
+                name in column_names
+            )...,
+            (@name(p), @name(p)) => FT(-1) * I,
+        ),
+        b = Fields.FieldVector(;
+            (name => random_field(FT, column_space) for name in column_names)...,
+            p = random_field(FT, point_space),
+        ),
+    )
+
+    # As in land models, a block lower triangular solve has more than 32 entries, which are
+    # copied from shared buffers to x on GPUs. Unlike the other solves, it is not checked
+    # with JET, which takes minutes for this many entries.
+    @testset "BlockLowerTriangularSolve for a block diagonal matrix with \
+              a tri-diagonal block and 32 scaled identity blocks on a surface" begin
+        surface_names = ntuple(n -> Symbol(:s, n), 32)
+        A = MatrixFields.FieldMatrix(
+            (@name(c), @name(c)) => ᶜᶜmat3,
+            (
+                (MatrixFields.FieldName(name), MatrixFields.FieldName(name)) =>
+                    FT(-1) * I for name in surface_names
+            )...,
+        )
+        b = Fields.FieldVector(;
+            c = ᶜvec,
+            (name => random_field(FT, surface_space) for name in surface_names)...,
+        )
+        alg = MatrixFields.BlockLowerTriangularSolve(@name(c))
+        A′ = FieldMatrixWithSolver(A, b, alg)
+        x = similar(b)
+        b_test = similar(b)
+        ldiv!(x, A′, b)
+        mul!(b_test, A′, x)
+        @test parent(b_test) ≈ parent(b)
+    end
 
     test_field_matrix_solver(;
         test_name = "BlockLowerTriangularSolve for a block lower triangular \
@@ -263,9 +307,7 @@ end
     for (P_name, alg) in (
         (
             "no (identity matrix)",
-            MatrixFields.StationaryIterativeSolve(;
-                n_iters = USING_CUDA ? 10 : 7,
-            ),
+            MatrixFields.StationaryIterativeSolve(; n_iters = 14),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3777
         (
             "Richardson (damped identity matrix)",
@@ -273,14 +315,14 @@ end
                 P_alg = MatrixFields.CustomPreconditioner(
                     scaled_identity_matrix(FT(1.12)),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 9,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2294
         (
             "Jacobi (diagonal)",
             MatrixFields.StationaryIterativeSolve(;
                 P_alg = MatrixFields.MainDiagonalPreconditioner(),
-                n_iters = USING_CUDA ? 8 : 6,
+                n_iters = 12,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.3241
         (
@@ -290,7 +332,7 @@ end
                     scaled_identity_matrix(FT(1.08)),
                     MatrixFields.MainDiagonalPreconditioner(),
                 ),
-                n_iters = USING_CUDA ? 8 : 7,
+                n_iters = 9,
             ),
         ), # ρ(I - P⁻¹ * A) ≈ 0.2249
         (
@@ -365,6 +407,16 @@ end
         )
     end
 
+    @testset "iterative solve without iterations returns x[0] = 0" begin
+        alg = MatrixFields.StationaryIterativeSolve(; n_iters = 0)
+        A = MatrixFields.FieldMatrix((@name(c), @name(c)) => ᶜᶜmat3)
+        b = Fields.FieldVector(; c = ᶜvec)
+        x = similar(b)
+        parent(x) .= 1
+        ldiv!(x, FieldMatrixWithSolver(A, b, alg), b)
+        @test iszero(parent(x))
+    end
+
     @testset "approximate iterative solve with debugging" begin
         Logging.with_logger(Logging.SimpleLogger(stderr, Logging.Debug)) do
             # Recreate the setup from the previous unit test.
@@ -397,6 +449,7 @@ end
                 (:debug, r"||x[2] - x'||₂ ≈"),
             )
             logs = (spectral_radius_logs..., error_norm_logs...)
+            ldiv!(x, A′, b) # compile first, so that compiler logs are not compared
             @test_logs logs... min_level = Logging.Debug ldiv!(x, A′, b)
         end
     end
@@ -610,4 +663,148 @@ end
     x_parent_host = Array(parent(x._))
     @test extrema(x_parent_host[:, 1, 1, 1, col_active]) == (-1.0, -1.0)
     @test extrema(x_parent_host[:, 1, 1, 1, col_inactive]) == (0.0, 0.0)
+end
+
+# Columnwise operations that each read values written by the operations before them at other
+# levels of a column, which other threads write on GPUs. The accumulations and reductions use
+# operators that the threads of a column can reorder and operators that one thread applies in
+# order, the tri-diagonal solve uses parallel cyclic reduction on GPUs, and the block solve
+# uses Gaussian elimination for a generic band matrix and a penta-diagonal matrix, which are
+# coupled by a bi-diagonal block.
+function columnwise_operations!(outputs, inputs, ops)
+    (; ᶜtmp, ᶠacc, ᶜacc, sfc, ᶜsol, ᶜx, ᶠx, ᶠint) = outputs
+    (; ᶜa, ᶠb, ᶜᶜtri, x, A, b) = inputs
+    (; ᶜinterp, ᶠinterp, ᶠgrad, ᶜdiv, sub, init, alg) = ops
+    lazy = Base.Broadcast.broadcasted
+    @. ᶜtmp = ᶜa * ᶜinterp(ᶠb)
+    Operators.column_accumulate!(sub, ᶠacc, ᶜtmp; init)
+    Operators.column_accumulate!(+, ᶜacc, lazy(*, ᶠacc, lazy(ᶠinterp, ᶜa)); reverse = true)
+    Operators.column_reduce!(max, sfc.a, ᶜacc)
+    @. ᶜtmp = ᶜacc / sfc.a
+    MatrixFields.single_field_solve!(ᶜsol, ᶜᶜtri, ᶜtmp)
+    # As in field_matrix_solve!, whose host-side checks and annotations cannot be in a kernel.
+    MatrixFields.run_field_matrix_solver!(alg, x, A, b)
+    Operators.column_reduce!(sub, sfc.b, ᶜx; reverse = true)
+    Operators.column_reduce!(+, sfc.c, lazy(ᶜinterp, lazy(*, ᶠx, ᶠb)); init)
+    ᶜdiv_grad_x = lazy(ᶜdiv, lazy(Geometry.WVector, lazy(ᶠgrad, ᶜx)))
+    Operators.column_integral_definite!(sfc.d, ᶜdiv_grad_x)
+    Operators.column_integral_indefinite!(ᶠint, lazy(ᶜinterp, ᶠx))
+    return nothing
+end
+
+@testset "columnwise operations fused into one loop" begin
+    FT = Float64
+    ops = (;
+        ᶜinterp = Operators.InterpolateF2C(),
+        ᶠinterp = Operators.InterpolateC2F(;
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        ),
+        ᶠgrad = Operators.GradientC2F(;
+            bottom = Operators.SetValue(FT(0)),
+            top = Operators.SetValue(FT(1)),
+        ),
+        ᶜdiv = Operators.DivergenceF2C(),
+        sub = (a, b) -> a - b,
+        init = FT(1),
+        alg = MatrixFields.BlockLowerTriangularSolve(@name(c)),
+    )
+    # On GPUs, the 17 faces of a column get one warp, and the 33 faces get two warps, which
+    # every loop over the column's 16 or 32 centers keeps.
+    for velem in (16, 32)
+        center_space, face_space = test_spaces(FT; velem)
+        seed!(1)
+        ᶜa = random_field(FT, center_space)
+        ᶠb = random_field(FT, face_space)
+        ᶜᶜtri = random_field(TridiagonalMatrixRow{FT}, center_space) ./ 10 .+ (I,)
+        ᶜᶜband = random_field(MatrixFields.BandMatrixRow{-1, 4, FT}, center_space)
+        A = MatrixFields.FieldMatrix(
+            (@name(c), @name(c)) => ᶜᶜband ./ 10 .+ (I,),
+            (@name(f), @name(f)) =>
+                random_field(PentadiagonalMatrixRow{FT}, face_space) ./ 10 .+ (I,),
+            (@name(f), @name(c)) =>
+                random_field(BidiagonalMatrixRow{FT}, face_space) ./ 10,
+        )
+        solver_b = Fields.FieldVector(; c = ᶜa, f = ᶠb)
+        new_outputs() = (;
+            ᶜtmp = similar(ᶜa),
+            ᶠacc = similar(ᶠb),
+            ᶜacc = similar(ᶜa),
+            sfc = Fields.Field(
+                NamedTuple{(:a, :b, :c, :d), NTuple{4, FT}},
+                Spaces.level(face_space, half),
+            ),
+            ᶜsol = similar(ᶜa),
+            ᶜx = similar(ᶜa),
+            ᶠx = similar(ᶠb),
+            ᶠint = similar(ᶠb),
+        )
+        # The vectors of the block solve are views of the other outputs.
+        function new_inputs(outputs)
+            (; ᶜsol, ᶠacc, ᶜx, ᶠx) = outputs
+            x = MatrixFields.field_vector_view(Fields.FieldVector(; c = ᶜx, f = ᶠx))
+            b = MatrixFields.field_vector_view(Fields.FieldVector(; c = ᶜsol, f = ᶠacc))
+            return (;
+                ᶜa,
+                ᶠb,
+                ᶜᶜtri,
+                x,
+                A = MatrixFields.replace_name_tree(A, keys(b).name_tree),
+                b,
+            )
+        end
+        outputs = new_outputs()
+        columnwise_operations!(outputs, new_inputs(outputs), ops)
+        # The same operations in one loop over columns, which is one kernel on GPUs.
+        fused_outputs = new_outputs()
+        DataLayouts.foreach_column(
+            values(fused_outputs)...,
+            values(new_inputs(fused_outputs))...,
+        ) do ᶜtmp, ᶠacc, ᶜacc, sfc, ᶜsol, ᶜx, ᶠx, ᶠint, ᶜa, ᶠb, ᶜᶜtri, x, A, b
+            columnwise_operations!(
+                (; ᶜtmp, ᶠacc, ᶜacc, sfc, ᶜsol, ᶜx, ᶠx, ᶠint),
+                (; ᶜa, ᶠb, ᶜᶜtri, x, A, b),
+                ops,
+            )
+        end
+        for (fused_output, output) in zip(fused_outputs, outputs)
+            @test parent(fused_output) ≈ parent(output)
+        end
+    end
+end
+
+# The last statement of a block arrowhead solve updates x₁ at each point, and the product after
+# it in the same loop over columns reads x₁ at other levels, which other threads write on GPUs.
+@testset "block arrowhead solve and product fused into one loop" begin
+    FT = Float64
+    center_space, face_space = test_spaces(FT; velem = 32)
+    seed!(1)
+    ᶠᶜmat = random_field(BidiagonalMatrixRow{FT}, face_space) ./ 10
+    A = MatrixFields.FieldMatrix(
+        (@name(c), @name(c)) =>
+            random_field(DiagonalMatrixRow{FT}, center_space) ./ 10 .+ (I,),
+        (@name(c), @name(f)) =>
+            random_field(BidiagonalMatrixRow{FT}, center_space) ./ 10,
+        (@name(f), @name(c)) => ᶠᶜmat,
+        (@name(f), @name(f)) =>
+            random_field(TridiagonalMatrixRow{FT}, face_space) ./ 10 .+ (I,),
+    )
+    b = Fields.FieldVector(;
+        c = random_field(FT, center_space),
+        f = random_field(FT, face_space),
+    )
+    alg = MatrixFields.BlockArrowheadSolve(@name(c))
+    function solve_and_multiply!(ᶠy, ᶠᶜmat, x, A, b)
+        MatrixFields.run_field_matrix_solver!(alg, x, A, b)
+        @. ᶠy = ᶠᶜmat * x[@name(c)]
+    end
+    b_view = MatrixFields.field_vector_view(b)
+    A_view = MatrixFields.replace_name_tree(A, keys(b_view).name_tree)
+    args(x, ᶠy) = (ᶠy, ᶠᶜmat, MatrixFields.field_vector_view(x), A_view, b_view)
+    (x, ᶠy, fused_x, fused_ᶠy) = (similar(b), similar(b.f), similar(b), similar(b.f))
+    solve_and_multiply!(args(x, ᶠy)...)
+    DataLayouts.foreach_column(solve_and_multiply!, args(fused_x, fused_ᶠy)...)
+    for (fused_field, field) in ((fused_x.c, x.c), (fused_x.f, x.f), (fused_ᶠy, ᶠy))
+        @test parent(fused_field) ≈ parent(field)
+    end
 end

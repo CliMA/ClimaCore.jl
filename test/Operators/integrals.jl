@@ -92,6 +92,15 @@ function test_column_integral_indefinite!(center_space)
     @test_opt ignored_modules = CUDA_FRAMES column_integral_indefinite!(ᶠ∫u_test, ᶜu)
 
     test_allocs(@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu))
+
+    # The same integral inside foreach_column, into a face temporary of each column.
+    ᶠ∫u_column_test = similar(ᶠ∫u_test)
+    DataLayouts.foreach_column(ᶜu, ᶠ∫u_column_test) do ᶜu_column, ᶠ∫u_column
+        ᶠ∫u_temp = similar(ᶜu_column, axes(ᶠ∫u_column))
+        column_integral_indefinite!(ᶠ∫u_temp, ᶜu_column)
+        @. ᶠ∫u_column = ᶠ∫u_temp
+    end
+    @test parent(ᶠ∫u_column_test) ≈ parent(ᶠ∫u_test)
 end
 
 function test_column_integral_indefinite_fn!(center_space)
@@ -116,6 +125,14 @@ function test_column_integral_indefinite_fn!(center_space)
         )
 
         test_allocs(@allocated column_integral_indefinite!(fn, ᶠ∫u_test))
+
+        # The same integral inside foreach_column (for one function, to limit compilation).
+        i == 1 || continue
+        ᶠ∫u_column_test = similar(ᶠ∫u_test)
+        DataLayouts.foreach_column(ᶠ∫u_column_test) do ᶠ∫u_column
+            column_integral_indefinite!(fn, ᶠ∫u_column)
+        end
+        @test parent(ᶠ∫u_column_test) ≈ parent(ᶠ∫u_test)
     end
 end
 

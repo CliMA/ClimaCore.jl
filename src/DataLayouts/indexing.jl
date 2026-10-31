@@ -253,12 +253,12 @@ end
     return get_struct(array, eltype(data), index_args...)
 end
 
-# Represent every single-point DataLayout view using a zero-dimensional DataF.
+# Represent every single-point DataLayout view using a zero-dimensional DataF. The view of
+# the parent has the canonical size and base type, so the checked constructor is skipped.
 @propagate_inbounds function Base.view(data::DataLayout, index::PointIndex)
     (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
-    return DataF{eltype(data), typeof(DataScope(data))}(
-        view_struct(array, eltype(data), index_args...),
-    )
+    point = view_struct(array, eltype(data), index_args...)
+    return DataF{eltype(data), typeof(DataScope(data)), typeof(point)}(point)
 end
 # A DataF is already a single-point view, so an in-bounds slice of it is itself.
 @propagate_inbounds function Base.view(data::DataF, index::PointIndex)
