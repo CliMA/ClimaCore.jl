@@ -25,6 +25,12 @@ main
   the domain bounds. `HyperbolicTangentStretching` throws an `ArgumentError` for
   `dz_surface ≥ (z_max - z_min) / nelems`, and `IntervalMesh(domain, faces)`
   requires at least two faces.
+- ![][badge-🐛bugfix] `Limiters.QuasiMonotoneLimiter` treats a slab whose
+  clipping moves no tracer mass as converged. A slab with no tracer mass, as is
+  common for precipitation tracers, used to report a relative error of `NaN`
+  and count as unconverged on every call. `apply_limiter!` warns only when some
+  slab fails to converge, and its `min_tracer_mass` statistic is the minimum
+  over slabs.
 - ![][badge-🔥behavioralΔ] The default `tol` of `IntervalMesh` with
   `GeneralizedExponentialStretching` is
   `sqrt(eps(FT_solve)) * min(dz_bottom, dz_top)`, which places the end
