@@ -2861,5 +2861,5 @@ shared_buffer_bytes
 
 # Constant propagation on these never improves inference; it re-infers the whole expression.
 @drop_constprop apply_operators, inline_apply_operators,
-apply_operators!, operator_arg, pointwise_arg, apply_operator, apply_stencil,
-apply_stencil!, materialize_buffer, column_value, stencil_value
+apply_operators!, inline_apply_operators!, operator_arg, pointwise_arg, apply_operator,
+apply_stencil, apply_stencil!, materialize_buffer, column_value, stencil_value

@@ -180,9 +180,11 @@ Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
 
 Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
-Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
+@inline Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
+# A slice loop body inlines this, since a function that is not inlined would return the
+# registers or private buffer of its result (see register_similar) in an MArray on the heap.
+@inline Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
 field_values(bc::LazyField{S}) where {S} =
@@ -313,7 +315,7 @@ Base.similar(bc::LazyField, ::Type{T}) where {T} =
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view
 # even when the broadcast's layout shape is static.
-Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
+@inline Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the

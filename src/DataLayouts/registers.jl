@@ -176,7 +176,7 @@ owns the point (see `owns_point`) is certain to be written.
 """
 @inline stored_in_scope_registers(data) =
     data isa DataLayout && stored_in_registers(data) &&
-    register_stride(parent(data)) in (1, static_num_threads(DataScope(data)))
+    unrolled_in(register_stride(parent(data)), (1, static_num_threads(DataScope(data))))
 @inline register_stride(
     ::RegisterArray{<:Any, <:Any, <:Any, <:Any, Stride},
 ) where {Stride} = Stride

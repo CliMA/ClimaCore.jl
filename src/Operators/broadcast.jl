@@ -122,10 +122,10 @@ end
         DataLayouts.DataScope(arg),
     )
 
-Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
-    register_similar(destination_template(bc), T)
-# A slice loop body inlines this, since a function that is not inlined would return the
+# A slice loop body inlines these, since a function that is not inlined would return the
 # registers of its result (see register_similar) in an MArray on the heap.
+@inline Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
+    register_similar(destination_template(bc), T)
 @inline Base.copy(bc::NonPointwiseBroadcasted) = copyto!(similar(bc), bc)
 
 single_field_buffer_bytes(arg, ::Type{T} = eltype(arg)) where {T} = sizeof(T) * length(arg)
@@ -194,6 +194,7 @@ has_mutable_registers(array::DataLayouts.RegisterArray) =
     !(array.array isa StaticArrays.SArray)
 has_mutable_registers(view::DataLayouts.RegisterPointView) =
     has_mutable_registers(parent(view))
+has_mutable_registers(::StaticArrays.MArray) = true
 @drop_recursion_limits has_mutable_registers
 
 # Copy the register data of an expression's Fields into SArrays (see constant_field).
@@ -264,12 +265,15 @@ in_registers_when_applied(bc::Broadcast.Broadcasted) =
 @inline function Base.copyto!(dest::Fields.Field, bc::NonPointwiseBroadcasted)
     has_registers =
         !DataLayouts.needs_loop_setup(DataLayouts.DataScope(dest, bc)) &&
-        !has_private_buffers(bc) && !can_compile_separately(dest, bc)
+        !can_compile_separately(dest, bc)
     has_registers || return copyto_by_slices!(dest, bc)
     frozen_bc = freeze_registers(bc)
     return can_compile_separately(dest) ? copyto_by_slices!(dest, frozen_bc) :
            @inline(copyto_by_slices!(dest, frozen_bc))
 end
+
+# Writing to register temporaries in a function that is not inlined would put them on the heap.
+@inline inline_apply_operators!(dest, bc) = @inline apply_operators!(dest, bc, Val(true))
 
 # Ignore masks that cannot skip this type of slice; for example, a column mask
 # is ignored when looping over slabs, since every column in a slab is needed to
@@ -296,7 +300,7 @@ function copyto_by_slices!(dest, bc)
             DataLayouts.slice_subscope(scope, op, dest, bc),
             scope,
             op,
-            apply_operators!,
+            can_compile_separately(dest) ? apply_operators! : inline_apply_operators!,
             mask,
             Val(false),
             dest,
@@ -337,7 +341,7 @@ thread's registers; used for every [`apply_operator`](@ref) destination, which o
 own thread reads and writes. This lets two applications in one fused expression
 be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
 """
-register_similar(arg, ::Type{T}) where {T} =
+@inline register_similar(arg, ::Type{T}) where {T} =
     Field(
         DataLayouts.register_similar(Fields.field_values(arg), T),
         Fields.shared_space(arg),
