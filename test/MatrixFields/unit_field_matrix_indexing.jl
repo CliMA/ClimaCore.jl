@@ -102,6 +102,13 @@ include("matrix_field_test_utils.jl")
         4,
         FT,
     )
+    test_field_offset_and_type(
+        (@name(), @name(components.data.:(1))), # the unnamed row of a covector
+        FT,
+        typeof(Geometry.Contravariant3Vector(FT(1))'),
+        0,
+        FT,
+    )
 end
 
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin

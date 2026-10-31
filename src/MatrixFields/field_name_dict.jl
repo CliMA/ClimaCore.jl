@@ -405,6 +405,16 @@ function field_offset_and_type(
     if name_pair == (@name(), @name()) # recursion base case
         # if S <: T, then its possible to construct a strided view in the indexing function
         return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
+    elseif S <: Geometry.Covector &&
+           name_pair[1] == @name() &&
+           is_child_name(name_pair[2], @name(components.data))
+        # The single row of a Covector is unnamed, so index it like row 1 of a Tensor{2}.
+        return field_offset_and_type(
+            (@name(components.data.:(1)), name_pair[2]),
+            T,
+            S,
+            full_key,
+        )
     elseif S <: Geometry.Tensor{2} &&
            any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
         all(n -> is_child_name(n, @name(components.data)), name_pair) ||

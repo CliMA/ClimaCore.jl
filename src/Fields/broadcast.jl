@@ -182,7 +182,9 @@ Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
 Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
-Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
+# A slice loop body inlines this, since a function that is not inlined would return the
+# registers or private buffer of its result (see register_similar) in an MArray on the heap.
+@inline Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
 field_values(bc::LazyField{S}) where {S} =
