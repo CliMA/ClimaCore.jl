@@ -4,6 +4,27 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.8
+-------
+
+- ![][badge-🐛bugfix] Temporaries in a loop over slices (e.g., `temp = @. 10 * x`
+  or `ᶠtemp = @. ᶠinterp(x)` in the function of `DataLayouts.foreach_column`,
+  including operator matrices) stay on the stack on CPUs, since the functions
+  that allocate and write them are inlined, and operators that read them copy
+  them into immutable arrays; they used to be allocated on the heap in every
+  column. A temporary that is passed to a function that is not inlined is still
+  allocated on the heap.
+- ![][badge-🐛bugfix] In a GPU loop over columns, whether a temporary is stored
+  in the registers of its column is decided at compile time, so a temporary with
+  a single point that is derived from a level of another temporary no longer
+  makes the kernel allocate (and fail to compile) when that decision was left to
+  run time.
+- ![][badge-🐛bugfix] The scalar blocks of a `FieldMatrix` whose entries are
+  covectors (e.g., the derivative of a scalar tendency with respect to a
+  vertical velocity) are writable views of the matrix, like those of other
+  `Tensor` entries; they used to be read-only copies, so a sparse automatic
+  differentiation Jacobian in ClimaAtmos left them uninitialized.
+
 v1.0.7
 -------
 
