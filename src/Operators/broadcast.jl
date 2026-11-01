@@ -125,7 +125,7 @@ end
 # A slice loop body inlines these, since a function that is not inlined would return the
 # registers of its result (see register_similar) in an MArray on the heap.
 @inline Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
-    register_similar(destination_template(bc), T)
+    register_similar(bc, T)
 @inline Base.copy(bc::NonPointwiseBroadcasted) = copyto!(similar(bc), bc)
 
 single_field_buffer_bytes(arg, ::Type{T} = eltype(arg)) where {T} = sizeof(T) * length(arg)
@@ -351,6 +351,10 @@ be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
         Fields.shared_space(arg),
     )
 
+# An operator broadcast has no data of its own, so its destination's template is allocated.
+@inline register_similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
+    register_similar(destination_template(bc), T)
+
 """
     buffer_similar(arg, [T], [Val(offset)])
 
@@ -365,6 +369,12 @@ the other's [`shared_buffer_bytes`](@ref) (see the buffer reuse invariant in
     DataLayouts.buffer_similar(Fields.field_values(arg), T, offset),
     Fields.shared_space(arg),
 )
+@inline buffer_similar(
+    bc::NonPointwiseBroadcasted,
+    ::Type{T},
+    offset::Val = Val(0),
+) where {T} =
+    buffer_similar(destination_template(bc), T, offset)
 @inline buffer_similar(arg) = buffer_similar(arg, eltype(arg))
 
 """

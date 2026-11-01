@@ -1,6 +1,7 @@
 has_inferred_slice_size(op::O, arg) where {O} =
     Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
-        slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
+        index = first(DataLayouts.each_slice_index(op, arg))
+        slice = DataLayouts.slice_arg(op, arg, Tuple(index)...)
         Val(DataLayouts.has_inferred_size(slice))
     end
 has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
@@ -63,12 +64,13 @@ end
             length(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
         check_index_count(max_slices)
         compact_args = Grids.toggle_compact_args(args...)
+        parameter = slices_value(DataLayouts.slice_parameter, subscope, op, f, args...)
         launch_slice_loop(
             subscope,
             can_exceed_level(kernel_subscope, Val(L), op, f, args...),
             Val(R),
             op,
-            f,
+            DataLayouts.with_slice_parameter(f, Val(parameter)),
             mask,
             enumerate,
             compact_args,
@@ -119,7 +121,8 @@ function launch_slice_loop(
     compact_args,
     max_slices,
 ) where {O, F}
-    kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
+    capped_subscope = DataLayouts.with_register_cap(subscope, R)
+    kernel_function = slice_loop_kernel(capped_subscope, op, f, mask, enumerate)
     key = (typeof(kernel_function), typeof(compact_args))
     compiles = @lock SHMEM_LEVEL_CACHE_LOCK get(SHMEM_LEVEL_CACHE, key, nothing)
     next = next_shmem_level(subscope)
@@ -146,7 +149,8 @@ function launch_slice_loop(
     compact_args,
     max_slices,
 ) where {O, F}
-    kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
+    capped_subscope = DataLayouts.with_register_cap(subscope, R)
+    kernel_function = slice_loop_kernel(capped_subscope, op, f, mask, enumerate)
     exceeded = launch_subblock_loop(kernel_function, R, compact_args, max_slices)
     isnothing(exceeded) || throw_shmem_level_exceeded(f, subscope, exceeded)
     return nothing
@@ -340,24 +344,27 @@ next_shmem_level(::ThisSubBlock{N, B}) where {N, B} =
     ThisSubBlock{N, shmem_level_bytes(Val(:max), Val(N))}() : DataLayouts.ThisThread()
 
 # Bytes of shared memory that f needs on every slice and whether it allocates any (or nothing
-# if they are unknown), found by inference alone (like has_inferred_slice_size), since they
-# only depend on the types of the slices; a result that inference cannot fold is an error, not
-# a fallback. The body f is an argument of the inferred function rather than captured by it,
-# so that a body that captures values keeps the call foldable. The slices are reassigned after
-# they are taken: slicing a host array rebuilds its layout with the host's scope (see
-# DataLayouts.rebuild), which would undo the reassignment.
+# if they are unknown).
 slices_required_shared_memory(subscope, op::O, f::F, args::Vararg{Any, N}) where {O, F, N} =
+    slices_value(subscope, op, f, args...) do f, slices...
+        bytes = DataLayouts.required_shared_memory(f, slices...)
+        isnothing(bytes) ? nothing : (bytes, DataLayouts.uses_shared_memory(f, slices...))
+    end
+
+# The value of g(f, slices...) for the slices of a loop at a subscope, found by inference alone
+# (like has_inferred_slice_size), since it only depends on the types of the slices; a result
+# that inference cannot fold is an error, not a fallback. The body f is an argument of the
+# inferred function rather than captured by it, so that a body that captures values keeps
+# the call foldable. The slices are reassigned after they are taken: slicing a host array
+# rebuilds its layout with the host's scope (see DataLayouts.rebuild), which would undo the
+# reassignment.
+slices_value(g::G, subscope, op::O, f::F, args::Vararg{Any, N}) where {G, O, F, N} =
     val_value(
         Utilities.return_type(Tuple{F, typeof(args)}) do f, args
             index =
                 first(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
             slices = DataLayouts.slice_every_arg(op, index, args...)
-            scoped_slices = unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)
-            bytes = DataLayouts.required_shared_memory(f, scoped_slices...)
-            Val(
-                isnothing(bytes) ? nothing :
-                (bytes, DataLayouts.uses_shared_memory(f, scoped_slices...)),
-            )
+            Val(g(f, unrolled_map(Base.Fix2(DataLayouts.reassign, subscope), slices)...))
         end,
     )
 val_value(::Type{Val{x}}) where {x} = x

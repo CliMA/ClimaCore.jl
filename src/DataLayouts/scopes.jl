@@ -303,6 +303,12 @@ launched it.
 struct ThisThreadPool <: DataScope end
 total_buffer_limit(::ThisThreadPool) = typemax(Int)
 
+# The scope at the level of buffers that only make a loop faster (e.g., copies of values that
+# the loop reads at other threads' points), or nothing if a scope has no such level (the
+# default); on GPUs, the level that keeps shared memory from limiting occupancy below half
+# (:large; see foreach_slice).
+optional_buffer_scope(_) = nothing
+
 # Threads._nthreads_in_pool is two pointer loads of jl_n_threads_per_pool; the public
 # Threads.threadpoolsize wraps _sym_to_tpid, whose unreachable ArgumentError branch has
 # a runtime dispatch (via repr/sprint) that JET flags on Julia 1.10+. The default pool is

@@ -29,6 +29,30 @@ main
   `column_integral_indefinite!`) are regrouped on GPUs, and CPU reductions
   interleave accumulators or use `@simd` loops, so their results can change by
   roundoff; `sum` of a `Field` is about twice as fast on CPUs.
+- ![][badge-✨feature/enhancement] On GPUs, `MatrixFields.field_matrix_solve!`
+  runs in one kernel, unless its algorithm stores Fields or logs debug
+  information, or its arguments do not fit in kernel parameter memory.
+- ![][badge-🔥behavioralΔ] `StationaryIterativeSolve` without a preconditioner or
+  with a diagonal one stores each increment of `x` before updating `x`, which
+  removes a data race on GPUs; CPUs now need as many iterations as GPUs.
+- ![][badge-🔥behavioralΔ] The `MatrixFields` solver algorithms have no caches:
+  the temporary vectors and matrices of a solve are new `Field`s, which the
+  fused GPU kernel keeps in registers (or in shared memory when other threads
+  read them), and lazy right-hand sides that are read once are not stored at
+  all. `run_field_matrix_solver!(alg, x, A, b)` and
+  `check_field_matrix_solver(alg, A, b)` take no cache, and a
+  `FieldMatrixSolver` only keeps the previous solution of correlated solves
+  (see `previous_solution`) and a pool of the temporaries of solves in a loop
+  of their own (on CPUs), which are allocated once.
+- ![][badge-🚀performance] `StationaryIterativeSolve` starts from `x[1] = inv(P) * b`
+  when `x[0]` is zero, instead of computing the residual of `x[0]`, and the
+  `MatrixFields` solvers skip solves whose right-hand sides are zero by
+  structure (e.g., the rows of `A₁₂ * x₂` that `A₁₂` does not have in a
+  `SchurComplementReductionSolve`) and products with their solutions, which
+  `run_field_matrix_solver!` leaves out of the entries of `x` it returns, and
+  `SchurComplementReductionSolve` only solves for the entries of
+  `inv(A₁₁) * b₁` that its Schur complement reads. The results change only by
+  the signs of zeros.
 - ![][badge-🐛bugfix] Inside a GPU loop over columns, the output of
   `column_reduce!` into a temporary with a single point is stored by every
   thread of the column, so that every thread reads its value; only the thread
