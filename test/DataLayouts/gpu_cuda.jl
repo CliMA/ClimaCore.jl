@@ -68,11 +68,13 @@ end
     data = VIJFH{T, 10, 4, 4, nothing}(CUDA.CuArray{FT}, 20)
     to = CUDA.KernelAdaptor()
 
-    # Full arrays pass through unchanged; every view compacts to a
-    # CompactDeviceView whose type is statically inferred from the host types,
-    # so that kernel launches never hit dynamic dispatch.
+    # Full arrays compact to CompactDeviceArrays that are read as CuDeviceArrays, and
+    # every view to a CompactDeviceView; their types are statically inferred from the
+    # host types, so that kernel launches never hit dynamic dispatch.
     full = @inferred Adapt.adapt(to, data)
     @test parent(full) isa CUDA.CuDeviceArray
+    @test size(parent(full)) == size(parent(data))
+    @test sizeof(typeof(full)) < sizeof(typeof(Adapt.adapt(to, parent(data))))
     for view_data in (data.b, ClimaCore.level(data, 2))
         compact = @inferred Adapt.adapt(to, view_data)
         @test parent(compact) isa ext.CompactDeviceView

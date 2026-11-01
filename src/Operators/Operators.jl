@@ -16,7 +16,7 @@ import ..Utilities:
     add_auto_broadcasters,
     drop_auto_broadcasters
 import ..Utilities
-import ..Utilities: @drop_recursion_limits, @drop_constprop
+import ..Utilities: @drop_recursion_limits, @drop_constprop, @inline_types_only
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts
 import ..Geometry: Geometry, ⊗
