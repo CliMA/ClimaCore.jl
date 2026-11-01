@@ -189,6 +189,10 @@ get_internal_entry(entry::DiagonalMatrixRow, name_pair::FieldNamePair) =
     DiagonalMatrixRow(get_internal_entry(scaling_value(entry), name_pair))
 get_internal_entry(entry, name_pair) =
     get_internal_entry(entry, name_pair, name_pair)
+
+# The name of all of the components of a Tensor refers to the Tensor itself.
+tensor_name(name) = name == @name(components.data) ? @name() : name
+
 # get_internal_entry to be used on the values held inside a `BandMatrixRow`
 function get_internal_entry(
     entry::T,
@@ -197,6 +201,8 @@ function get_internal_entry(
 ) where {T}
     if name_pair == (@name(), @name())
         return entry
+    elseif T <: Geometry.Tensor && any(==(@name(components.data)), name_pair)
+        return get_internal_entry(entry, map(tensor_name, name_pair), full_key)
     elseif T <: Geometry.Tensor{2} &&
            all(n -> is_child_name(n, @name(components.data)), name_pair)
         # two indices needed to index into a 2d tensor (one can be Colon())
@@ -405,6 +411,18 @@ function field_offset_and_type(
     if name_pair == (@name(), @name()) # recursion base case
         # if S <: T, then its possible to construct a strided view in the indexing function
         return (0, S, S <: T ? Val(:view) : Val(:view_of_blocks))
+    elseif S <: Geometry.Tensor && any(==(@name(components.data)), name_pair)
+        return field_offset_and_type(map(tensor_name, name_pair), T, S, full_key)
+    elseif S <: Geometry.Covector &&
+           name_pair[1] == @name() &&
+           is_child_name(name_pair[2], @name(components.data))
+        # The single row of a Covector is unnamed, so index it like row 1 of a Tensor{2}.
+        return field_offset_and_type(
+            (@name(components.data.:(1)), name_pair[2]),
+            T,
+            S,
+            full_key,
+        )
     elseif S <: Geometry.Tensor{2} &&
            any(n -> is_child_name(n, @name(components.data)), name_pair) # special case to calculate index
         all(n -> is_child_name(n, @name(components.data)), name_pair) ||
