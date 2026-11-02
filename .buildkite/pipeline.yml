@@ -1373,8 +1373,8 @@ steps:
           env:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
 
-      # PRs that change the version run all of ClimaCoupler's CI; other builds
-      # run a subset of it
+      # PRs that change the version run all of ClimaCoupler's CI and its
+      # nightly AMIP; other builds run a subset of ClimaCoupler's CI
       - label: ":rocket: Downstream: select ClimaCoupler steps"
         retry: *retry_policy
         command: "bash .buildkite/coupler_downstream/upload.sh"
