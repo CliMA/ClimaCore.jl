@@ -6,6 +6,7 @@
 # `TEST_NAME=sphere/baroclinic_wave_rhoe`, on CG or (`DISCRETIZATION=DG`) DG.
 using Test
 using Plots
+import ClimaCore
 using ClimaCore.DataLayouts
 
 include("baroclinic_wave_utils.jl")
@@ -50,9 +51,21 @@ function postprocessing(sol, output_dir)
     v_end = maximum(abs, center_velocity(sol.u[end].c).components.data.:2)
     @test v_end > 4 * v_init > 0
 
-    anim = Plots.@animate for Y in sol.u
+    plot_solution(sol, output_dir)
+end
+
+# Animations of the meridional wind and the temperature at level 3; the plot
+# recipes read nodal values, so each saved state is moved to the CPU.
+function plot_solution(sol, output_dir)
+    states = map(ClimaCore.to_cpu, sol.u)
+    T_lim = extrema(parent(center_temperature(states[1])))
+    anim = Plots.@animate for Y in states
         ᶜv = center_velocity(Y.c).components.data.:2
         Plots.plot(ᶜv, level = 3, clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
+    anim = Plots.@animate for Y in states
+        Plots.plot(center_temperature(Y), level = 3, clim = T_lim)
+    end
+    Plots.mp4(anim, joinpath(output_dir, "T.mp4"), fps = 5)
 end

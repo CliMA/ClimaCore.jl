@@ -106,6 +106,15 @@ center_velocity(Yc) =
     momentum_form(Yc) isa FluxForm ? (@. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)) :
     (@. Geometry.UVVector(Yc.uₕ))
 
+# The temperature of a saved state, `T = (e_tot - K - Φ) / c_vd + T_tri`.
+function center_temperature(Y)
+    ᶜuₕ = center_velocity(Y.c)
+    ᶠw = momentum_form(Y.c) isa FluxForm ? (@. Y.f.ρw / ᶠinterp(Y.c.ρ)) : Y.f.w
+    ᶜK = @. norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    ᶜΦ = grav .* Fields.coordinate_field(axes(Y.c)).z
+    return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
+end
+
 # At rest in the vertical (`w` or `ρw`).
 function face_initial_condition(local_geometry)
     (; z) = local_geometry.coordinates
