@@ -998,14 +998,12 @@ reference direction.
 the (non-unit) nodal metric vectors in the local orthonormal horizontal frame.
 It must be linear in each metric vector and consistent
 (`fn2pt(n, n, y, y) == F(y)⋅n`). Its part symmetric under
-`(nvec_a, y_a) ↔ (nvec_b, y_b)` is the conservative divergence; kinetic-energy
-/ entropy properties are fixed by this choice (e.g. Kennedy–Gruber → KEP). It
-may also carry a non-symmetric fluctuation `g(y_a, y_b) (ê ⋅ nvec_a)` with
-`g(y, y) = 0` (a two-point gravity or pressure force, Souza et al. 2023): the
-kernel always passes the node being updated as the first pair, and the
-consistency boundary lifts `fn2pt(n, n, y, y)` are unaffected. Such a term is
-not conservative and needs its own face part through
-[`add_lifting_flux_interior!`](@ref), not the antisymmetric interface flux.
+`(nvec_a, y_a) ↔ (nvec_b, y_b)` is the conservative divergence, whose
+kinetic-energy / entropy properties follow from the flux (e.g. Kennedy–Gruber
+→ KEP). A non-symmetric fluctuation `g(y_a, y_b) (ê ⋅ nvec_a)` with
+`g(y, y) = 0` (a two-point gravity or pressure force) is evaluated with the
+node being updated as the first pair; its face part is a lifting
+([`add_lifting_flux_interior!`](@ref)).
 
 Stored in weak-equivalent form (strong flux-differencing plus one-sided
 boundary lifts), so it replaces `dydt = hwdiv(F) * (-WJ)` and composes with

@@ -39,10 +39,9 @@ Environment variables read by the driver:
 * `FLOAT_TYPE`: `Float32` (default) or `Float64`.
 * `DISCRETIZATION`: `CG` (default) or `DG` (no hyperdiffusion; output in a
   `_dg`-suffixed directory).
-* `DG_FLUX`: `kg-roe` (default), `kg-rusanov` (Kennedy-Gruber flux
-  differencing with the two-point Exner force and gravity, which exchange
-  kinetic and potential energy exactly, and a Roe or Rusanov interface flux)
-  or `rusanov` (weak form).
+* `DG_FLUX`: `kg-roe` (default) or `kg-rusanov` (Kennedy-Gruber flux
+  differencing with the two-point Exner force and a Roe or Rusanov interface
+  flux), or `rusanov` (weak form).
 * `MOMENTUM_FORM`: on DG, `flux` (default; `ρuₕ`, `ρw`) or `vector_invariant`
   (`uₕ`, `w`; output in a `_dg_vi`-suffixed directory).
 

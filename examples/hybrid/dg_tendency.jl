@@ -1,8 +1,6 @@
 # DG flux-form explicit tendency: `ρuₕ` at centers (in Cartesian components,
 # so `∇·(ρu⊗u)` has no Christoffel terms) and `ρw` at faces. `DG_FLUX` selects
-# the horizontal fluxes. In the flux-differencing schemes the horizontal
-# pressure force and gravity are a two-point Exner force with a face lift,
-# with `ψ = Φ − Φ_r(p)`: the same reference as the vertical `ρw` equation.
+# the horizontal fluxes.
 
 import LinearAlgebra
 import ClimaCore: Fields, Geometry, Grids, Operators, Spaces
@@ -74,10 +72,10 @@ The horizontal assembly named by `DG_FLUX`, as
 `(; volume2pt, numflux, face_lift)`:
 
   - `"rusanov"`: weak-form volume divergence with Rusanov interface fluxes
-    (`volume2pt = nothing`, nodal gravity).
+    (`volume2pt = nothing`).
   - `"kg-rusanov"`, `"kg-roe"`: Kennedy-Gruber flux differencing with the
-    two-point Exner force and gravity (KPEP) and its face lift, and a Rusanov
-    or Roe interface dissipation on the advective central flux.
+    two-point Exner force, its face lift, and a Rusanov or Roe interface
+    dissipation.
 """
 function dg_flux_scheme(name)
     name == "rusanov" && return (;
