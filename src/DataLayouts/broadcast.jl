@@ -107,8 +107,8 @@ the same time are given different byte offsets of the scope's memory (see
     return similar_layout_at(D, T, B, offset, size(bc))
 end
 
-# Define a MultiBroadcastFusion type, FusedMultiBroadcast, and a corresponding
-# @fused macro, as outlined in https://github.com/CliMA/MultiBroadcastFusion.jl.
+# Define a fused broadcast type, FusedMultiBroadcast, and a corresponding
+# @fused_direct macro, as outlined in the LazyBroadcast.jl docs.
 @make_type FusedMultiBroadcast
 @make_fused fused_direct FusedMultiBroadcast fused_direct
 
