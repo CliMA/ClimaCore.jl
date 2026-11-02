@@ -7,7 +7,7 @@ import BlockArrays
 import Adapt
 
 import ClimaComms
-import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
+import LazyBroadcast: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
 import ..Utilities: @drop_recursion_limits, @drop_constprop

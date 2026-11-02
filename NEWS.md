@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- The macros behind `Fields.@fused_direct` now come from LazyBroadcast.jl
+  (v1.1), and MultiBroadcastFusion.jl is no longer a dependency. Behavior is
+  unchanged.
+
 v1.0.8
 -------
 

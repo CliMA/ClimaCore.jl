@@ -1,7 +1,6 @@
 module Fields
 
 import ClimaComms
-import MultiBroadcastFusion as MBF
 import ..slab, ..column, ..level
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts: DataLayouts, DataLayout, DataStyle, PointIndex
