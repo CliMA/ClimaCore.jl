@@ -55,10 +55,17 @@ function postprocessing(sol, output_dir)
 end
 
 # Animations of the meridional wind and the temperature at level 3; the plot
-# recipes read nodal values, so each saved state is moved to the CPU.
+# recipes read nodal values, so each saved state is moved to the CPU, with the
+# center and face fields on one grid.
 function plot_solution(sol, output_dir)
-    states = map(ClimaCore.to_cpu, sol.u)
-    T_lim = extrema(parent(center_temperature(states[1])))
+    ᶜspace = ClimaCore.to_cpu(axes(sol.u[1].c))
+    ᶠspace = Spaces.face_space(ᶜspace)
+    on_cpu(Y) = Fields.FieldVector(;
+        c = Fields.Field(ClimaCore.to_cpu(Fields.field_values(Y.c)), ᶜspace),
+        f = Fields.Field(ClimaCore.to_cpu(Fields.field_values(Y.f)), ᶠspace),
+    )
+    states = map(on_cpu, sol.u)
+    T_lim = extrema(parent(Fields.level(center_temperature(states[1]), 3)))
     anim = Plots.@animate for Y in states
         ᶜv = center_velocity(Y.c).components.data.:2
         Plots.plot(ᶜv, level = 3, clim = (-6, 6))
