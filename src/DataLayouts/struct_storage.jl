@@ -306,25 +306,23 @@ end
 @inline unchecked_view_struct(array, val_Nf, index...) =
     @inbounds stable_view(array, struct_indices(array, val_Nf, index...)...)
 @inline unchecked_view_struct(array::Array, ::Val{Nf}, i::Integer, s::Integer) where {Nf} =
-    PointView{eltype(array), Nf, typeof(array), typeof(i)}(array, i, s)
+    PointView{eltype(array), Nf, typeof(array)}(array, i, s)
 
-# A view of the Nf entries of a value in an array, with a linear index and a
-# stride of the same integer type as the index (Int64 on CPUs, UInt32 on GPUs).
-struct PointView{T, Nf, A <: AbstractArray{T}, I} <: AbstractVector{T}
+# A view of the Nf entries of a value in an array, with a linear index and a stride.
+struct PointView{T, Nf, A <: AbstractArray{T}} <: AbstractVector{T}
     parent::A
-    offset::I
-    stride::I
+    offset::Int
+    stride::Int
 end
 
 Base.IndexStyle(::Type{<:PointView}) = IndexLinear()
 Base.parent(view::PointView) = view.parent
 Base.size(::PointView{<:Any, Nf}) where {Nf} = (Nf,)
 
-@inline point_index(view::PointView{<:Any, <:Any, <:Any, I}, i::Integer) where {I} =
-    view.offset + (i % I - one(I)) * view.stride
+@inline point_index(view::PointView, i::Integer) = view.offset + (i % Int - 1) * view.stride
 
 @inline Base.pointer(view::PointView, i::Integer = 1) =
-    pointer(parent(view), Int(point_index(view, i)))
+    pointer(parent(view), point_index(view, i))
 
 Base.@propagate_inbounds function Base.getindex(view::PointView, i::Integer)
     @boundscheck checkbounds(view, i)

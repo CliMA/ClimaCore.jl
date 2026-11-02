@@ -71,7 +71,8 @@ function MultiPointGrid(
     radius::Real,
     device::ClimaComms.AbstractDevice = ClimaComms.device(),
 ) where {FT}
-    get!(Cache.OBJECT_CACHE, (MultiPointGrid, copy(points), radius, device)) do
+    key = Cache.ObjectKey(:MultiPointGrid, (copy(points), radius, device))
+    get!(Cache.OBJECT_CACHE, key) do
         _MultiPointGrid(points; radius, device)
     end
 end

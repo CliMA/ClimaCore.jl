@@ -101,10 +101,10 @@ matrix_row_value, projected_value
 # where the second argument of each matrix product is cached. Left-associativity
 # makes the first argument grow in bandwidth when multiplying a chain of
 # matrices, whereas right-associativity makes the second argument grow instead.
-Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
-    unrolled_reduce((x, y) -> Base.broadcasted(*, x, y), args; init = arg)
+@inline Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
+    unrolled_reduce(@inline((x, y) -> Base.broadcasted(*, x, y)), args; init = arg)
 
-Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
+@inline Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
     check_entry(FieldNamePair, x) && check_entry(FieldName, y) ?
     Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, projected_operand(x, y)) :
     auto_broadcasted(style, *, (x, y))

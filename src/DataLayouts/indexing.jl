@@ -62,21 +62,31 @@ end
 @inline Base.IndexStyle(bc::MaybeFusedDataLayoutBroadcast) =
     equal_layout_shapes(layout_args(bc)) ? IndexLinear() : IndexCartesian()
 
+# The index style and indices of a tuple of layouts, found with unrolled functions, which take
+# any number of layouts (e.g., the arguments in the containers of a loop; see foreach_slice).
+@inline index_style((arg,)::Tuple{Any}) = IndexStyle(arg)
+@inline index_style(args) =
+    equal_layout_shapes(args) ? unrolled_mapreduce(IndexStyle, IndexStyle, args) :
+    IndexCartesian()
+
+@inline unrolled_eachindex(args) = unrolled_eachindex(index_style(args), args)
+@inline unrolled_eachindex(::IndexLinear, args) =
+    unrolled_allequal(length, args) ? Base.OneTo(length(first(args))) :
+    throw(DimensionMismatch("Inputs to eachindex must have the same length"))
+@inline unrolled_eachindex(::IndexCartesian, args) =
+    unrolled_allequal(size, args) ? CartesianIndices(size(first(args))) :
+    throw(DimensionMismatch("Inputs to eachindex must have the same size"))
+
 # Allow linear indexing if all DataLayouts in an expression have the same shape.
 # Add DataLayout-only methods to avoid ambiguities with AbstractArray methods.
 for T in (:IndexableData, :DataLayout)
     @eval @inline Base.IndexStyle(arg1::$T, arg2::$T, args::$T...) =
-        equal_layout_shapes((arg1, arg2, args...)) ?
-        unrolled_mapreduce(IndexStyle, IndexStyle, (arg1, arg2, args...)) : IndexCartesian()
-
-    @eval @inline Base.eachindex(arg::$T, args::$T...) =
-        eachindex(IndexStyle(arg, args...), arg, args...)
-    @eval @inline Base.eachindex(::IndexLinear, arg::$T, args::$T...) =
-        unrolled_allequal(length, (arg, args...)) ? Base.OneTo(length(arg)) :
-        throw(DimensionMismatch("Inputs to eachindex must have the same length"))
-    @eval @inline Base.eachindex(::IndexCartesian, arg::$T, args::$T...) =
-        unrolled_allequal(size, (arg, args...)) ? CartesianIndices(size(arg)) :
-        throw(DimensionMismatch("Inputs to eachindex must have the same size"))
+        index_style((arg1, arg2, args...))
+    @eval @inline Base.eachindex(arg::$T, args::$T...) = unrolled_eachindex((arg, args...))
+    @eval @inline Base.eachindex(style::IndexLinear, arg::$T, args::$T...) =
+        unrolled_eachindex(style, (arg, args...))
+    @eval @inline Base.eachindex(style::IndexCartesian, arg::$T, args::$T...) =
+        unrolled_eachindex(style, (arg, args...))
 end
 
 """
@@ -316,11 +326,28 @@ end
 # slices of materialized data.
 @propagate_inbounds function level(arg::IndexableData, v)
     (; Nv, Ni, Nj, Nh) = vijh_params(arg)
-    Ni == Nj == Nh == 1 && return view(arg, CartesianIndex(v, 1, 1, 1))
+    if Ni == Nj == Nh == 1
+        stored_in_scope_registers(arg) || return view(arg, CartesianIndex(v, 1, 1, 1))
+        # Every thread of the column's scope has to read the level at once, but only one of
+        # them owns it when the column is in their registers (see owns_point), so its value
+        # is shared with the other threads.
+        value = shared_level_value(DataScope(arg), arg, v)
+        entries = bitcast_struct(NTuple{ncomponents(arg), eltype(parent_type(arg))}, value)
+        return DataF{eltype(arg), typeof(DataScope(arg))}(StaticArrays.SVector(entries))
+    end
     Nv == 1 || return level_view(arg, v)
     @boundscheck v == 1 || throw(ArgumentError("DataLayout has only one level"))
     return arg
 end
+
+# The owner of the level writes its value into a buffer that every thread reads.
+@inline function shared_level_value(scope, column, v)
+    buffer = scoped_static_array(scope, eltype(column), 1)
+    owns_point(scope, v) && (@inbounds buffer[1] = column[CartesianIndex(v, 1, 1, 1)])
+    synchronize(scope)
+    return @inbounds buffer[1]
+end
+
 @propagate_inbounds function slab(arg::IndexableData, v, h)
     (; Nv, Ni, Nj, Nh) = vijh_params(arg)
     Ni == Nj == 1 && return view(arg, CartesianIndex(v, 1, 1, h))

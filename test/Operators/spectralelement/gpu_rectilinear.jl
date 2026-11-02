@@ -184,8 +184,8 @@ end
 
 # Operators.fits_buffers decides the shared memory of a broadcast's slice loop from the
 # buffers of its operator applications (Operators.largest_application_bytes, since only one
-# application's buffers are live at a time): the :medium level when they fit, else :large,
-# else :max, else one thread per slice with private buffers (see
+# application's buffers are live at a time): the :medium level when they fit, else their
+# bytes up to :max, else one thread per slice with private buffers (see
 # DataLayouts.foreach_slice). Kernels use
 # no static shared memory, and slabs that fit in a warp cache arguments in registers, which
 # need no shared memory.
@@ -207,15 +207,14 @@ end
     end
     bc(f, args...) = Base.Broadcast.broadcasted(f, args...)
     # The subscope of a broadcast whose operator applications need `bytes` of shared memory
-    # on each slab of N threads: a sub-block at the first level that holds them (see the
+    # on each slab of N threads: a sub-block at the :medium level if it holds them (see the
     # CUDA extension's slice_subscope_at_level), whose bytes per thread the device sets, or
-    # one thread per slab beyond the :max level.
+    # else with their bytes, or one thread per slab beyond the :max level.
     function subscope_for(bytes, N = 64)
-        for name in DataLayouts.SHMEM_LEVELS
-            B = CUDA_EXT.shmem_level_bytes(Val(name), Val(N))
-            bytes <= N * B && return CUDA_EXT.ThisSubBlock{N, B}
-        end
-        return DataLayouts.ThisThread
+        level(name) = CUDA_EXT.shmem_level_bytes(Val(name), Val(N))
+        bytes <= N * level(:medium) && return typeof(CUDA_EXT.ThisSubBlock{N}())
+        bytes <= N * level(:max) || return DataLayouts.ThisThread
+        return typeof(CUDA_EXT.ThisSubBlock{N, cld(bytes, N)}())
     end
 
     cpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())

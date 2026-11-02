@@ -258,7 +258,7 @@ function Topology2D(
 )
     get!(
         Cache.OBJECT_CACHE,
-        (Topology2D, context, mesh, elemorder, elempid, orderindex),
+        Cache.ObjectKey(:Topology2D, (context, mesh, elemorder, elempid, orderindex)),
     ) do
         _Topology2D(context, mesh, elemorder, elempid, orderindex)
     end

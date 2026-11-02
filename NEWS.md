@@ -9,6 +9,116 @@ main
   differencing with Roe or Rusanov interface fluxes, `DG_FLUX`) or in
   vector-invariant form (`MOMENTUM_FORM=vector_invariant`).
 
+v1.0.8
+-------
+
+- ![][badge-🐛bugfix] Temporaries in a loop over slices (e.g., `temp = @. 10 * x`
+  or `ᶠtemp = @. ᶠinterp(x)` in the function of `DataLayouts.foreach_column`,
+  including operator matrices, vectors, and their levels) stay on the stack on
+  CPUs, since the functions that allocate them, write them, or pass them to
+  other broadcasts are inlined, and operators that read them copy them into
+  immutable arrays; they used to be allocated on the heap in every column. A
+  temporary that is passed to a function that is not inlined is still allocated
+  on the heap.
+- ![][badge-🐛bugfix] In a GPU loop over columns, whether a temporary is stored
+  in the registers of its column is decided at compile time, so a temporary with
+  a single point that is derived from a level of another temporary no longer
+  makes the kernel allocate (and fail to compile) when that decision was left to
+  run time.
+- ![][badge-🐛bugfix] The scalar blocks of a `FieldMatrix` whose entries are
+  covectors (e.g., the derivative of a scalar tendency with respect to a
+  vertical velocity) are writable views of the matrix, like those of other
+  `Tensor` entries; they used to be read-only copies, so a sparse automatic
+  differentiation Jacobian in ClimaAtmos left them uninitialized. A name of all
+  of the components of a `Tensor` entry (`@name(components.data)`) refers to the
+  entry itself; it used to throw an error.
+- ![][badge-✨feature/enhancement] Added
+  `Meshes.BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl)`
+  for two-scale hyperbolic tangent stretching that refines the boundary layer
+  with scale height `z_pbl` while matching element spacing `dz_surface` at the
+  surface and `dz_top` at the domain top.
+- ![][badge-🐛bugfix] Stretched `IntervalMesh` constructors now depend on the
+  domain only through its height. `GeneralizedExponentialStretching` and
+  `HyperbolicTangentStretching` solved for the target spacings as fractions of
+  the top coordinate rather than the domain height, and all three stretched
+  rules placed `reverse_mode` faces outside the domain when its top was away
+  from zero. `HyperbolicTangentStretching` and
+  `GeneralizedExponentialStretching` evaluate their stretching functions
+  without cancellation at the end faces, so `FT_solve = Float32` solves
+  converge to their residual tolerances.
+- ![][badge-🐛bugfix] `Meshes.truncate_mesh` fits its mesh to the parent faces
+  between the bottom and top of `trunc_domain`, so it handles a raised bottom,
+  and it accepts `reverse_mode` parents such as land meshes. Stretched meshes
+  solved with an `FT_solve` narrower than the domain's float type end exactly at
+  the domain bounds. `HyperbolicTangentStretching` throws an `ArgumentError` for
+  `dz_surface ≥ (z_max - z_min) / nelems`, and `IntervalMesh(domain, faces)`
+  requires at least two faces.
+- ![][badge-🐛bugfix] `Limiters.QuasiMonotoneLimiter` treats a slab whose
+  clipping moves no tracer mass as converged. A slab with no tracer mass, as is
+  common for precipitation tracers, used to report a relative error of `NaN`
+  and count as unconverged on every call. `apply_limiter!` warns only when some
+  slab fails to converge, and its `min_tracer_mass` statistic is the minimum
+  over slabs.
+- ![][badge-🔥behavioralΔ] The default `tol` of `IntervalMesh` with
+  `GeneralizedExponentialStretching` is
+  `sqrt(eps(FT_solve)) * min(dz_bottom, dz_top)`, which places the end
+  spacings to within ~1e-8 in Float64 and ~2e-4 in Float32. The previous
+  default, an absolute residual tolerance of `1e-3`, left end-spacing errors of
+  1% in shallow soil columns (2 m deep, 20 levels, 5 cm surface spacing). Faces
+  of existing stretched meshes move by at most 0.4 mm in ClimaLand's soil
+  configurations. Passing `tol = 1e-3` reproduces the previous meshes.
+
+v1.0.7
+-------
+
+- ![][badge-✨feature/enhancement] Every argument of `DataLayouts.foreach_slice`
+  and its variants can be a `Tuple` or `NamedTuple` of arguments, or a nested
+  container of them, whose slices are passed to the loop's function in the same
+  container, so that GPU loops can have more than 31 arguments.
+- ![][badge-🐛bugfix] On GPUs, a reduction inside a loop over columns (e.g.,
+  `sum` of a column in `foreach_column`) gives its result to every thread of the
+  column; when the number of levels was not a power of two, some threads got a
+  partial result.
+- ![][badge-🐛bugfix] Inside a GPU loop over columns, a temporary with a single
+  point (e.g., `@. 2 * ᶜbottom` with `ᶜbottom = Fields.level(ᶜtemp, 1)`, or the
+  result of an operator on a column with one cell) is stored by every thread of
+  the column, and every thread's copy is written, so that every thread reads its
+  value; only the thread that owned the point used to write it.
+- ![][badge-🐛bugfix] In a GPU loop over columns, a statement whose operators read
+  a Field at neighboring levels (a Field of the loop or a buffer from `similar`)
+  waits for the statements before it, which may have written the Field
+  pointwise; it used to read the values of other threads without synchronizing.
+  When its result is in registers, the statements after it also wait for its
+  reads, so that they cannot overwrite the Field while other threads read it.
+  Likewise, a statement that reads or writes a single point outside of
+  registers (e.g., a level of a Field of the loop), or whose operators read a
+  Field as a boundary value, waits for the statements before it, and the
+  statements after it wait for it.
+- ![][badge-🐛bugfix] The keys of `Utilities.Cache.OBJECT_CACHE` have one
+  concrete type (`Utilities.Cache.ObjectKey`), so that looking up a memoized
+  object (e.g., the rotation and DSS buffer of `cartesian_tensor_divergence!`,
+  the scratch Fields of the DG Laplacian, or the DG connectivity and staging
+  buffers) never allocates; a lookup with a `Tuple` key allocated when it met a
+  different key with the same short hash.
+- ![][badge-🔥behavioralΔ] `Utilities.Cache.clean_cache!(object)` also releases
+  the objects that were cached for `object` (e.g., the buffers of operators on a
+  grid).
+- ![][badge-🚀performance] On GPUs, masked loops with one thread per slice deal
+  their slices out to the warps of all blocks, so that the active slices of a
+  mask run on every multiprocessor.
+- ![][badge-🚀performance] On GPUs, the point views of a `DataLayout` have `Int`
+  offsets, so that the offsets of the struct field views a kernel takes (e.g.,
+  the entries of a `FieldVector`) fold into the immediate offsets of memory
+  accesses, and the fields of a point share one address, which saves registers
+  in kernels that read many fields.
+- ![][badge-🚀performance] On GPUs, a fused loop whose shared buffers are known
+  and exceed the `:medium` level (see the `shmem` keyword of
+  `DataLayouts.foreach_slice`) gets exactly the shared memory that they need,
+  instead of the `:large` or `:max` level, which leaves the rest of the shared
+  memory of a multiprocessor to more blocks and the L1 cache. The buffers of
+  spectral element operators on lower-precision data are sized for their values
+  in the precision of the space.
+
 v1.0.6
 -------
 

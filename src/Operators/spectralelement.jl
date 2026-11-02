@@ -70,6 +70,14 @@ jacobian_weight(::WeakForm, arg) = Fields.local_geometry_field(arg).WJ
     return Base.broadcasted(*, maybe_private_buffer(arg), Base.broadcasted(/, WJ, J))
 end
 
+# The values that materialize_quadrature_weighted evaluates, as a lazy expression whose eltype
+# is that of the intermediate values of an operator (see buffer_bytes).
+quadrature_weighted(::StrongForm, arg) = arg
+function quadrature_weighted(::WeakForm, arg)
+    (; WJ, J) = Fields.local_geometry_field(arg)
+    return Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J))
+end
+
 @inline quadrature_unweighted(::StrongForm, dest) = dest
 @inline function quadrature_unweighted(::WeakForm, dest)
     (; WJ, J) = Fields.local_geometry_field(dest)
@@ -439,10 +447,17 @@ function apply_operator(op::Divergence{F}, arg) where {F}
     )
     return jacobian_unweighted(F(), constant_field(dest))
 end
-# The contravariant component cached per dimension has the type of the divergence, and the
-# dimensions share one buffer (see the buffer reuse invariant in apply_operator).
-buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence}) =
-    isempty(horizontal_dims(bc.args[1])) ? 0 : cached_bytes(bc.args[1], eltype(bc))
+
+# The contravariant component cached per dimension has the type of the divergence of the
+# Jacobian-weighted argument, and the dimensions share one buffer (see the buffer reuse
+# invariant in apply_operator).
+buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence{F}}) where {F} =
+    isempty(horizontal_dims(bc.args[1])) ? 0 :
+    cached_bytes(bc.args[1], weighted_divergence_type(F(), bc.args[1]))
+
+weighted_divergence_type(form, arg) = Geometry.divergence_result_type(
+    eltype(Base.broadcasted(*, arg, jacobian_weight(form, arg))),
+)
 
 """
     split_div = SplitDivergence()
@@ -587,11 +602,12 @@ function apply_operator(op::SplitDivergence, arg1, arg2)
     )
     return jacobian_unweighted(StrongForm(), constant_field(dest))
 end
+
 # The dimensions share one buffer, as in Divergence.
 buffer_bytes(bc::SpectralOperatorBroadcasted{<:SplitDivergence}) =
     (
         isempty(horizontal_dims(bc.args[1])) ? 0 :
-        cached_bytes(bc.args[1], Geometry.divergence_result_type(eltype(bc.args[1])))
+        cached_bytes(bc.args[1], weighted_divergence_type(StrongForm(), bc.args[1]))
     ) + (is_cached(bc.args[2]) ? cached_bytes(bc.args[2]) : 0)
 
 """
@@ -680,9 +696,14 @@ function apply_operator(op::Gradient{F}, arg) where {F}
     )
     return quadrature_unweighted(F(), constant_field(dest))
 end
+
 # The term eʰ ⊗ arg′ cached per dimension holds one dimension's part of the gradient.
-buffer_bytes(bc::SpectralOperatorBroadcasted{<:Gradient}) =
-    cached_bytes(bc.args[1], eltype(bc))
+function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Gradient{F}}) where {F}
+    arg = bc.args[1]
+    value_type = eltype(quadrature_weighted(F(), arg))
+    gradient_type = Geometry.gradient_result_type(Val(horizontal_dims(arg)), value_type)
+    return cached_bytes(arg, gradient_type)
+end
 
 """
     curl = Curl()              # strong form, == Curl{StrongForm}()
@@ -792,10 +813,12 @@ function apply_operator(op::Curl{F}, arg) where {F}
     )
     return jacobian_unweighted(F(), constant_field(dest))
 end
-function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl})
+
+function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl{F}}) where {F}
     (arg,) = bc.args
     (dims, lg) = (horizontal_dims(arg), Fields.local_geometry_field(arg))
-    term_bytes(dim) = cached_bytes(arg, eltype(levi_civita(dim, arg, lg)))
+    term_bytes(dim) =
+        cached_bytes(arg, eltype(levi_civita(dim, quadrature_weighted(F(), arg), lg)))
     # The terms cached per dimension can differ in type, and share one buffer (see the
     # buffer reuse invariant in apply_operator).
     return max(
@@ -907,19 +930,23 @@ function apply_operator(op::TensorOperator, arg)
     DataLayouts.synchronize(DataLayouts.DataScope(arg))
     return tensor_unweighted(op, constant_field(dest))
 end
+
 # Interpolate copies a lazy or register-resident argument into a buffer, while Restrict reads
 # its weighted argument lazily unless it is register-resident; two-dimensional slabs also
 # need a partial result buffer.
 function buffer_bytes(bc::SpectralOperatorBroadcasted{<:TensorOperator})
     (arg,) = bc.args
     scope = DataLayouts.DataScope(arg)
+    T′ =
+        bc.f isa Interpolate ? eltype(arg) :
+        eltype(Base.broadcasted(*, arg, jacobian_weight(WeakForm(), arg)))
     arg_bytes =
         (bc.f isa Interpolate ? is_cached(arg) : in_registers_when_applied(arg)) ?
-        DataLayouts.scoped_buffer_bytes(scope, single_field_buffer_bytes(arg)) : 0
+        DataLayouts.scoped_buffer_bytes(scope, single_field_buffer_bytes(arg, T′)) : 0
     horizontal_dims(arg) == (1, 2) || return arg_bytes
     return arg_bytes + DataLayouts.scoped_buffer_bytes(
         scope,
-        max(single_field_buffer_bytes(arg, eltype(bc)), single_field_buffer_bytes(bc)),
+        max(single_field_buffer_bytes(arg, T′), single_field_buffer_bytes(bc)),
     )
 end
 
@@ -1143,6 +1170,7 @@ function apply_operator(op::LumpedRestriction, arg)
     DataLayouts.synchronize(scope)
     return constant_field(dest)
 end
+
 function buffer_bytes(bc::SpectralOperatorBroadcasted{<:LumpedRestriction})
     (arg,) = bc.args
     dims = horizontal_dims(arg)
@@ -1153,9 +1181,10 @@ function buffer_bytes(bc::SpectralOperatorBroadcasted{<:LumpedRestriction})
         return 0
     Nc = Quadratures.degrees_of_freedom(bc.f.quadrature_style)
     scope = DataLayouts.DataScope(arg)
+    WJ = Fields.local_geometry_field(arg).WJ
     return DataLayouts.scoped_buffer_bytes(
         scope,
-        single_field_buffer_bytes(arg, eltype(bc)),
+        single_field_buffer_bytes(arg, eltype(Base.broadcasted(*, arg, WJ))),
     ) + DataLayouts.scoped_buffer_bytes(scope, sizeof(eltype(bc)) * Nc^length(dims))
 end
 

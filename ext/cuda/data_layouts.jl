@@ -187,7 +187,9 @@ function Adapt.adapt_structure(to::CUDA.KernelAdaptor, data::DataLayouts.DataLay
 end
 
 # GPU point index arithmetic is in 32 bits (see adapt_structure above): 64-bit integer ops
-# take several instructions at every point. Point views have UInt32 indices.
+# take several instructions at every point. Point views have Int offsets, so that the
+# offsets of their components fold into the immediate offsets of memory accesses (see
+# Utilities.linear_index_and_stride).
 const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
 const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
@@ -218,7 +220,7 @@ end
     array::CUDA.CuDeviceArray,
     index::Integer,
     stride::Integer,
-) = (array, (index % UInt32, stride % UInt32))
+) = (array, (index, stride % UInt32))
 
 # One method per type: JET would union-split a Union method on hosts and report its calls.
 for A in (:(CUDA.CuDeviceArray), :CompactDeviceView, :DeviceSubArray)
@@ -247,7 +249,7 @@ DataLayouts.parent_array_and_index_args(
 ) where {T}
     Nf = DataLayouts.num_basetypes(eltype(array), T)
     (device_array, (offset, stride)) = device_offset_and_stride(array, index, stride)
-    return DataLayouts.PointView{eltype(array), Nf, typeof(device_array), UInt32}(
+    return DataLayouts.PointView{eltype(array), Nf, typeof(device_array)}(
         device_array, offset, stride,
     )
 end

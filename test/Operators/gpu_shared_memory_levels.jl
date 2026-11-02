@@ -189,6 +189,12 @@ error_message(f) =
     auto_level(needed, N = 64) =
         isnothing(fitting(needed, N)) ? DataLayouts.ThisThread() :
         level(fitting(needed, N), N)
+    # The subscope of a loop whose buffers are known (e.g., a broadcast's): :medium if it
+    # holds them, or else exactly their bytes, up to :max.
+    known_level(needed, N = 64) =
+        needed <= N * bytes(Val(:medium), N) ? level(:medium, N) :
+        isnothing(fitting(needed, N)) ? DataLayouts.ThisThread() :
+        CUDA_EXT.ThisSubBlock{N, cld(needed, N)}()
     # The levels come from the device: 64-thread blocks run at full occupancy in as many
     # blocks as a multiprocessor holds (32 on an A100), and blocks of narrow sub-blocks
     # (1024 threads) in as many as its threads allow (2 on an A100).
@@ -423,12 +429,13 @@ error_message(f) =
         )
     end
 
-    # A broadcast chooses the first level whose buffers fit: on an 8x8 slab, the gradient
-    # of 3 Float64s needs 3072 bytes (the :medium level on an A100), of 8 Float64s 8192
-    # bytes (:large) and of 90 Float64s 92160 bytes (:max), and of 170 Float64s 174080
-    # bytes, more than any level, so each of its slabs is evaluated by one thread.
+    # A broadcast is given the :medium level if its buffers fit, or else their bytes: on an
+    # 8x8 slab, the gradient of 3 Float64s needs 3072 bytes (the :medium level on an A100),
+    # of 8 Float64s 8192 bytes and of 90 Float64s 92160 bytes (up to :max), and of 170
+    # Float64s 174080 bytes, more than any level, so each of its slabs is evaluated by one
+    # thread.
     tuple3(z) = ntuple(i -> i * z, Val(3))
-    for (tuple_f, expected) in ((tuple3, auto_level(3072)), (tuple8, auto_level(8192)))
+    for (tuple_f, expected) in ((tuple3, known_level(3072)), (tuple8, known_level(8192)))
         (tg, tc) = map((GPU.z, CPU.z)) do z
             space = TU.CenterExtrudedFiniteDifferenceSpace(
                 FT;
@@ -446,7 +453,7 @@ error_message(f) =
         @test Array(parent(dest)) ≈ parent(grad.(tc))
     end
     space = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 10, helem = 2, Nq = 8)
-    for (n, expected) in ((90, auto_level(92160)), (170, auto_level(174080)))
+    for (n, expected) in ((90, known_level(92160)), (170, known_level(174080)))
         tg = Fields.Field(NTuple{n, FT}, space) # not initialized; only its type is read
         bc = Base.Broadcast.instantiate(Base.Broadcast.broadcasted(grad, tg))
         dest = Fields.Field(eltype(bc), space)

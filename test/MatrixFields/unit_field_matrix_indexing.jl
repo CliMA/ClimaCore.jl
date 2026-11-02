@@ -102,6 +102,21 @@ include("matrix_field_test_utils.jl")
         4,
         FT,
     )
+    test_field_offset_and_type(
+        (@name(), @name(components.data.:(1))), # the unnamed row of a covector
+        FT,
+        typeof(Geometry.Contravariant3Vector(FT(1))'),
+        0,
+        FT,
+    )
+    for name_pair in (
+        (@name(), @name(components.data)),
+        (@name(components.data), @name(components.data)),
+    )
+        # all of the components of a tensor are the tensor itself
+        covector_type = typeof(Geometry.Contravariant3Vector(FT(1))')
+        test_field_offset_and_type(name_pair, FT, covector_type, 0, covector_type)
+    end
 end
 
 @testset "fieldmatrix to scalar fieldmatrix unit tests" begin

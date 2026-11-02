@@ -305,6 +305,29 @@ end
     @test fₑ - fₑ₋₁ ≈ 0.02 / 45.0 rtol = 1e-2
 end
 
+@testset "IntervalMesh GeneralizedExponentialStretching default tolerance" begin
+    # The default tolerance scales with the finer spacing, so both end
+    # spacings match their targets. The meshes are a GCM-like profile and a
+    # scaled 2 m soil column on a unit domain; an absolute tolerance of 1e-3
+    # leaves end-spacing errors of 0.3% and 1.2% in them.
+    for (reverse_mode, dz_bottom, dz_top, nelems) in (
+        (false, 0.02 / 45.0, 7.0 / 45.0, 45),
+        (true, 0.3 / 2.0, 0.05 / 2.0, 20),
+    )
+        _, mesh = unit_intervalmesh(;
+            stretching = Meshes.GeneralizedExponentialStretching(
+                dz_bottom,
+                dz_top,
+            ),
+            nelems,
+            reverse_mode,
+        )
+        z = [f.z for f in mesh.faces]
+        @test isapprox(z[2] - z[1], dz_bottom; rtol = 1e-6)
+        @test isapprox(z[end] - z[end - 1], dz_top; rtol = 1e-6)
+    end
+end
+
 @testset "IntervalMesh HyperbolicTangentStretching" begin
     # Use normalized GCM profile heights (75km)
     @test_throws ArgumentError unit_intervalmesh(
@@ -314,6 +337,11 @@ end
     @test_throws ArgumentError unit_intervalmesh(
         stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
         nelems = 1,
+    )
+    # A surface spacing of at least `H / nelems` has no stretched solution.
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(1 / 20),
+        nelems = 20,
     )
     # Test a gcm like configuration
     nelems = 75
@@ -362,6 +390,310 @@ end
     )
 end
 
+@testset "Stretched IntervalMesh on shifted domains" begin
+    # Every rule depends on the domain only through its height: shifting the
+    # bounds translates the faces, and `reverse_mode` mirrors them about the
+    # domain midpoint, with the surface spacing at the corresponding end.
+    FT = Float64
+    H = FT(30000)
+    z_lo = FT(1000)
+    base = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(H);
+        boundary_names = (:bottom, :top),
+    )
+    shifted = Domains.IntervalDomain(
+        Geometry.ZPoint(z_lo),
+        Geometry.ZPoint(z_lo + H);
+        boundary_names = (:bottom, :top),
+    )
+    faces_z(mesh) = [f.z for f in mesh.faces]
+    for (stretch, rev_stretch, dz_surface, nelems) in (
+        (
+            Meshes.ExponentialStretching(FT(7500)),
+            Meshes.ExponentialStretching(FT(7500)),
+            nothing,
+            10,
+        ),
+        (
+            Meshes.GeneralizedExponentialStretching(FT(30), FT(5000)),
+            Meshes.GeneralizedExponentialStretching(FT(5000), FT(30)),
+            FT(30),
+            20,
+        ),
+        (
+            Meshes.HyperbolicTangentStretching(FT(30)),
+            Meshes.HyperbolicTangentStretching(FT(30)),
+            FT(30),
+            20,
+        ),
+        (
+            Meshes.BoundaryLayerHyperbolicTangentStretching(
+                FT(30),
+                FT(3000),
+                FT(2200),
+            ),
+            Meshes.BoundaryLayerHyperbolicTangentStretching(
+                FT(30),
+                FT(3000),
+                FT(2200),
+            ),
+            FT(30),
+            43,
+        ),
+    )
+        z_base = faces_z(Meshes.IntervalMesh(base, stretch; nelems))
+        z_shift = faces_z(Meshes.IntervalMesh(shifted, stretch; nelems))
+        @test z_shift[1] == z_lo
+        @test z_shift[end] == z_lo + H
+        @test z_shift ≈ z_lo .+ z_base
+        if !isnothing(dz_surface)
+            @test isapprox(z_shift[2] - z_shift[1], dz_surface; rtol = 1e-3)
+        end
+
+        z_rev = faces_z(
+            Meshes.IntervalMesh(
+                shifted,
+                rev_stretch;
+                nelems,
+                reverse_mode = true,
+            ),
+        )
+        @test z_rev[1] == z_lo
+        @test z_rev[end] == z_lo + H
+        @test z_rev ≈ (z_lo + H) .- reverse(z_base)
+    end
+
+    # Float32 solves reach the default tolerance and match the end spacings,
+    # including a surface spacing of 1/560 of `H / nelems`.
+    domain32 = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0f0),
+        Geometry.ZPoint(45000.0f0);
+        boundary_names = (:bottom, :top),
+    )
+    for (dz_surface, nelems) in ((30.0f0, 20), (0.2f0, 400))
+        mesh32 = Meshes.IntervalMesh(
+            domain32,
+            Meshes.HyperbolicTangentStretching(dz_surface);
+            nelems,
+            FT_solve = Float32,
+        )
+        @test isapprox(mesh32.faces[2].z, dz_surface; rtol = 1e-5)
+    end
+    # The default tolerance of `GeneralizedExponentialStretching` is
+    # `sqrt(eps(Float32)) * min(dz_bottom, dz_top)`, which places the end
+    # spacings to within 2.1e-4 in a 12-configuration sweep.
+    for (dz_bottom, dz_top, nelems) in ((30.0f0, 5000.0f0, 20), (700.0f0, 800.0f0, 63))
+        mesh32 = Meshes.IntervalMesh(
+            domain32,
+            Meshes.GeneralizedExponentialStretching(dz_bottom, dz_top);
+            nelems,
+            FT_solve = Float32,
+        )
+        z32 = [f.z for f in mesh32.faces]
+        @test isapprox(z32[2] - z32[1], dz_bottom; rtol = 1e-3)
+        @test isapprox(z32[end] - z32[end - 1], dz_top; rtol = 1e-3)
+    end
+
+    # Faces solved in Float32 on a Float64 domain end at the domain bounds,
+    # which Float32 does not represent.
+    offset = Domains.IntervalDomain(
+        Geometry.ZPoint(0.1),
+        Geometry.ZPoint(60000.1);
+        boundary_names = (:bottom, :top),
+    )
+    bl_stretch =
+        Meshes.BoundaryLayerHyperbolicTangentStretching(28.0, 3000.0, 2200.0)
+    for (stretch, nelems, reverse_mode) in (
+        (Meshes.HyperbolicTangentStretching(30.0), 45, false),
+        (Meshes.HyperbolicTangentStretching(30.0), 45, true),
+        (Meshes.GeneralizedExponentialStretching(30.0, 5000.0), 45, false),
+        (Meshes.GeneralizedExponentialStretching(5000.0, 30.0), 45, true),
+        (bl_stretch, 75, false),
+        (bl_stretch, 75, true),
+    )
+        mesh = Meshes.IntervalMesh(
+            offset,
+            stretch;
+            nelems,
+            FT_solve = Float32,
+            reverse_mode,
+        )
+        @test mesh.faces[1] == offset.coord_min
+        @test mesh.faces[end] == offset.coord_max
+    end
+end
+
+@testset "IntervalMesh from explicit faces" begin
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_names = (:bottom, :top),
+    )
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, [Geometry.ZPoint(0.0)])
+    mesh = Meshes.IntervalMesh(domain, Geometry.ZPoint.([0.0, 1000.0]))
+    @test Meshes.nelements(mesh) == 1
+end
+
+@testset "IntervalMesh BoundaryLayerHyperbolicTangentStretching" begin
+    FT = Float64
+    z_max = FT(60000)
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(z_max);
+        boundary_names = (:bottom, :top),
+    )
+    stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        FT(28.0),
+        FT(3000.0),
+        FT(2200.0),
+    )
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 0)
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 1)
+    # Too few levels for the boundary layer, and too many for the background.
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 61)
+    @test_throws ArgumentError Meshes.IntervalMesh(domain, stretch; nelems = 110)
+    err = try
+        Meshes.IntervalMesh(domain, stretch; nelems = 25)
+    catch e
+        e
+    end
+    @test occursin("admits 62 ≤ nelems ≤ 109", err.msg)
+    # A boundary layer this shallow leaves no admissible `nelems`.
+    err = try
+        Meshes.IntervalMesh(
+            domain,
+            Meshes.BoundaryLayerHyperbolicTangentStretching(28.0, 1000.0, 500.0);
+            nelems = 100,
+        )
+    catch e
+        e
+    end
+    @test occursin("admits no value of nelems", err.msg)
+
+    adaption = ClimaCore.Hypsography.SLEVEAdaption(
+        Geometry.ZPoint(FT(5500.0)),
+        FT(0.7),
+        FT(10.0),
+    )
+    z_top_pt = Geometry.ZPoint(z_max)
+
+    # `find_gamma` has two roots for `nelems ≥ 98`.
+    for nelems in (63, 75, 79, 87, 95, 105)
+        mesh = Meshes.IntervalMesh(domain, stretch; nelems)
+        @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(FT(0))
+        @test Meshes.coordinates(mesh, nelems, 2) == Geometry.ZPoint(z_max)
+        @test isapprox(
+            Meshes.coordinates(mesh, 1, 2).z,
+            FT(28.0);
+            rtol = 1e-5,
+        )
+        dz_ref = diff([f.z for f in mesh.faces])
+        @test all(>(0), dz_ref)
+        @test all(>(0), diff(dz_ref))
+        @test minimum(dz_ref) >= FT(28.0) * (1 - 1e-5)
+        @test isapprox(dz_ref[end], FT(3000.0); rtol = 1e-3)
+
+        # Physical spacing stays monotonic and above 20 m under SLEVE over
+        # 5500 m terrain.
+        phys_faces = [
+            ClimaCore.Hypsography.ref_z_to_physical_z(adaption, f, z_top_pt).z
+            for f in mesh.faces
+        ]
+        dz_phys = diff(phys_faces)
+        @test all(>(0), dz_phys)
+        @test all(>(0), diff(dz_phys))
+        @test minimum(dz_phys) >= FT(20.0)
+    end
+
+    # Float32 solves reach the default tolerance.
+    mesh32 =
+        Meshes.IntervalMesh(domain, stretch; nelems = 75, FT_solve = Float32)
+    mesh64 = Meshes.IntervalMesh(domain, stretch; nelems = 75)
+    @test isapprox(
+        [f.z for f in mesh32.faces],
+        [f.z for f in mesh64.faces];
+        rtol = 1e-4,
+    )
+    # A 1 m surface spacing in a 45 km domain, where `γ ≈ 4.5`.
+    domain45 = Domains.IntervalDomain(
+        Geometry.ZPoint(FT(0)),
+        Geometry.ZPoint(FT(45000));
+        boundary_names = (:bottom, :top),
+    )
+    thin_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        FT(1),
+        FT(2000),
+        FT(1000),
+    )
+    mesh32 = Meshes.IntervalMesh(
+        domain45,
+        thin_stretch;
+        nelems = 200,
+        FT_solve = Float32,
+    )
+    mesh64 = Meshes.IntervalMesh(domain45, thin_stretch; nelems = 200)
+    @test isapprox(
+        [f.z for f in mesh32.faces],
+        [f.z for f in mesh64.faces];
+        rtol = 1e-3,
+    )
+
+    # A surface-to-top spacing ratio of 3e-8, for which `atanh` of the bound
+    # on `tanh γ` overflows in Float32.
+    tiny_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        1.0f-4,
+        3000.0f0,
+        2200.0f0,
+    )
+    domain32 = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0f0),
+        Geometry.ZPoint(60000.0f0);
+        boundary_names = (:bottom, :top),
+    )
+    mesh32 = Meshes.IntervalMesh(
+        domain32,
+        tiny_stretch;
+        nelems = 200,
+        FT_solve = Float32,
+    )
+    @test isapprox(mesh32.faces[2].z, 1.0f-4; rtol = 1e-4)
+
+    # The argmin of a monotonic function is the end of the interval.
+    @test Meshes._golden_section_argmin(identity, 0.0, 1.0) == 0.0
+    @test Meshes._golden_section_argmin(-, 0.0, 1.0) == 1.0
+    @test Meshes._golden_section_argmin(x -> (x - 0.3)^2, 0.0, 1.0) ≈ 0.3
+
+    # `reverse_mode` mirrors the profile about the domain midpoint, for a
+    # domain whose top is away from zero as well.
+    soil_stretch = Meshes.BoundaryLayerHyperbolicTangentStretching(
+        FT(0.05),
+        FT(2.0),
+        FT(1.0),
+    )
+    for (z_lo, z_hi) in ((FT(-10), FT(0)), (FT(-5), FT(5)))
+        soil_domain = Domains.IntervalDomain(
+            Geometry.ZPoint(z_lo),
+            Geometry.ZPoint(z_hi);
+            boundary_names = (:bottom, :top),
+        )
+        up = Meshes.IntervalMesh(soil_domain, soil_stretch; nelems = 20)
+        down = Meshes.IntervalMesh(
+            soil_domain,
+            soil_stretch;
+            nelems = 20,
+            reverse_mode = true,
+        )
+        z_up = [f.z for f in up.faces]
+        z_down = [f.z for f in down.faces]
+        @test z_down[1] == z_lo
+        @test z_down[end] == z_hi
+        @test z_down ≈ z_lo .+ z_hi .- reverse(z_up)
+        @test isapprox(z_hi - z_down[end - 1], FT(0.05); rtol = 1e-5)
+        @test all(<(0), diff(diff(z_down)))
+    end
+end
+
 @testset "Truncated IntervalMesh" begin
     FT = Float64
     nz = 55
@@ -387,6 +719,56 @@ end
     @test Meshes.coordinates(trunc_mesh, 1, 1) == Geometry.ZPoint(z_bottom)
     @test Meshes.coordinates(trunc_mesh, Meshes.nelements(trunc_mesh), 2) ==
           Geometry.ZPoint(z_top)
+
+    # With a raised bottom, the mesh has the parent's element count and end
+    # spacings between the bounds.
+    faces_z(mesh) = [f.z for f in mesh.faces]
+    z_parent = faces_z(parent_mesh)
+    raised_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(1000),
+        Geometry.ZPoint{FT}(10000),
+        boundary_names = (:bottom, :top),
+    )
+    raised = faces_z(Meshes.truncate_mesh(parent_mesh, raised_domain))
+    k_bottom = findlast(≤(1000), z_parent)
+    k_top = findfirst(≥(10000), z_parent)
+    @test length(raised) == k_top - k_bottom + 1
+    @test (raised[1], raised[end]) == (1000, 10000)
+    @test isapprox(
+        raised[2] - raised[1],
+        z_parent[k_bottom + 1] - z_parent[k_bottom];
+        rtol = 1e-6,
+    )
+
+    # A land mesh, with its fine end at the top, can be truncated below the
+    # surface.
+    land_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(-10),
+        Geometry.ZPoint{FT}(0),
+        boundary_names = (:bottom, :top),
+    )
+    land_mesh = Meshes.IntervalMesh(
+        land_domain,
+        Meshes.GeneralizedExponentialStretching(FT(1.5), FT(0.1));
+        nelems = 20,
+        reverse_mode = true,
+    )
+    trunc_land_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(-10),
+        Geometry.ZPoint{FT}(-2),
+        boundary_names = (:bottom, :top),
+    )
+    trunc_land = Meshes.truncate_mesh(land_mesh, trunc_land_domain)
+    z_land = faces_z(land_mesh)
+    z_trunc = faces_z(trunc_land)
+    k_top = findfirst(≥(-2), z_land)
+    @test trunc_land.reverse_mode
+    @test length(z_trunc) == k_top
+    @test isapprox(
+        z_trunc[end] - z_trunc[end - 1],
+        z_land[k_top] - z_land[k_top - 1];
+        rtol = 1e-3,
+    )
 end
 
 @testset "IntervalMesh stretching parameter promotion" begin
@@ -430,9 +812,22 @@ end
                 Meshes.HyperbolicTangentStretching(30),
                 Meshes.HyperbolicTangentStretching(FT(30)),
             ),
+            (
+                Meshes.BoundaryLayerHyperbolicTangentStretching(30, 3000, 2200),
+                Meshes.BoundaryLayerHyperbolicTangentStretching(
+                    FT(30),
+                    FT(3000),
+                    FT(2200),
+                ),
+            ),
         )
-            int_mesh = Meshes.IntervalMesh(domain, int_stretch; nelems = 20)
-            float_mesh = Meshes.IntervalMesh(domain, float_stretch; nelems = 20)
+            nelems =
+                int_stretch isa Meshes.BoundaryLayerHyperbolicTangentStretching ?
+                43 : 20
+            int_mesh =
+                Meshes.IntervalMesh(domain, int_stretch; nelems = nelems)
+            float_mesh =
+                Meshes.IntervalMesh(domain, float_stretch; nelems = nelems)
             @test int_mesh.faces == float_mesh.faces
             @test typeof(int_mesh.stretch) === typeof(float_stretch)
         end

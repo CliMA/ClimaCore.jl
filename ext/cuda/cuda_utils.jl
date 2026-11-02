@@ -116,6 +116,11 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
             end
         end
         max_blocks_per_sm_by_warps = fld(max_warps_per_sm, warps_per_block)
+        # Blocks of two warps are dealt unevenly to the four schedulers of a multiprocessor
+        # unless every scheduler gets the same number of blocks.
+        if warps_per_block == 2 && attrs.schedulers_per_sm == 4
+            max_blocks_per_sm_by_warps = 4 * fld(max_blocks_per_sm_by_warps, 4)
+        end
         if max_blocks_per_sm_by_warps < max_blocks_per_sm
             (max_blocks_per_sm, limit) = (max_blocks_per_sm_by_warps, warp_limit)
         end

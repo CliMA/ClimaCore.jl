@@ -206,7 +206,9 @@ no separate `F` axis.
     reassign(data, scope)
 
 Assign a new [`DataScope`](@ref) to a [`DataLayout`](@ref), or determine the
-result type of performing such an assignment for a layout of type `D`.
+result type of performing such an assignment for a layout of type `D`. The layouts
+in a `Tuple` or `NamedTuple` (e.g., a container of arguments of
+[`foreach_slice`](@ref)) are reassigned one by one.
 """
 @inline function reassign(data, scope)
     array = parent(data)
@@ -215,6 +217,8 @@ result type of performing such an assignment for a layout of type `D`.
 end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
+@inline reassign(arg::Union{Tuple, NamedTuple}, scope) =
+    unrolled_map(Base.Fix2(reassign, scope), arg)
 
 """
     layout_constructor(D, [T]; [params...])
