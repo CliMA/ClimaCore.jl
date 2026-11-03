@@ -4,6 +4,9 @@ using JET
 using IntervalSets
 
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: Domains, Meshes, Spaces, Fields, Operators
@@ -189,47 +192,62 @@ end
             center_values = ones(FT, center_space)
             center_velocities = Geometry.WVector.(center_values)
 
-            # Also ignore the runtime dispatch in Threads.threading_run as of Julia
-            # 1.10 (UnionAll construction in typejoin, reached through the error
-            # message machinery of sprint), used by parallelize_over
-            filter(@nospecialize f) =
-                f !== Base.mapreduce_empty && f !== Core.UnionAll
-
             # Face space operators
-            @test_opt function_filter = filter sum(ones(FT, face_space))
-            @test_opt function_filter = filter sum(sin.(faces))
+            @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+                JETConfig.function_filter sum(ones(FT, face_space))
+            @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+                JETConfig.function_filter sum(sin.(faces))
 
-            @test_opt opt_InterpolateF2C(faces)
-            @test_opt opt_WeightedInterpolateF2C(face_values, faces)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_InterpolateF2C(
+                faces,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_WeightedInterpolateF2C(
+                face_values,
+                faces,
+            )
 
-            @test_opt opt_BottomBiasedF2C(faces)
-            @test_opt opt_TopBiasedF2C(faces)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_BottomBiasedF2C(
+                faces,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_TopBiasedF2C(faces)
 
-            @test_opt opt_GradientF2C(faces)
-            @test_opt opt_DivergenceF2C(faces)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_GradientF2C(faces)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_DivergenceF2C(faces)
 
-            @test_opt opt_SetBoundary_SetValue(faces)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_SetBoundary_SetValue(
+                faces,
+            )
 
             # Center space operators
-            @test_opt function_filter = filter sum(ones(FT, center_space))
-            @test_opt function_filter = filter sum(sin.(centers))
+            @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+                JETConfig.function_filter sum(ones(FT, center_space))
+            @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+                JETConfig.function_filter sum(sin.(centers))
 
-            @test_opt opt_InterpolateC2F_SetValue(centers)
-            @test_opt opt_InterpolateC2F_Extrapolate(centers)
-
-            @test_opt opt_WeightedInterpolateC2F_SetValue(
-                center_values,
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_InterpolateC2F_SetValue(
                 centers,
             )
-            @test_opt opt_WeightedInterpolateC2F_Extrapolate(
-                center_values,
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_InterpolateC2F_Extrapolate(
                 centers,
             )
 
-            @test_opt opt_BottomBiasedC2F(centers)
-            @test_opt opt_TopBiasedC2F(centers)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_WeightedInterpolateC2F_SetValue(
+                center_values,
+                centers,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_WeightedInterpolateC2F_Extrapolate(
+                center_values,
+                centers,
+            )
 
-            @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_BottomBiasedC2F(
+                centers,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_TopBiasedC2F(
+                centers,
+            )
+
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,
                 centers,
             )
@@ -239,18 +257,37 @@ end
             # extrapolations and, for FCTZalesak, the tuple-valued advected
             # field and the neighboring-face velocities
             face_ct3 = Geometry.Contravariant3Vector.(face_values)
-            @test_opt opt_Upwind3rdOrderBiasedProductC2F_mixed(
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_Upwind3rdOrderBiasedProductC2F_mixed(
                 face_velocities,
                 centers,
             )
-            @test_opt opt_FCTBorisBook(face_ct3, centers)
-            @test_opt opt_FCTZalesak(face_ct3, centers, centers)
-            @test_opt opt_TVDLimitedFluxC2F(face_ct3, centers, face_ct3)
-            @test_opt opt_LinVanLeerC2F(face_velocities, centers, FT(0.1))
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_FCTBorisBook(
+                face_ct3,
+                centers,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_FCTZalesak(
+                face_ct3,
+                centers,
+                centers,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_TVDLimitedFluxC2F(
+                face_ct3,
+                centers,
+                face_ct3,
+            )
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_LinVanLeerC2F(
+                face_velocities,
+                centers,
+                FT(0.1),
+            )
 
-            @test_opt opt_GradientC2F_SetGradient(centers)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_GradientC2F_SetGradient(
+                centers,
+            )
 
-            @test_opt opt_DivergenceC2F_SetDivergence(centers)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_DivergenceC2F_SetDivergence(
+                centers,
+            )
         end
     end
 end

@@ -2,6 +2,9 @@
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaComms
 import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore:
@@ -265,11 +268,8 @@ using JET
     ρ = Fields.Field(Float64, cspace)
     S = Fields.Field(Float64, cspace)
     ifelsekernel!(S, ρ)
-    # Ignore the runtime dispatch in Threads.threading_run as of Julia 1.10
-    # (UnionAll construction in typejoin, reached through the error message
-    # machinery of sprint), which parallelize_over uses for multithreading
-    filter(@nospecialize f) = f !== Core.UnionAll
-    @test_opt function_filter = filter ifelsekernel!(S, ρ)
+    @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+        JETConfig.function_filter ifelsekernel!(S, ρ)
 end
 
 @testset "dss of FieldVectors" begin

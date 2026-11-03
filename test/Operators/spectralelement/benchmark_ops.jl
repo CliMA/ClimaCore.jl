@@ -1,4 +1,7 @@
 import ClimaCore as CC
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(CC), "test", "TestUtilities", "JETConfig.jl"),
+)
 import DataStructures
 include(
     joinpath(
@@ -114,12 +117,26 @@ using JET
         p = @allocated kernel_complicated_field2_dss!(kernel_args)
         @test p == 0
         # Inference tests
-        JET.@test_opt kernel_scalar_dss!(kernel_args)
-        JET.@test_opt kernel_vector_dss!(kernel_args)
-        JET.@test_opt kernel_field_dss!(kernel_args)
-        JET.@test_opt kernel_ntuple_field_dss!(kernel_args)
-        JET.@test_opt kernel_ntuple_floats_dss!(kernel_args)
-        JET.@test_opt kernel_complicated_field_dss!(kernel_args)
-        JET.@test_opt kernel_complicated_field2_dss!(kernel_args)
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_scalar_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_vector_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_field_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_ntuple_field_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_ntuple_floats_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_complicated_field_dss!(
+            kernel_args,
+        )
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() kernel_complicated_field2_dss!(
+            kernel_args,
+        )
     end
 end

@@ -1,4 +1,7 @@
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore: Spaces, Grids, Topologies
 using Test
 @isdefined(TU) || include(
@@ -10,8 +13,11 @@ ClimaComms.@import_required_backends
 
 using JET
 function test_n_failures(n_allowed, f::F, context) where {F}
-    result = JET.@report_opt f(Float32; context = context)
-    n_found = length(JET.get_reports(result.analyzer, result.result))
+    result = JET.@report_opt ignored_modules = JETConfig.ignored_modules() f(
+        Float32;
+        context = context,
+    )
+    n_found = length(JET.get_reports(result))
     @test n_found ≤ n_allowed
     if n_found < n_allowed
         @info "Inference may have improved for $f: (n_found, n_allowed) = ($n_found, $n_allowed)"
@@ -52,7 +58,7 @@ end
         # separately:
 
         space = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context=ClimaComms.context())
-        result = JET.@report_opt Grids._SpectralElementGrid2D(
+        result = JET.@report_opt ignored_modules = JETConfig.ignored_modules() Grids._SpectralElementGrid2D(
             Spaces.topology(space),
             Spaces.quadrature_style(space),
             ClimaCore.DataLayouts.VIJFH;
@@ -61,7 +67,7 @@ end
             enable_mask = false,
             discretization = Grids.CG(),
         )
-        n_found = length(JET.get_reports(result.analyzer, result.result))
+        n_found = length(JET.get_reports(result))
         # Measured at Float32, GLL{4}, on a CenterExtrudedFiniteDifferenceSpace.
         n_allowed = 107
         @test n_found ≤ n_allowed

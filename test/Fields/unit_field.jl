@@ -5,6 +5,9 @@ using ClimaComms
 ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore.InputOutput
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
@@ -652,10 +655,14 @@ end
     # JET tests
     # prerequisite
     call_getproperty(fv) # compile first
-    @test_opt call_getproperty(fv)
+    @test_opt ignored_modules = JETConfig.ignored_modules() call_getproperty(fv)
 
     call_getcolumn(fv, colidx, device) # compile first
-    @test_opt call_getcolumn(fv, colidx, device)
+    @test_opt ignored_modules = JETConfig.ignored_modules() call_getcolumn(
+        fv,
+        colidx,
+        device,
+    )
     p = @allocated call_getcolumn(fv, colidx, device)
     if ClimaComms.SingletonCommsContext(device) isa ClimaComms.AbstractCPUDevice
         TU.@test_allocations p ≤ 32

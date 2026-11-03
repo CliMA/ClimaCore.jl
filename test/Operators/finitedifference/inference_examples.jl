@@ -3,6 +3,9 @@
 # and views from getproperty (48-96 bytes each), and whether the compiler
 # elides them depends on how much of its inference budget is used up.
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 using ClimaComms
 ClimaComms.@import_required_backends
 using BenchmarkTools
@@ -472,7 +475,10 @@ end
     if !(ClimaComms.device(ffield) isa ClimaComms.CUDADevice)
         # TODO: this fails, but it may not actually be important
         # JET.@test_call jet_test_f2c_interp2(cfield, ffield)
-        JET.@test_opt jet_test_f2c_interp2(cfield, ffield)
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() jet_test_f2c_interp2(
+            cfield,
+            ffield,
+        )
     end
 
     alloc_test_c2f_interp(
