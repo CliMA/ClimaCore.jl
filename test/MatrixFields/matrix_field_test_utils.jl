@@ -131,17 +131,22 @@ const USING_CUDA = comms_device isa ClimaComms.CUDADevice
 cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
 const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
 const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+# CUDA 6 splits CUDA.jl into subpackages, with GPUArrays and most of the device
+# code reached through CUDACore. CUDA 5 keeps all of it in CUDA itself.
+const CUDA_CORE_MOD =
+    USING_CUDA && isdefined(CUDA_MOD, :CUDACore) ? CUDA_MOD.CUDACore : CUDA_MOD
 const CUDA_FRAMES =
     USING_CUDA ?
     (
         AnyFrameModule(CUDA_MOD),
+        AnyFrameModule(CUDA_CORE_MOD),
         AnyFrameModule(CLIMACORE_CUDA_MOD),
         # `Field == Field` bottoms out in GPUArrays' generic `==` for device
         # arrays, whose `mapreduce` accumulator inference cannot resolve. The
         # dispatches are reported against `Base` frames reached through
         # GPUArrays, so only `AnyFrameModule`, which matches any frame in the
         # stack rather than the innermost, excludes them.
-        AnyFrameModule(CUDA_MOD.GPUArrays),
+        AnyFrameModule(CUDA_CORE_MOD.GPUArrays),
     ) : ()
 const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()
 const invalid_ir_error = USING_CUDA ? CUDA_MOD.InvalidIRError : ErrorException

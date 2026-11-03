@@ -1386,15 +1386,19 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     foo = InferenceFoo(2.0)
     device = ClimaComms.CPUSingleThreaded() # cuda fill is broken
     context = ClimaComms.SingletonCommsContext(device)
+    # Julia 1.12 throws a `FieldError` instead of an `ErrorException`.
+    no_field_error(name) =
+        VERSION >= v"1.12" ? FieldError(InferenceFoo{FT}, name) :
+        ErrorException("type InferenceFoo has no field $name")
     for space in TU.all_spaces(FT; context)
         Y = fill((; a = FT(0), b = FT(1)), space)
-        @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
+        @test_throws no_field_error(:bingo) FieldFromNamedTupleBroken(
             space,
             ics_foo,
             FT,
             foo,
         )
-        @test_throws ErrorException("type InferenceFoo has no field baz") FieldFromNamedTupleBroken(
+        @test_throws no_field_error(:baz) FieldFromNamedTupleBroken(
             space,
             ics_foo_with_field,
             FT,
