@@ -4,6 +4,34 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.1.0
+-------
+
+- ![][badge-🚀performance] Grids store their local geometry in
+  `DataLayouts.InvariantArray`s, whose loads are marked invariant
+  (`!invariant.load`) on CPUs and in GPU kernels. Each geometry value that a
+  loop or kernel reads at a point is loaded once, and loads of geometry can be
+  moved across stores. Loops used to reload the Jacobian and metric terms of a
+  point after every barrier or store, e.g., once for each spectral or finite
+  difference operator in a loop over slices. Copies, comparisons, reductions,
+  and broadcasts of the geometry outside of loops and kernels use the methods
+  of the arrays it wraps (e.g., the `CuArray` methods for GPU grids on the
+  host).
+- ![][badge-🔥behavioralΔ] The local geometry of a grid cannot be modified:
+  writes to an `InvariantArray` throw an `ArgumentError`. `copy` and `similar`
+  of a geometry field (e.g., `copy(Fields.coordinate_field(space).z)`) and
+  broadcasts over it return fields of ordinary arrays, which can be modified,
+  while `deepcopy` keeps the `InvariantArray`s.
+- ![][badge-🔥behavioralΔ] `==` compares `FieldVector`s by value: `FieldVector`s
+  with the same component names and equal component values are equal, whatever
+  the types of their arrays (e.g., `InvariantArray`s and `Array`s). For the same
+  reason, `Fields.rcompare` always compares values and no longer takes a
+  `strict` keyword.
+- ![][badge-✨feature/enhancement] `DataLayouts.invariant_data` also wraps the
+  arrays of a `Field`, `FieldVector`, or `FieldNameDict` (e.g., a
+  `FieldMatrix`) in `InvariantArray`s, so that loops and kernels that read them
+  without modifying them load each of their values once.
+
 v1.0.8
 -------
 

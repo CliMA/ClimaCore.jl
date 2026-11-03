@@ -114,7 +114,7 @@ function _MultiPointGrid(
     return MultiPointGrid(
         context,
         global_geometry,
-        DataLayouts.rebuild(local_geometry, DA),
+        DataLayouts.invariant_data(DataLayouts.rebuild(local_geometry, DA)),
     )
 end
 

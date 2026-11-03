@@ -443,6 +443,9 @@ Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 Base.deepcopy_internal(field::Field, stackdict::IdDict) =
     Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
 
+DataLayouts.invariant_data(field::Field) =
+    Field(DataLayouts.invariant_data(field_values(field)), axes(field))
+
 function Base.copyto!(
     dest::Field,
     src::Field,

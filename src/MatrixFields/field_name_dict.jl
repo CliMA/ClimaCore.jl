@@ -134,6 +134,9 @@ function Adapt.adapt_structure(to, dict::FieldNameDict)
     FieldNameDict(keys(dict), vals)
 end
 
+DataLayouts.invariant_data(dict::FieldNameDict) =
+    FieldNameDict(keys(dict), unrolled_map(DataLayouts.invariant_data, values(dict)))
+
 Base.keys(dict::FieldNameDict) = dict.keys
 
 Base.values(dict::FieldNameDict) = dict.entries

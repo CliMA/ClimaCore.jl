@@ -470,7 +470,8 @@ fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, ar
     space = spectral_space_2D()
     FT = Spaces.undertype(space)
     u = Geometry.Covariant12Vector.(ones(space), 2 .* ones(space))
-    x = Fields.coordinate_field(space).x
+    # A copy, so that writing to Y does not modify the geometry of the grid
+    x = copy(Fields.coordinate_field(space).x)
     y = FT[1, 2, 3]
     z = FT(4)
     Y = Fields.FieldVector(u = u, k = (x = x, y = y, z = z))
@@ -483,9 +484,6 @@ fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, ar
     # Entries follow the FieldVector's own linear indexing.
     @test array == [Y[i] for i in eachindex(Y)]
 
-    # `deepcopy` (not `zero`) is used for the round-trip target because `Y.k.x`
-    # is a property view: `zero` materializes its SubArray parent into an owned
-    # Array, which strict `==` treats as a difference.
     Y2 = deepcopy(Y)
     fill!(Y2, 0)
     @test Fields.array2fieldvector!(Y2, array) === Y2
@@ -494,7 +492,7 @@ fv_from_array_allocations(Y, array) = @allocated Fields.array2fieldvector!(Y, ar
 
     # Zero preserves ScalarWrapper components; without a
     # `zero(::ScalarWrapper)` method they would become 0-dimensional Arrays,
-    # changing the FieldVector's type and breaking strict equality.
+    # changing the FieldVector's type.
     Ys = Fields.FieldVector(u = u, z = z)
     @test typeof(zero(Ys)) == typeof(Ys)
     @test zero(Ys).z === zero(FT)
@@ -577,7 +575,7 @@ end
     Y2.bucket.W .= 0.05
 
     Y1 .= Y2 # FieldVector broadcasting
-    @test Fields.rcompare(Y1, Y2; strict = false)
+    @test Fields.rcompare(Y1, Y2)
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1465
@@ -1148,17 +1146,20 @@ function test_adapt_types(space_fn; broken_space_type_match = false)
     end
 end
 
+# Grids store their local geometry in InvariantArrays.
+const InvariantCPUArray = DataLayouts.InvariantArray{<:Any, <:Any, <:Array}
+
 function test_adapt(space_fn)
     cpu_space_in = space_fn(ClimaComms.CPUSingleThreaded())
     test_adapt_space(cpu_space_in)
     cpu_f_in = Fields.Field(Float64, cpu_space_in)
     cpu_f_out = Adapt.adapt(Array, cpu_f_in)
-    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa Array
+    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa InvariantCPUArray
     @test parent(Fields.field_values(cpu_f_out)) isa Array
 
     cpu_f_in = Fields.Field(Float64, cpu_space_in)
     cpu_f_out = ClimaCore.to_device(ClimaComms.CPUSingleThreaded(), cpu_f_in)
-    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa Array
+    @test parent(Spaces.local_geometry_data(axes(cpu_f_out))) isa InvariantCPUArray
     @test parent(Fields.field_values(cpu_f_out)) isa Array
 
     @static if ClimaComms.device() isa ClimaComms.CUDADevice
@@ -1185,8 +1186,8 @@ end
 
 function test_adapt_fieldvector(fv_in)
     cpu_fv_out = Adapt.adapt(Array, fv_in)
-    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.c))) isa Array
-    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.f))) isa Array
+    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.c))) isa InvariantCPUArray
+    @test parent(Spaces.local_geometry_data(axes(cpu_fv_out.f))) isa InvariantCPUArray
     @test parent(Fields.field_values(cpu_fv_out.c)) isa Array
     @test parent(Fields.field_values(cpu_fv_out.f)) isa Array
 
@@ -1205,15 +1206,16 @@ end
 function test_adapt_space(cpu_space_in)
     # cpu -> cpu
     cpu_space_out = Adapt.adapt(Array, cpu_space_in)
-    @test parent(Spaces.local_geometry_data(cpu_space_out)) isa Array
+    @test parent(Spaces.local_geometry_data(cpu_space_out)) isa InvariantCPUArray
 
     @static if ClimaComms.device() isa ClimaComms.CUDADevice
         # cpu -> gpu
         gpu_space_out = Adapt.adapt(CUDA.CuArray, cpu_space_in)
-        @test parent(Spaces.local_geometry_data(gpu_space_out)) isa CUDA.CuArray
+        @test parent(Spaces.local_geometry_data(gpu_space_out)) isa
+              DataLayouts.InvariantArray{<:Any, <:Any, <:CUDA.CuArray}
         # gpu -> gpu
         cpu_space_out = Adapt.adapt(Array, gpu_space_out)
-        @test parent(Spaces.local_geometry_data(cpu_space_out)) isa Array
+        @test parent(Spaces.local_geometry_data(cpu_space_out)) isa InvariantCPUArray
     end
 end
 

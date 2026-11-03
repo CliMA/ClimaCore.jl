@@ -159,7 +159,8 @@ function _SpectralElementGrid1D(
         )
     end
 
-    device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
+    device_local_geometry =
+        DataLayouts.invariant_data(DataLayouts.rebuild(local_geometry, DA))
     return SpectralElementGrid1D(
         topology,
         quadrature_style,
@@ -599,7 +600,8 @@ function _SpectralElementGrid2D(
         boundary_surface_geometries = nothing
     end
 
-    device_local_geometry = DataLayouts.rebuild(local_geometry, DA)
+    device_local_geometry =
+        DataLayouts.invariant_data(DataLayouts.rebuild(local_geometry, DA))
     # Construct the mask from the device-side geometry, so that its data is
     # stored on the same device as the rest of the grid.
     mask =

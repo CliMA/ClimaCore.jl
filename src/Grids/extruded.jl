@@ -128,8 +128,8 @@ function _ExtrudedFiniteDifferenceGrid(
         vertical_grid,
         hypsography,
         global_geometry,
-        center_local_geometry,
-        face_local_geometry,
+        DataLayouts.invariant_data(center_local_geometry),
+        DataLayouts.invariant_data(face_local_geometry),
     )
 end
 

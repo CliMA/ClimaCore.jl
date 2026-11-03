@@ -4,6 +4,7 @@ import Base: @propagate_inbounds, unsafe_load
 import LLVM # for the `unsafe_load` methods on `Core.LLVMPtr`
 import StaticArrays
 import BlockArrays
+import LinearAlgebra
 import Adapt
 
 import ClimaComms
@@ -22,6 +23,7 @@ import ..slab, ..column, ..level
 export DataScope, DataLayout, DataF, VIJFH, VIJHF, VIH1, IH1JH2
 
 include("bitcast_struct.jl")
+include("invariant_arrays.jl")
 include("struct_storage.jl")
 include("scopes.jl")
 

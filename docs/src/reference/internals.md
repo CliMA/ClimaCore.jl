@@ -48,6 +48,8 @@ CurrentModule = ClimaCore.DataLayouts
 ```
 
 ```@docs
+InvariantArray
+invariant_data
 RegisterArray
 DataLayouts.register_similar
 DataLayouts.buffer_similar

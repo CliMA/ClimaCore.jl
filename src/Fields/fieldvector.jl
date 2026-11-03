@@ -42,9 +42,10 @@ Base.size(::ScalarWrapper) = ()
 Base.getindex(s::ScalarWrapper) = s.val
 Base.setindex!(s::ScalarWrapper, value) = s.val = value
 Base.similar(s::ScalarWrapper) = ScalarWrapper(s.val)
+
 # Without this method, zero(::ScalarWrapper) would return a 0-dimensional
 # Array, so zero(::FieldVector) would not preserve the component types of
-# FieldVectors with scalar components (breaking strict equality with them).
+# FieldVectors with scalar components.
 Base.zero(s::ScalarWrapper) = ScalarWrapper(zero(s.val))
 
 """
@@ -171,6 +172,9 @@ Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
 
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, field_vector_values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, field_vector_values(fv)))
+
+DataLayouts.invariant_data(fv::FieldVector{T}) where {T} =
+    FieldVector{T}(map(DataLayouts.invariant_data, field_vector_values(fv)))
 
 for op in (:level, :slab, :column)
     @eval Base.@propagate_inbounds $op(fv::FieldVector{T}, inds...) where {T} =
@@ -875,61 +879,36 @@ macro rprint_diff(x, y)
 end
 
 
-# Recursively compare contents of similar fieldvectors
-_rcompare(pass, x::T, y::T; strict) where {T <: Field} =
-    pass && _rcompare(pass, field_values(x), field_values(y); strict)
-_rcompare(pass, x::T, y::T; strict) where {T <: DataLayouts.DataLayout} =
+# Recursively compare the values of the components of FieldVectors or NamedTuples, with the
+# parent arrays of fields and data layouts of the same type compared directly
+_rcompare(pass, x::T, y::T) where {T <: Field} =
+    pass && _rcompare(pass, field_values(x), field_values(y))
+_rcompare(pass, x::T, y::T) where {T <: DataLayouts.DataLayout} =
     pass && (parent(x) == parent(y))
-_rcompare(pass, x::T, y::T; strict) where {T} = pass && (x == y)
+_rcompare(pass, x::Field, y::Field) = pass && (field_values(x) == field_values(y))
+_rcompare(pass, x, y) = pass && (x == y)
+_rcompare(pass, x::NamedTuple, y::NamedTuple) = _rcompare_nt(pass, x, y)
+_rcompare(pass, x::FieldVector, y::FieldVector) = _rcompare_nt(pass, x, y)
 
-_rcompare(pass, x::NamedTuple, y::NamedTuple; strict) =
-    _rcompare_nt(pass, x, y; strict)
-_rcompare(pass, x::FieldVector, y::FieldVector; strict) =
-    _rcompare_nt(pass, x, y; strict)
-
-function _rcompare_nt(pass, x, y; strict)
+function _rcompare_nt(pass, x, y)
     length(propertynames(x)) ≠ length(propertynames(y)) && return false
-    if strict
-        typeof(x) == typeof(y) || return false
-    end
     for pn in propertynames(x)
-        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn); strict)
+        pn in propertynames(y) || return false
+        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn))
     end
     return pass
 end
 
 """
-    rcompare(x::T, y::T; strict = true) where {T <: Union{FieldVector, NamedTuple}}
+    rcompare(x, y)
 
-Recursively compare `x` and `y` via `==`; return `true` if all components are
-equal.
-
-With `strict = true`, the types must match as well, and `FieldVector`s or
-`NamedTuple`s of different types compare unequal. With `strict = false`,
-`rcompare` returns `true` for `FieldVector`s and `NamedTuple`s with the same
-properties in permuted order. For example:
-
-  - `rcompare((; a = 1, b = 2), (; b = 2, a = 1); strict = true)` returns `false`.
-  - `rcompare((; a = 1, b = 2), (; b = 2, a = 1); strict = false)` returns `true`.
+Recursively compare the components of the `FieldVector`s or `NamedTuple`s `x` and `y` via
+`==`; return `true` if they have the same component names and equal component values. The
+types of the components do not have to match (e.g., fields of `InvariantArray`s and of
+`Array`s are compared by their values), and the components can be in any order:
+`rcompare((; a = 1, b = 2), (; b = 2, a = 1))` returns `true`.
 """
-rcompare(
-    x::T,
-    y::T;
-    strict = true,
-) where {T <: Union{FieldVector, NamedTuple}} = _rcompare(true, x, y; strict)
+rcompare(x::FieldVector, y::FieldVector) = _rcompare(true, x, y)
+rcompare(x::NamedTuple, y::NamedTuple) = _rcompare(true, x, y)
 
-rcompare(x::T, y::T; strict = true) where {T <: FieldVector} =
-    _rcompare(true, x, y; strict)
-
-rcompare(x::T, y::T; strict = true) where {T <: NamedTuple} =
-    _rcompare(true, x, y; strict)
-
-# FieldVectors with different types are always different
-rcompare(x::FieldVector, y::FieldVector; strict::Bool = true) =
-    strict ? false : _rcompare(true, x, y; strict)
-
-rcompare(x::NamedTuple, y::NamedTuple; strict::Bool = true) =
-    strict ? false : _rcompare(true, x, y; strict)
-
-# Define == to call rcompare for two fieldvectors
-Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y; strict = true)
+Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y)

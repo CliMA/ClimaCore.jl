@@ -136,10 +136,17 @@ const ViewDimIndex = Union{
     UnitRange{<:Integer},
 }
 
+# Arrays of device memory, including the InvariantArrays of grid geometry
+const InvariantDeviceArray = DataLayouts.InvariantArray{<:Any, <:Any, <:CUDA.CuDeviceArray}
+# Arrays of device memory on the host, including the InvariantArrays of grid geometry
+const HostDeviceArray =
+    Union{CUDA.CuArray, DataLayouts.InvariantArray{<:Any, <:Any, <:CUDA.CuArray}}
+const DenseDeviceArray = Union{CUDA.CuDeviceArray, InvariantDeviceArray}
+
 # Kernels inline every call, so every parent access in a kernel assumes the extents
 # fixed by a layout's type (like DataLayouts.reassign, but for all parent accesses).
 @inline function Base.parent(
-    data::DataLayouts.VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, <:CUDA.CuDeviceArray},
+    data::DataLayouts.VIJHWithF{T, Nv, Ni, Nj, Nh, F, S, <:DenseDeviceArray},
 ) where {T, Nv, Ni, Nj, Nh, F, S}
     array = getfield(data, :array)
     extents = DataLayouts.inferred_parent_extents(data, array)
@@ -190,7 +197,7 @@ end
 # take several instructions at every point. Point views have Int offsets, so that the
 # offsets of their components fold into the immediate offsets of memory accesses (see
 # Utilities.linear_index_and_stride).
-const DeviceArray = Union{CUDA.CuDeviceArray, CompactDeviceView}
+const DeviceArray = Union{DenseDeviceArray, CompactDeviceView}
 const DeviceSubArray = Utilities.UnitRangeSubArray{<:DeviceArray}
 
 @inline function Utilities.dense_array_and_index(
@@ -217,13 +224,13 @@ end
     return (parent(array), (parent_index, parent_stride))
 end
 @inline device_offset_and_stride(
-    array::CUDA.CuDeviceArray,
+    array::DenseDeviceArray,
     index::Integer,
     stride::Integer,
 ) = (array, (index, stride % UInt32))
 
 # One method per type: JET would union-split a Union method on hosts and report its calls.
-for A in (:(CUDA.CuDeviceArray), :CompactDeviceView, :DeviceSubArray)
+for A in (:(CUDA.CuDeviceArray), :InvariantDeviceArray, :CompactDeviceView, :DeviceSubArray)
     @eval Base.@propagate_inbounds DataLayouts.parent_array_and_index_args(
         array::$A,
         (index, val_F)::Tuple{CartesianIndex, Val},
@@ -234,10 +241,10 @@ end
 # of ReshapedArrays at StridedRanges. Cartesian components also keep linear indices of
 # layouts with several components from being converted to strided parent indices.
 DataLayouts.has_cartesian_components(
-    ::Union{CUDA.CuArray, Utilities.UnitRangeSubArray{<:CUDA.CuArray}},
+    ::Union{HostDeviceArray, Utilities.UnitRangeSubArray{<:HostDeviceArray}},
 ) = true
 DataLayouts.parent_array_and_index_args(
-    array::Union{CUDA.CuArray, Utilities.UnitRangeSubArray{<:CUDA.CuArray}},
+    array::Union{HostDeviceArray, Utilities.UnitRangeSubArray{<:HostDeviceArray}},
     index_args::Tuple{CartesianIndex, Val},
 ) = (array, index_args)
 

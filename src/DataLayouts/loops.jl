@@ -923,15 +923,18 @@ end
 # Optimize unmasked equality checks for similar layouts with the same packed
 # (un-padded) element types by deferring to their parent arrays. Padded values
 # should not be compared in this way, since equality must not depend on padding.
-# Parent arrays with mismatched dimensions are flattened before being compared.
+# Parent arrays with mismatched dimensions are flattened before being compared, and arrays
+# wrapped in InvariantArrays are unwrapped.
 @inline Base.:(==)(arg1::DataLayout, arg2::DataLayout; mask = NoMask()) =
     size(arg1) == size(arg2) && (
         mask != NoMask() ||
         !(eltype(arg1) == eltype(arg2) && Base.ispacked(eltype(arg1))) ||
         !(layout_type(arg1) == layout_type(arg2) && f_dim(arg1) == f_dim(arg2)) ?
         mapreduce(all ∘ ==, &, arg1, arg2; mask, init = true) :
-        ndims(parent(arg1)) == ndims(parent(arg2)) ? parent(arg1) == parent(arg2) :
-        stable_view(parent(arg1), :) == stable_view(parent(arg2), :)
+        ndims(parent(arg1)) == ndims(parent(arg2)) ?
+        unwrap_invariant(parent(arg1)) == unwrap_invariant(parent(arg2)) :
+        unwrap_invariant(stable_view(parent(arg1), :)) ==
+        unwrap_invariant(stable_view(parent(arg2), :))
     )
 @inline Base.:(==)(arg1::MaybeLazyDataLayout, arg2::MaybeLazyDataLayout; kwargs...) =
     size(arg1) == size(arg2) &&

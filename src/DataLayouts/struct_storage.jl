@@ -305,8 +305,12 @@ end
 
 @inline unchecked_view_struct(array, val_Nf, index...) =
     @inbounds stable_view(array, struct_indices(array, val_Nf, index...)...)
-@inline unchecked_view_struct(array::Array, ::Val{Nf}, i::Integer, s::Integer) where {Nf} =
-    PointView{eltype(array), Nf, typeof(array)}(array, i, s)
+@inline unchecked_view_struct(
+    array::Union{Array, InvariantArray{<:Any, <:Any, <:Array}},
+    ::Val{Nf},
+    i::Integer,
+    s::Integer,
+) where {Nf} = PointView{eltype(array), Nf, typeof(array)}(array, i, s)
 
 # A view of the Nf entries of a value in an array, with a linear index and a stride.
 struct PointView{T, Nf, A <: AbstractArray{T}} <: AbstractVector{T}
