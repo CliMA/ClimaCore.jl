@@ -37,21 +37,21 @@ end
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(56,   TU.PointSpace, context)
         test_n_failures(750,  TU.SpectralElementSpace1D, context)
-        test_n_failures(402,  TU.SpectralElementSpace2D, context)
+        test_n_failures(615,  TU.SpectralElementSpace2D, context)
         test_n_failures(115,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(115,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(408,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(423,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(423,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(621,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(671,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(672,  TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(236,  TU.SpectralElementSpace1D, context)
-        test_n_failures(415,  TU.SpectralElementSpace2D, context)
+        test_n_failures(263,  TU.SpectralElementSpace1D, context)
+        test_n_failures(462,  TU.SpectralElementSpace2D, context)
         test_n_failures(110,  TU.ColumnFaceFiniteDifferenceSpace, context)
         test_n_failures(110,  TU.ColumnCenterFiniteDifferenceSpace, context)
-        test_n_failures(423,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(460,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(461,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(468,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(511,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(512,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those

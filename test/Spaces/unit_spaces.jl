@@ -138,10 +138,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
     # Without a mask, sqrt(-1) is evaluated everywhere and throws a DomainError.
     # On GPU, it raises from inside the kernel and arrives as a
-    # CUDA.KernelException, so assert only that it is thrown there.
-    no_mask_sqrt() =
+    # CUDA.KernelException, so assert only that it is thrown there. Kernels run
+    # asynchronously, so the exception is only raised once the device is
+    # synchronized.
+    device = ClimaComms.device(ᶜspace_no_mask)
+    no_mask_sqrt() = ClimaComms.@cuda_sync device begin
         @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-    if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
+    end
+    if device isa ClimaComms.CUDADevice
         @test_throws Exception no_mask_sqrt()
     else
         @test_throws DomainError no_mask_sqrt()
