@@ -1373,9 +1373,9 @@ uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2025.11.4"
 
 [[deps.MultiBroadcastFusion]]
-git-tree-sha1 = "e66130ebb9b05c01baddd58566a20ec49ee8834d"
+git-tree-sha1 = "bdbbad5375a802f983bd3ad4a68e091e6297f90b"
 uuid = "c3c07f87-98de-43f2-a76f-835b330b2cbb"
-version = "0.3.4"
+version = "0.3.5"
 weakdeps = ["Adapt", "CUDA"]
 
     [deps.MultiBroadcastFusion.extensions]
