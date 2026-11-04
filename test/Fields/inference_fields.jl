@@ -91,7 +91,7 @@ function fast_broadcast_single_field!(Y1, dt, Y2)
     @.. x += 2.0
     nothing
 end
-# Removing dt from argument fixes allocations
+# Allocated with dt in the arguments before Julia 1.12
 function fast_broadcast_copyto!(Y1, dt, Y2)
     @.. Y1 = Y2
     nothing
@@ -109,7 +109,7 @@ end
         TU.@test_allocations p == 0
         fast_broadcast_copyto!(Y1, dt, Y2)
         p = @allocated fast_broadcast_copyto!(Y1, dt, Y2)
-        @test_broken p == 0
+        TU.@test_allocations p == 0
     end
 end
 
@@ -152,8 +152,19 @@ end
     end
 end
 
+# Allocations are measured from calls to functions: an inline `@allocated` can
+# report bytes that are not allocated by the code it measures, depending on how
+# the surrounding code is compiled.
+function call_zero!(Y)
+    Y .= 0
+    nothing
+end
 function call_zero_eltype!(Y)
     Y .= zero(eltype(Y))
+    nothing
+end
+function call_fill_zero_eltype!(Y)
+    fill!(Y, zero(eltype(Y)))
     nothing
 end
 # https://github.com/CliMA/ClimaCore.jl/issues/983
@@ -165,22 +176,16 @@ end
             f = fill((; x = FT(0)), space),
         )
 
-        Y .= 0 # compile first
-        p = @allocated begin
-            Y .= 0
-            nothing
-        end
+        call_zero!(Y) # compile first
+        p = @allocated call_zero!(Y)
         TU.@test_allocations p == 0
 
         call_zero_eltype!(Y) # compile first
         p = @allocated call_zero_eltype!(Y)
         TU.@test_allocations p == 0
 
-        fill!(Y, zero(eltype(Y))) # compile first
-        p = @allocated begin
-            fill!(Y, zero(eltype(Y)))
-            nothing
-        end
+        call_fill_zero_eltype!(Y) # compile first
+        p = @allocated call_fill_zero_eltype!(Y)
         TU.@test_allocations p == 0
     end
 end

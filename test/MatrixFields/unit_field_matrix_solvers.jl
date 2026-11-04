@@ -16,7 +16,16 @@ include("matrix_field_test_utils.jl")
 @noinline mul_allocs(b, A, x) = @allocated mul!(b, A, x)
 @noinline ldiv_allocs(x, A, b) = @allocated ldiv!(x, A, b)
 
-function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
+# `max_eps_error` is the largest error allowed, in units of eps, when
+# `use_rel_error` is false.
+function test_field_matrix_solver(;
+    test_name,
+    alg,
+    A,
+    b,
+    use_rel_error = false,
+    max_eps_error = 3,
+)
     @testset "$test_name" begin
         x = similar(b)
         A′ = FieldMatrixWithSolver(A, b, alg)
@@ -56,8 +65,8 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
             error_string = "Relative Error = $rel_error_rounded"
         else
             max_error = maximum(error_vector)
-            max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
-            error_string = "Maximum Error = $max_eps_error eps"
+            eps_error = ceil(Int, max_error / eps(typeof(max_error)))
+            error_string = "Maximum Error = $eps_error eps"
         end
 
         @debug "$test_name:$timing_info\n\t$error_string"
@@ -65,7 +74,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         if use_rel_error
             @test rel_error < 1e-5
         else
-            @test max_eps_error <= 3
+            @test eps_error <= max_eps_error
         end
 
         USING_CUDA ||
@@ -152,6 +161,9 @@ end
                 (@name(f), @name(f)) => ᶠᶠmat5,
             ),
             b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec),
+            # The concurrent updates on GPUs leave more error after n_iters
+            max_eps_error = USING_CUDA &&
+                            alg isa MatrixFields.StationaryIterativeSolve ? 27 : 3,
         )
     end
 
@@ -490,6 +502,7 @@ end
         ),
         A = A_moist_dycore_prognostic_edmf_prognostic_surface,
         b = b_moist_dycore_prognostic_edmf_prognostic_surface,
+        max_eps_error = USING_CUDA ? 4 : 3,
     )
 end
 

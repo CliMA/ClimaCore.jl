@@ -16,7 +16,8 @@ import ClimaCore:
     Geometry,
     Operators,
     DeviceSideContext,
-    DeviceSideDevice
+    DeviceSideDevice,
+    to_device
 
 using ClimaCore.CommonSpaces
 using ClimaCore.Utilities.Cache
@@ -318,12 +319,17 @@ end
     @test length(Spaces.unique_nodes(hspace)) == 4
     @test length(Spaces.all_nodes(hspace)) == 4
 
+    # These spaces are built on the CPU, and CUDA's KernelAdaptor rejects CPU
+    # arrays, so they are moved to the GPU before being adapted for a kernel.
     @static if on_gpu
-        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), c_space)
+        gpu = ClimaComms.CUDADevice()
+        adapted_space =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, c_space))
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
 
-        adapted_hspace = Adapt.adapt(CUDA.KernelAdaptor(), hspace)
+        adapted_hspace =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, hspace))
         @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
         @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
     end
@@ -410,8 +416,12 @@ end
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
 
+    # The space is built on the CPU, and CUDA's KernelAdaptor rejects CPU
+    # arrays, so it is moved to the GPU before being adapted for a kernel.
     @static if on_gpu
-        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), space)
+        gpu = ClimaComms.CUDADevice()
+        adapted_space =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, space))
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
     end
