@@ -4,6 +4,9 @@ import Random
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore: Spaces, Fields, Operators
 import ClimaCore.Operators:
     column_integral_definite!,
@@ -15,19 +18,6 @@ import ClimaCore.Operators:
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 );
 import .TestUtilities as TU;
-
-# CUDA is only needed to prune JET reports raised from CUDA frames, and it is
-# absent from the CPU-only test environment that `Pkg.test` builds. Reach it
-# through the ClimaComms extension (which `@import_required_backends` loads
-# only on a CUDA device) rather than importing it outright, and prune nothing
-# when there is no GPU. This mirrors MatrixFields/matrix_field_test_utils.jl.
-const USING_CUDA = ClimaComms.device() isa ClimaComms.CUDADevice
-cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
-const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
-const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
-const CUDA_FRAMES =
-    USING_CUDA ?
-    (AnyFrameModule(CUDA_MOD), AnyFrameModule(CLIMACORE_CUDA_MOD)) : ()
 
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
 center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
@@ -61,7 +51,10 @@ function test_column_integral_definite!(center_space)
     @test max_relative_error <= 0.006 # Less than 0.6% error.
 
 
-    @test_opt ignored_modules = CUDA_FRAMES column_integral_definite!(∫u_test, ᶜu)
+    @test_opt ignored_modules = JETConfig.ignored_modules() column_integral_definite!(
+        ∫u_test,
+        ᶜu,
+    )
 
     test_allocs(@allocated column_integral_definite!(∫u_test, ᶜu))
 end
@@ -80,7 +73,10 @@ function test_column_integral_indefinite!(center_space)
     max_relative_error = maximum(@. abs((ref_array - test_array) / ref_array))
     @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-    @test_opt ignored_modules = CUDA_FRAMES column_integral_indefinite!(ᶠ∫u_test, ᶜu)
+    @test_opt ignored_modules = JETConfig.ignored_modules() column_integral_indefinite!(
+        ᶠ∫u_test,
+        ᶜu,
+    )
 
     test_allocs(@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu))
 end
@@ -101,7 +97,7 @@ function test_column_integral_indefinite_fn!(center_space)
             maximum(@. abs((ref_array - test_array) / ref_array))
         @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-        @test_opt ignored_modules = CUDA_FRAMES column_integral_indefinite!(
+        @test_opt ignored_modules = JETConfig.ignored_modules() column_integral_indefinite!(
             fn,
             ᶠ∫u_test,
         )
@@ -151,7 +147,7 @@ function test_column_reduce_and_accumulate!(center_space)
         set_output! = () -> column_reduce!(f, output, input; init, transform, reverse)
         set_output!()
         @test output == reference_output
-        @test_opt ignored_modules = CUDA_FRAMES set_output!()
+        @test_opt ignored_modules = JETConfig.ignored_modules() set_output!()
         test_allocs(@allocated set_output!())
     end
 
@@ -172,7 +168,7 @@ function test_column_reduce_and_accumulate!(center_space)
             () -> column_accumulate!(f, output, input; init, transform, reverse)
         set_output!()
         @test output == reference_output
-        @test_opt ignored_modules = CUDA_FRAMES set_output!()
+        @test_opt ignored_modules = JETConfig.ignored_modules() set_output!()
         test_allocs(@allocated set_output!())
     end
 
@@ -239,7 +235,7 @@ function test_column_reduce_and_accumulate_lazy!(center_space)
             reduce!(scale, Base.Broadcast.broadcasted(abs, materialized_input))
             @test parent(output) ≈ parent(reference) rtol = 100 * eps(FT) atol =
                 100 * eps(FT) * maximum(abs, parent(scale))
-            @test_opt ignored_modules = CUDA_FRAMES reduce!(output, input)
+            @test_opt ignored_modules = JETConfig.ignored_modules() reduce!(output, input)
             test_allocs(@allocated reduce!(output, input))
         end
     end
@@ -285,7 +281,7 @@ function test_column_reduce_and_accumulate_column_fields!(center_space)
             reduce!(reference, reference_input)
             reduce!(output, input)
             @test parent(output) ≈ parent(reference) rtol = 100 * eps(FT)
-            @test_opt ignored_modules = CUDA_FRAMES reduce!(output, input)
+            @test_opt ignored_modules = JETConfig.ignored_modules() reduce!(output, input)
         end
     end
 end
