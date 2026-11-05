@@ -23,7 +23,8 @@ z_elem = parse(Int, get(ENV, "Z_ELEM", "10"))
 t_end = FT(60 * 60 * 24 * 10)
 dt = parse(FT, get(ENV, "DT", is_dg ? "100" : "400"))
 dt_save_to_sol = FT(60 * 60 * 24)
-dt_save_to_disk = FT(0) # 0 means don't save to disk
+dt_save_to_disk = parse(FT, get(ENV, "DT_SAVE_TO_DISK", "0")) # 0: no disk output
+show_progress_bar = get(ENV, "PROGRESS", "0") == "1"
 ode_algorithm = CTS.SSP333
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
