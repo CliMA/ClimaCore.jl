@@ -8,7 +8,7 @@
 # vectors), `ψ = Φ − Φ_r(p)`, `θ = θ′ = θ − θ_r(p)` and `Π` (Exner function).
 
 import LinearAlgebra
-import ClimaCore: Geometry
+import ClimaCore: Geometry, Operators, Fields, Spaces
 
 ##
 ## Two-point volume fluxes
@@ -88,6 +88,46 @@ end
         (ρ⁻ + ρ⁺) / 2 *
         ((ψ⁺ - ψ⁻) / 2 + f.cp_d * (θ⁻ + θ⁺) / 2 * (Π⁺ - Π⁻) / 2)
     ) * normal
+
+"""
+    add_kpep_vertical_force!(ρuₕₜ, cp_d, ρ, ψ, θ, Π)
+
+Subtract from `ρuₕₜ` the part of the two-point Exner force along `ξ³`, which
+is horizontal on terrain-following levels:
+
+    ρ / J ⋅ I_c( J (∇ξ³)ₕ [δψ + c_pd I_f(θ′) δΠ] ),
+
+with the face differences `δ` and the interpolations `I_f`, `I_c`. With the
+vertical mass flux `I_f(ρuₕ) ⋅ J∇ξ³` the geopotential part exchanges kinetic
+and potential energy exactly, as the horizontal part does with `{ρ}{u_n}`.
+The term vanishes on flat levels, at the hydrostatic reference and on a
+uniform state; the boundary faces carry no force.
+"""
+function add_kpep_vertical_force!(ρuₕₜ, cp_d, ρ, ψ, θ, Π)
+    FT = eltype(ρ)
+    C3 = Geometry.Covariant3Vector
+    ᶜinterp = Operators.InterpolateF2C()
+    ᶠinterp = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    ᶠgradᵥ = Operators.GradientC2F(
+        bottom = Operators.SetGradient(C3(zero(FT))),
+        top = Operators.SetGradient(C3(zero(FT))),
+    )
+    ᶜJ = Fields.local_geometry_field(axes(ρ)).J
+    ᶠlg = Fields.local_geometry_field(Spaces.face_space(axes(ρ)))
+    @. ρuₕₜ -=
+        ρ / ᶜJ * ᶜinterp(
+            ᶠlg.J * horizontal_part(
+                ᶠgradᵥ(ψ) + cp_d * ᶠinterp(θ) * ᶠgradᵥ(Π),
+                ᶠlg,
+            ),
+        )
+    return ρuₕₜ
+end
+horizontal_part(v, lg) =
+    Geometry.project(Geometry.UVAxis(), Geometry.LocalVector(v, lg))
 
 ##
 ## Interface fluxes

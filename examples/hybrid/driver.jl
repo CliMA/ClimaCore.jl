@@ -11,6 +11,7 @@ horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0
 z_max = 0
 z_elem = 0
+surface_elevation = nothing # function of the horizontal coordinate, or flat
 t_end = 0
 dt = 0
 dt_save_to_sol = 0 # 0 means don't save to sol
@@ -135,7 +136,7 @@ else
         discretization,
     )
     center_space, face_space =
-        make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
+        make_hybrid_spaces(h_space, z_max, z_elem; z_stretch, surface_elevation)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶠlocal_geometry = Fields.local_geometry_field(face_space)
     Y = Fields.FieldVector(
@@ -240,7 +241,13 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
             discretization,
         )
         global_center_space, global_face_space =
-            make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
+            make_hybrid_spaces(
+                global_h_space,
+                z_max,
+                z_elem;
+                z_stretch,
+                surface_elevation,
+            )
         global_Y_c_type =
             Fields.Field{typeof(global_Y_c_1), typeof(global_center_space)}
         global_Y_f_type =

@@ -127,7 +127,8 @@ struct FluxForm end
 momentum_form(Yc) =
     hasfield(eltype(Yc), :ρuₕ) ? FluxForm() : VectorInvariantForm()
 
-# Flux-form velocities, into cache scratch.
+# Flux-form velocities, into cache scratch: the physical `uₕ` and the `C3`
+# component of `w ẑ`, so the velocity is `C123(uₕ) + C123(WVector(w))`.
 function flux_form_velocities!(Y, p)
     @. p.ᶜuₕ = Y.c.ρuₕ / Y.c.ρ
     @. p.ᶠw = Y.f.ρw / ᶠinterp(Y.c.ρ)
@@ -247,11 +248,11 @@ function implicit_tendency!(::FluxForm, Yₜ, Y, p, t)
     ᶠρw = Y.f.ρw
     (; ᶜK, ᶜΦ, ᶜp) = p
     ᶜuₕ, ᶠw = flux_form_velocities!(Y, p)
-    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(Geometry.WVector(ᶜinterp(ᶠw)))) / 2
     @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
 
-    @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠρw))
-    @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠρw * ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ)))
+    @. Yₜ.c.ρ = -(ᶜdivᵥ(Geometry.WVector(ᶠρw)))
+    @. Yₜ.c.ρe = -(ᶜdivᵥ(Geometry.WVector(ᶠρw) * ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ)))
     Yₜ.c.ρuₕ .= (zero(eltype(Yₜ.c.ρuₕ)),)
     # Exner form, times the face density
     @. Yₜ.f.ρw = -(
@@ -351,18 +352,22 @@ function implicit_equation_jacobian!(::FluxForm, j, Y, p, δtγ, t)
     ᶜρ = Y.c.ρ
     (; ᶜK, ᶜΦ, ᶜp) = p
     ᶜuₕ, ᶠw = flux_form_velocities!(Y, p)
-    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(Geometry.WVector(ᶜinterp(ᶠw)))) / 2
     @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
 
     ᶜρ_name = @name(c.ρ)
     ᶜ𝔼_name = @name(c.ρe)
     ᶠ𝕄_name = @name(f.ρw)
-    ᶠgⁱʲ = Fields.local_geometry_field(Y.f).gⁱʲ
-    g³³(gⁱʲ) = reshape(
-        gⁱʲ,
-        Geometry.Contravariant3Axis(),
-        Geometry.Contravariant3Axis(),
-    )
+    ᶠlg = Fields.local_geometry_field(Y.f)
+    # `∂CT3(WVector(ρw))/∂ρw`: `g³³` with only its vertical part, `(∂ξ³/∂z)²`.
+    function w³³(lg)
+        g³³ = reshape(
+            lg.gⁱʲ,
+            Geometry.Contravariant3Axis(),
+            Geometry.Contravariant3Axis(),
+        )
+        return g³³ * (lg.∂ξ∂x[3, 3]^2 / g³³[1, 1])
+    end
 
     ∂ᶜρₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜρ_name, ᶠ𝕄_name]
     ∂ᶜ𝔼ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶜ𝔼_name, ᶠ𝕄_name]
@@ -370,11 +375,11 @@ function implicit_equation_jacobian!(::FluxForm, j, Y, p, δtγ, t)
     ∂ᶠ𝕄ₜ∂ᶜ𝔼 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶜ𝔼_name]
     ∂ᶠ𝕄ₜ∂ᶠ𝕄 = ∂Yₜ∂Y[ᶠ𝕄_name, ᶠ𝕄_name]
 
-    # ᶜρₜ = -ᶜdivᵥ(ᶠρw), ᶜρeₜ = -ᶜdivᵥ(ᶠρw * ᶠinterp(ᶜh_tot))
-    @. ∂ᶜρₜ∂ᶠ𝕄 = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(g³³(ᶠgⁱʲ))
+    # ᶜρₜ = -ᶜdivᵥ(WVector(ᶠρw)), ᶜρeₜ = -ᶜdivᵥ(WVector(ᶠρw) * ᶠinterp(ᶜh_tot))
+    @. ∂ᶜρₜ∂ᶠ𝕄 = -(ᶜdivᵥ_matrix()) * DiagonalMatrixRow(w³³(ᶠlg))
     @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
         -(ᶜdivᵥ_matrix()) *
-        DiagonalMatrixRow(ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ) * g³³(ᶠgⁱʲ))
+        DiagonalMatrixRow(ᶠinterp((Y.c.ρe + ᶜp) / ᶜρ) * w³³(ᶠlg))
     # ᶠρwₜ = -ᶠgradᵥ(ᶜp) - ᶠinterp(ᶜρ) * ᶠgradᵥ(ᶜΦ), with
     # ∂p/∂ρe = R_d / cv_d and ∂p/∂ρ = R_d * (T_tri - (ᶜK + ᶜΦ) / cv_d)
     @. ∂ᶠ𝕄ₜ∂ᶜ𝔼 = -(ᶠgradᵥ_matrix() * R_d / cv_d)

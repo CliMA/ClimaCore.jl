@@ -233,7 +233,9 @@ function default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t)
     ᶜcoords = Fields.coordinate_field(ᶜspace)
     ᶠcoords = Fields.coordinate_field(ᶠspace)
 
-    @. ᶜu = Geometry.UVWVector(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw)))
+    @. ᶜu = Geometry.UVWVector(
+        C123(ᶜuₕ) + C123(Geometry.WVector(ᶜinterp(ᶠw))),
+    )
     @. ᶜu_cart = Geometry.CartesianVector(ᶜu, geometry, ᶜcoords)
     @. ᶜK = norm_sqr(ᶜu) / 2
     @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
@@ -245,7 +247,9 @@ function default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t)
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
     @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
     # Vertical flux of `ρuₕ`, rotated to Cartesian and back.
-    @. ᶠu = Geometry.UVWVector(C123(ᶠinterp(ᶜuₕ)) + C123(ᶠw))
+    @. ᶠu = Geometry.UVWVector(
+        C123(ᶠinterp(ᶜuₕ)) + C123(Geometry.WVector(ᶠw)),
+    )
     @. ᶠT_cart = Geometry.CartesianTensor(
         dg_momentum_transport(ᶠinterp(ᶜρ), ᶠu),
         geometry,
@@ -323,7 +327,8 @@ function dg_horizontal_tendency!(::Nothing, Yₜ, Y, p, geometry, ᶜcoords)
 end
 
 # Flux differencing over the whole state, into a mass-weighted residual; the
-# face part of the two-point Exner force is a lifting on `ρuₕ`.
+# face part of the two-point Exner force is a lifting on `ρuₕ`, its `ξ³` part a
+# vertical difference.
 function dg_horizontal_tendency!(volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
     (; ᶜΦ, ᶜp, ᶜu, ᶜu_cart, ᶜλ, ᶜfluxstate, ᶜp_ref, ᶜresidual) = p
     (; ᶜL_kpep, numflux, face_lift) = p
@@ -369,6 +374,14 @@ function dg_horizontal_tendency!(volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
         Y.c.ρ,
     )
     @. Yₜ.c.ρuₕ -= ᶜL_kpep / ᶜWJ
+    add_kpep_vertical_force!(
+        Yₜ.c.ρuₕ,
+        cp_d,
+        Y.c.ρ,
+        ᶜfluxstate.ψ,
+        ᶜfluxstate.θ,
+        ᶜfluxstate.Π,
+    )
     return Yₜ
 end
 

@@ -108,9 +108,14 @@ center_velocity(Yc) =
 
 # The temperature of a saved state, `T = (e_tot - K - Φ) / c_vd + T_tri`.
 function center_temperature(Y)
-    ᶜuₕ = center_velocity(Y.c)
-    ᶠw = momentum_form(Y.c) isa FluxForm ? (@. Y.f.ρw / ᶠinterp(Y.c.ρ)) : Y.f.w
-    ᶜK = @. norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
+    ᶜK = if momentum_form(Y.c) isa FluxForm
+        ᶠw = @. Y.f.ρw / ᶠinterp(Y.c.ρ)
+        @. norm_sqr(
+            C123(Y.c.ρuₕ / Y.c.ρ) + C123(Geometry.WVector(ᶜinterp(ᶠw))),
+        ) / 2
+    else
+        @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+    end
     ᶜΦ = grav .* Fields.coordinate_field(axes(Y.c)).z
     return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
 end
