@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] The 3D sphere baroclinic wave runs on DG
+  (`DISCRETIZATION=DG`), in flux form (`ρuₕ`, `ρw`; Kennedy-Gruber flux
+  differencing with Roe or Rusanov interface fluxes, `DG_FLUX`) or in
+  vector-invariant form (`MOMENTUM_FORM=vector_invariant`).
+
 - ![][badge-🐛bugfix] `ClimaComms.context` and `ClimaComms.device` no longer
   throw a `TypeError` for every nonempty `FieldVector`. They return the context
   and device of the first `Field` at any nesting depth that is not a
@@ -170,6 +175,7 @@ v1.0.6
   `Val(:none)`, or registers per thread) that caps the registers of a GPU
   kernel: no cap by default, and a count of the caller's choosing, which can
   speed up fused column loop bodies but slows down heavier pointwise bodies.
+>>>>>>> origin/main
 
 v1.0.5
 -------
