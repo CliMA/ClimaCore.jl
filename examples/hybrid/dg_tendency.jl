@@ -129,11 +129,12 @@ function dg_cache(::Grids.DG, ::FluxForm, ᶜlocal_geometry, ᶠlocal_geometry, 
         ᶜu_cart = similar(ᶜlocal_geometry, UVW),
         ᶜλ = similar(ᶜlocal_geometry, FT),
         dg_horizontal_cache(scheme.volume2pt, scheme, ᶜlocal_geometry)...,
-        ᶠu = similar(ᶠlocal_geometry, UVW),
+        ᶠm = similar(ᶠlocal_geometry, UVW),
         ᶠT_cart = similar(ᶠlocal_geometry, Tensor),
         ᶠw = similar(ᶠlocal_geometry, C3{FT}),
         ᶠuₕ = similar(ᶠlocal_geometry, UV),
         ᶠρw_value = similar(ᶠlocal_geometry, FT),
+        ᶜF³ = similar(ᶜlocal_geometry, CT3{FT}),
         ᶠλ = similar(ᶠlocal_geometry, FT),
         ᶠdYt_ρw,
         ᶠρw_completion = Operators.tendency_completion(
@@ -225,8 +226,8 @@ function default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t)
     ᶜρe = Y.c.ρe
     ᶜuₕ, ᶠw = flux_form_velocities!(Y, p)
     (; ᶜK, ᶜΦ, ᶜp) = p
-    (; ᶜf_coriolis, ᶜu, ᶜu_cart, ᶜλ) = p
-    (; ᶠu, ᶠT_cart, ᶜdivᵥT) = p
+    (; ᶜf_coriolis, ᶜu, ᶜλ) = p
+    (; ᶠm, ᶠT_cart, ᶜdivᵥT) = p
     ᶜspace = axes(Y.c)
     ᶠspace = axes(Y.f)
     geometry = Spaces.global_geometry(ᶜspace)
@@ -236,22 +237,22 @@ function default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t)
     @. ᶜu = Geometry.UVWVector(
         C123(ᶜuₕ) + C123(Geometry.WVector(ᶜinterp(ᶠw))),
     )
-    @. ᶜu_cart = Geometry.CartesianVector(ᶜu, geometry, ᶜcoords)
     @. ᶜK = norm_sqr(ᶜu) / 2
     @. ᶜp = pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
     @. ᶜλ = dg_wavespeed(ᶜρ, ᶜu, ᶜp)
 
     dg_horizontal_tendency!(p.volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
 
-    # Vertical transport by `uₕ`.
+    # Vertical transport: the mass flux `I_f(ρuₕ) + ρw ẑ` times the face mean
+    # of the specific quantity.
     @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
-    @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    # Vertical flux of `ρuₕ`, rotated to Cartesian and back.
-    @. ᶠu = Geometry.UVWVector(
-        C123(ᶠinterp(ᶜuₕ)) + C123(Geometry.WVector(ᶠw)),
+    @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ) * ᶠinterp((ᶜρe + ᶜp) / ᶜρ))
+    # `ρuₕ`, with the flux rotated to Cartesian and back.
+    @. ᶠm = Geometry.UVWVector(
+        C123(ᶠinterp(ᶜρ * ᶜuₕ)) + C123(Geometry.WVector(Y.f.ρw)),
     )
     @. ᶠT_cart = Geometry.CartesianTensor(
-        dg_momentum_transport(ᶠinterp(ᶜρ), ᶠu),
+        ᶠm ⊗ Geometry.UVWVector(ᶠinterp(ᶜuₕ)),
         geometry,
         ᶠcoords,
     )
@@ -267,11 +268,23 @@ function default_remaining_tendency!(::Grids.DG, ::FluxForm, Yₜ, Y, p, t)
 end
 
 # Explicit `ρw` advection, `-∇ᵥ·(ρw w) - ∇ₕ·(uₕ ρw)`; zero at the boundaries.
+# The vertical flux is the J-weighted center mean of the mass flux
+# `J (I_f(ρuₕ) + ρw ẑ)³` times `I_c(w)`.
 function dg_vertical_momentum_tendency!(Yₜ, Y, p, ᶠw)
     ᶠρw = Y.f.ρw
-    (; ᶜuₕ, ᶠuₕ, ᶠρw_value, ᶠλ, ᶠdYt_ρw, ᶠρw_completion) = p
+    (; ᶜuₕ, ᶠuₕ, ᶠρw_value, ᶠλ, ᶠdYt_ρw, ᶠρw_completion, ᶜF³) = p
+    ᶜJ = Fields.local_geometry_field(axes(Y.c)).J
+    ᶠJ = Fields.local_geometry_field(axes(Y.f)).J
+    @. ᶜF³ =
+        ᶜinterp(
+            ᶠJ * ᶠno_flux(
+                CT3(C123(ᶠinterp(Y.c.ρuₕ)) + C123(Geometry.WVector(ᶠρw))),
+            ),
+        ) / ᶜJ
     @. Yₜ.f.ρw -= C3(
-        ᶠdivᵥ_tensor(ᶜinterp(Geometry.WVector(ᶠρw) ⊗ Geometry.WVector(ᶠw))),
+        Geometry.WVector(
+            ᶠdivᵥ_flux(ᶜF³ * ᶜinterp(vertical_component(Geometry.WVector(ᶠw)))),
+        ),
     )
     @. ᶠuₕ = ᶠinterp(ᶜuₕ)
     @. ᶠρw_value = vertical_component(Geometry.WVector(ᶠρw))
@@ -283,9 +296,9 @@ function dg_vertical_momentum_tendency!(Yₜ, Y, p, ᶠw)
     return Yₜ
 end
 
-const ᶠdivᵥ_tensor = Operators.DivergenceC2F(
-    bottom = Operators.SetDivergence(Geometry.WVector(FT(0))),
-    top = Operators.SetDivergence(Geometry.WVector(FT(0))),
+const ᶠdivᵥ_flux = Operators.DivergenceC2F(
+    bottom = Operators.SetDivergence(FT(0)),
+    top = Operators.SetDivergence(FT(0)),
 )
 const ᶠno_momentum_flux = Operators.SetBoundaryOperator(
     bottom = Operators.SetValue(C3(FT(0))),
@@ -305,6 +318,7 @@ function dg_horizontal_tendency!(::Nothing, Yₜ, Y, p, geometry, ᶜcoords)
     ᶜρe = Y.c.ρe
     (; ᶜΦ, ᶜp, ᶜu, ᶜu_cart, ᶜλ, ᶜT, ᶜT_cart, ᶜdivT, ᶜdYt) = p
     (; ᶜthermo_completion, ᶜmomentum_completion) = p
+    @. ᶜu_cart = Geometry.CartesianVector(ᶜu, geometry, ᶜcoords)
 
     @. ᶜdYt = -wdivₕ(dg_thermo_flux(ᶜρ, ᶜρe, ᶜu, ᶜp))
     Operators.complete_tendency!(ᶜthermo_completion, ᶜdYt, Y.c, ᶜu, ᶜp, ᶜλ)
@@ -330,7 +344,7 @@ end
 # face part of the two-point Exner force is a lifting on `ρuₕ`, its `ξ³` part a
 # vertical difference.
 function dg_horizontal_tendency!(volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
-    (; ᶜΦ, ᶜp, ᶜu, ᶜu_cart, ᶜλ, ᶜfluxstate, ᶜp_ref, ᶜresidual) = p
+    (; ᶜΦ, ᶜp, ᶜu, ᶜλ, ᶜfluxstate, ᶜp_ref, ᶜresidual) = p
     (; ᶜL_kpep, numflux, face_lift) = p
     ᶜWJ = Fields.local_geometry_field(axes(Y.c)).WJ
 
@@ -341,9 +355,10 @@ function dg_horizontal_tendency!(volume2pt, Yₜ, Y, p, geometry, ᶜcoords)
     @. ᶜfluxstate.pm = ᶜp - ᶜp_ref
     @. ᶜfluxstate.λ = ᶜλ
     @. ᶜfluxstate.uₕ = Geometry.project(Geometry.UVAxis(), ᶜu)
-    @. ᶜfluxstate.u_x = ᶜu_cart.components.data.:1
-    @. ᶜfluxstate.u_y = ᶜu_cart.components.data.:2
-    @. ᶜfluxstate.u_z = ᶜu_cart.components.data.:3
+    # Cartesian components of `uₕ`: the flux transports horizontal momentum.
+    @. ᶜfluxstate.u_x = dot(ᶜfluxstate.x̂, ᶜfluxstate.uₕ)
+    @. ᶜfluxstate.u_y = dot(ᶜfluxstate.ŷ, ᶜfluxstate.uₕ)
+    @. ᶜfluxstate.u_z = dot(ᶜfluxstate.ẑ, ᶜfluxstate.uₕ)
     @. ᶜfluxstate.ψ = ᶜΦ - phi_ref(ᶜp)
     @. ᶜfluxstate.θ = theta_prime(Y.c.ρ, ᶜp)
     @. ᶜfluxstate.Π = exner(ᶜp)

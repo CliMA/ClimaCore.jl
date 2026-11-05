@@ -3,8 +3,8 @@
 # callable structs.
 #
 # Flux state fields: `ρ`, `ρe`, `e_tot`, `p`, `pm = p − p_ref(Φ)`, `λ`, `uₕ`
-# (orthonormal horizontal velocity), `u_x`, `u_y`, `u_z` (Cartesian velocity
-# components), `x̂`, `ŷ`, `ẑ` (tangential projections of the Cartesian unit
+# (orthonormal horizontal velocity), `u_x`, `u_y`, `u_z` (Cartesian components
+# of `uₕ`), `x̂`, `ŷ`, `ẑ` (tangential projections of the Cartesian unit
 # vectors), `ψ = Φ − Φ_r(p)`, `θ = θ′ = θ − θ_r(p)` and `Π` (Exner function).
 
 import LinearAlgebra
