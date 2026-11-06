@@ -293,12 +293,15 @@ maxregs_kwarg(maxregs::Int) = (; maxregs)
 # check_shmem_level); the marker is the name of the undefined function that the check calls,
 # read from the invalid IR error's metadata, and the largest one gives the bytes the loop
 # needs (see launch_slice_loop, which launches the loop at the level that holds them), or 0
-# when the error has no marker. The metadata is untyped, so the markers are read in a loop
-# that narrows it, rather than by a closure that would be dispatched on it.
+# when the error has no marker. GPUCompiler names the function by a String for a call to an
+# external C function, and by a SubString of its PLT entry's name for a call to a
+# lazy-initialized function, which is how Julia 1.12 and later emit calls to undefined
+# functions (next to an external call with no name). The metadata is untyped, so the markers
+# are read in a loop that narrows it, rather than by a closure that would be dispatched on it.
 function shmem_level_error_bytes(err::CUDA_COMPILER.GPUCompiler.InvalidIRError)
     bytes = 0
     for (_, _, meta) in err.errors
-        meta isa String || continue
+        meta isa Union{String, SubString{String}} || continue
         startswith(meta, SHMEM_LEVEL_ERROR) || continue
         digits = chop(
             meta;
