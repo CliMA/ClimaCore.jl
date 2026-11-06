@@ -9,6 +9,11 @@ main
   and device of the first `Field` at any nesting depth that is not a
   `PointField`, or else of the first `PointField`, and throw an error for a
   `FieldVector` without a `Field`.
+- ![][badge-🐛bugfix] On Julia 1.12 and later, a GPU loop over slices whose
+  operator buffers exceed its level of shared memory (e.g., a `foreach_slab`
+  with a `LumpedRestriction` of a temporary, which `shmem = Val(:auto)` launches
+  without shared memory) is compiled again at the next level, as on Julia 1.11,
+  instead of throwing the `InvalidIRError` of the first compilation.
 
 v1.0.8
 -------
