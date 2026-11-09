@@ -833,9 +833,29 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+@inline Base.copyto!(
     dest::DataLayout,
     arg::MaybeLazyDataLayout,
+    mask::DataMask = NoMask(),
+) = copyto_capped!(dest, arg, nothing, mask)
+
+"""
+    copyto_capped!(dest, arg, maxregs, mask = NoMask())
+
+Copy `arg` into `dest` with the register cap `maxregs` (see `maxregs` in
+[`foreach_slice`](@ref)), or without one when it is `nothing`.
+
+A call site that knows its kernel sits at the top of an occupancy band can ask
+for the band's register count here, so that `ptxas` meets the budget instead of
+choosing one or two registers past the edge and costing the launch a quarter of
+its resident warps. The cap is positional rather than a keyword because a
+keyword adds a `Core.kwcall` method instance to every pointwise copy and stops
+the entry point inlining.
+"""
+@inline function copyto_capped!(
+    dest::DataLayout,
+    arg::MaybeLazyDataLayout,
+    maxregs,
     mask::DataMask = NoMask(),
 )
     scope = DataScope(dest, arg)
@@ -843,7 +863,9 @@ end
     size(dest) == size(dest_and_arg) ||
         throw(DimensionMismatch("DataLayout broadcast result exceeds destination size"))
     synchronize_shared_points(scope, dest, arg)
-    _foreach_slice(
+    foreach_slice_with_options(
+        nothing,
+        maxregs,
         view,
         dest_and_arg_point -> begin
             @inbounds (dest_point, arg_point) = dest_and_arg_point.args
