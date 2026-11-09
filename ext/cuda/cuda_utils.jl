@@ -508,6 +508,7 @@ const CLIMACORE_IGNORE_FUNCS = (
     :materialize,
     :materialize!,
     :copyto!,
+    :copyto_capped!,
     :foreach,
     :unrolled_foreach,
     Symbol("macro expansion"),
