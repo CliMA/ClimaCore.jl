@@ -194,6 +194,41 @@ end
 
 @inline DataLayouts.is_subscope(::ThisSubBlock, ::ThisBlock) = true
 
+# Closed forms of DataLayouts.is_subscope and DataLayouts.points_subscope over the chain of
+# sub-blocks that partition(::ThisKernel) and partition(::ThisSubBlock) descend through, in
+# place of the generic recursions through partition, so that both are compile-time constants
+# for constant arguments.
+@inline DataLayouts.is_subscope(_, ::ThisSubBlock) = false
+@inline DataLayouts.is_subscope(::DataLayouts.ThisThread, ::ThisSubBlock) = true
+@inline DataLayouts.is_subscope(::ThisSubBlock{N}, ::ThisSubBlock{M}) where {N, M} =
+    is_subblock_halving(N, M)
+@inline DataLayouts.is_subscope(_, ::ThisKernel) = false
+@inline DataLayouts.is_subscope(::Union{ThisKernel, DataLayouts.ThisThread}, ::ThisKernel) =
+    true
+@inline DataLayouts.is_subscope(::ThisSubBlock{N}, ::ThisKernel) where {N} =
+    is_subblock_halving(N, MAX_SUBBLOCK_LAUNCH_THREADS)
+
+# Whether N is M or one of the halvings of M that partition(::ThisSubBlock) gives.
+@inline function is_subblock_halving(N, M)
+    shift = leading_zeros(N) - leading_zeros(M)
+    return shift >= 0 && M >> shift == N &&
+           (shift == 0 || M >> (shift - 1) > MIN_THREADS_PER_SUBBLOCK)
+end
+
+# The smallest sub-block in the chain of scope with at least max_slice_points threads, or
+# scope itself when it has fewer threads, or ThisThread for a slice of at most one point.
+@inline function DataLayouts.points_subscope(
+    scope::ThisSubBlock{M, B},
+    max_slice_points::Int,
+) where {M, B}
+    (M <= MIN_THREADS_PER_SUBBLOCK || max_slice_points <= 1) &&
+        return DataLayouts.ThisThread()
+    max_slice_points >= M && return scope
+    shift = leading_zeros(max_slice_points) - leading_zeros(M)
+    N = M >> shift >= max_slice_points ? M >> shift : M >> (shift - 1)
+    return ThisSubBlock{N, B}()
+end
+
 # Largest block that a slice loop assigning every slice to this subscope may be launched
 # with; the launch keeps every block to whole sub-blocks (see the granularity of
 # launch_configuration in _foreach_slice).
