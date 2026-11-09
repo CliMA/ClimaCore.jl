@@ -326,9 +326,15 @@ Base.similar(bc::LazyField, ::Type{T}) where {T} =
 @inline function Base.copyto!(
     dest::Field,
     bc::LazyField,
-    mask::DataLayouts.DataMask = get_mask(axes(dest)),
+    mask::DataLayouts.DataMask = get_mask(axes(dest));
+    maxregs = nothing,
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)), mask)
+    copyto!(
+        field_values(dest),
+        Base.Broadcast.instantiate(field_values(bc)),
+        mask;
+        maxregs,
+    )
     return dest
 end
 

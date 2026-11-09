@@ -836,14 +836,17 @@ end
 @inline function Base.copyto!(
     dest::DataLayout,
     arg::MaybeLazyDataLayout,
-    mask::DataMask = NoMask(),
+    mask::DataMask = NoMask();
+    maxregs = nothing,
 )
     scope = DataScope(dest, arg)
     dest_and_arg = Broadcast.broadcasted(tuple, written_layout(dest), arg)
     size(dest) == size(dest_and_arg) ||
         throw(DimensionMismatch("DataLayout broadcast result exceeds destination size"))
     synchronize_shared_points(scope, dest, arg)
-    _foreach_slice(
+    foreach_slice_with_options(
+        nothing,
+        maxregs,
         view,
         dest_and_arg_point -> begin
             @inbounds (dest_point, arg_point) = dest_and_arg_point.args
