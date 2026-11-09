@@ -58,6 +58,13 @@ end
                   points_subscope_by_chain(scope, max_slice_points)
         end
     end
+    # Sub-blocks of the same threads are the same subscope, whatever their shared memory.
+    for N in sizes, M in sizes, (B1, B2) in ((0, 74), (74, 0), (66, 148))
+        subscope = ext.ThisSubBlock{N, B1}()
+        scope = ext.ThisSubBlock{M, B2}()
+        @test DataLayouts.is_subscope(subscope, scope) ==
+              (subscope in partition_chain(scope))
+    end
     kernel_chain = partition_chain(ext.ThisKernel())
     for subscope in
         (subblocks..., DataLayouts.ThisThread(), ext.ThisKernel(), ext.ThisHost())
