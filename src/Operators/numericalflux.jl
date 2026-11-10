@@ -991,15 +991,19 @@ end
 
 Add the horizontal flux-differencing (split-form / FDDG) volume divergence to
 the mass-weighted residual `dydt`, and return `dydt` ([Souza2023](@cite),
-Eqs. 25–30): the collocation derivative acts on symmetric two-point fluxes along
-each reference direction.
+Eqs. 25–30): the collocation derivative acts on two-point fluxes along each
+reference direction.
 
 `fn2pt(nvec_a, nvec_b, y_a, y_b)` returns the two-point flux contracted with
 the (non-unit) nodal metric vectors in the local orthonormal horizontal frame.
-It must be jointly linear in `(nvec_a, nvec_b)`, symmetric under
-`(nvec_a, y_a) ↔ (nvec_b, y_b)`, and consistent
-(`fn2pt(n, n, y, y) == F(y)⋅n`). Kinetic-energy / entropy properties are
-fixed by this choice (e.g. Kennedy–Gruber → KEP).
+It must be linear in each metric vector and consistent
+(`fn2pt(n, n, y, y) == F(y)⋅n`). Its part symmetric under
+`(nvec_a, y_a) ↔ (nvec_b, y_b)` is the conservative divergence, whose
+kinetic-energy / entropy properties follow from the flux (e.g. Kennedy–Gruber
+→ KEP). A non-symmetric fluctuation `g(y_a, y_b) (ê ⋅ nvec_a)` with
+`g(y, y) = 0` (a two-point gravity or pressure force) is evaluated with the
+node being updated as the first pair; its face part is a lifting
+([`add_lifting_flux_interior!`](@ref)).
 
 Stored in weak-equivalent form (strong flux-differencing plus one-sided
 boundary lifts), so it replaces `dydt = hwdiv(F) * (-WJ)` and composes with
