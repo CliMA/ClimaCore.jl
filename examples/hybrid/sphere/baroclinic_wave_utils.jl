@@ -90,16 +90,42 @@ function sphere_center_initial_condition(
         @. v₀ += δv(long, lat, z)
     end
     ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
-    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     ᶜρe = @. ᶜρ *
              (cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z)
+    # Covariant `uₕ` (vector-invariant) or orthonormal `ρuₕ` (flux form).
+    if momentum_form_name == "flux"
+        ᶜρuₕ = @. ᶜρ * ᶜuₕ_local
+        return NamedTuple{(:ρ, :ρe, :ρuₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜρuₕ))
+    end
+    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
 end
 
+# The horizontal velocity of a saved state, for diagnostics.
+center_velocity(Yc) =
+    momentum_form(Yc) isa FluxForm ? (@. Geometry.UVVector(Yc.ρuₕ / Yc.ρ)) :
+    (@. Geometry.UVVector(Yc.uₕ))
+
+# The temperature of a saved state, `T = (e_tot - K - Φ) / c_vd + T_tri`.
+function center_temperature(Y)
+    ᶜK = if momentum_form(Y.c) isa FluxForm
+        ᶠw = @. Y.f.ρw / ᶠinterp(Y.c.ρ)
+        @. norm_sqr(
+            C123(Y.c.ρuₕ / Y.c.ρ) + C123(Geometry.WVector(ᶜinterp(ᶠw))),
+        ) / 2
+    else
+        @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+    end
+    ᶜΦ = grav .* Fields.coordinate_field(axes(Y.c)).z
+    return @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri
+end
+
+# At rest in the vertical (`w` or `ρw`).
 function face_initial_condition(local_geometry)
     (; z) = local_geometry.coordinates
     w = @. Geometry.Covariant3Vector(zero(z))
-    return NamedTuple{(:w,)}.(tuple.(w))
+    name = momentum_form_name == "flux" ? :ρw : :w
+    return NamedTuple{(name,)}.(tuple.(w))
 end
 
 ##
