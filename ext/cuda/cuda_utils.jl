@@ -636,8 +636,10 @@ function auto_launch!(
         # stale: CUDA's compilation cache tracks the world age and recompiles
         # the revised kernel either way.
         key = (F!, typeof(args))
-        kernel_name_exists = key in keys(kernel_names)
-        if !kernel_name_exists
+        # The name is built in a closure that captures nothing from this
+        # function, so that it is compiled once instead of once per kernel.
+        kernel_name = get!(kernel_names, key) do
+            local kernel_name = nothing
             # Construct the kernel name, ignoring modules we don't care about
             stack = stacktrace()
             first_relevant_index = findfirst(is_relevant_frame, stack)
@@ -678,9 +680,8 @@ function auto_launch!(
                 kernel_name = replace(name_str, r"[^A-Za-z0-9]" => "_")
             end
             @debug "Using kernel name: $kernel_name"
-            kernel_names[key] = kernel_name
+            kernel_name
         end
-        kernel_name = kernel_names[key]
     end
 
     # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
