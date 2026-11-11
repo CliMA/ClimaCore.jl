@@ -489,8 +489,9 @@ end
     @test CUDA_EXT.shmem_level_error_bytes(err) == 64
     (_, bt, _) = first(err.errors)
     marker(bytes) = SubString("$(CUDA_EXT.SHMEM_LEVEL_ERROR)_$(bytes)_bytes")
-    error_bytes(errors...) =
-        CUDA_EXT.shmem_level_error_bytes(GPUCompiler.InvalidIRError(err.job, [errors...]))
+    error_bytes(errors...) = CUDA_EXT.shmem_level_error_bytes(
+        GPUCompiler.InvalidIRError(err.job, eltype(err.errors)[errors...]),
+    )
     (external, lazy) = (GPUCompiler.CCALL_FUNCTION, GPUCompiler.LAZY_FUNCTION)
     @test error_bytes((external, bt, String(marker(64)))) == 64
     @test error_bytes((external, bt, nothing), (lazy, bt, marker(64))) == 64

@@ -655,7 +655,7 @@ end
         ),
     )
         materialize(get_result)
-        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
+        JETConfig.@test_with_jet cuda_ext = true materialize(get_result)
     end
 
     test_field_broadcast(;

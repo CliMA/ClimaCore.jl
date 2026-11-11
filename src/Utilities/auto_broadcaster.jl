@@ -342,11 +342,17 @@ function ambiguous_constructor_types(T)
         end
     end
     vars = []
-    empty_var = TypeVar(Symbol())
     while true
         new_type = reduce((T, var) -> UnionAll(var, T), vars; init = Type{T})
-        constructor = reduce((T, _) -> UnionAll(empty_var, T), vars; init = T)
-        hasmethod(constructor, Tuple{AutoBroadcaster}) && push!(types, new_type)
+        # Bind the type parameters around the whole call signature; checking a
+        # constructor with free parameters via hasmethod stopped matching
+        # methods like Dual{T}(x) where {T} in Julia 1.12.
+        signature = reduce(
+            (S, var) -> UnionAll(var, S),
+            vars;
+            init = Tuple{Type{T}, AutoBroadcaster},
+        )
+        Core._hasmethod(signature) && push!(types, new_type)
         T isa DataType && break
         push!(vars, T.var)
         T = T.body

@@ -3,18 +3,21 @@ using JET
 using StaticArrays: SMatrix, MArray
 import ClimaComms
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore: DataLayouts, Geometry
 ClimaComms.@import_required_backends
 
 function test_similar!(data)
     if isnothing(DataLayouts.f_dim(data))
         new_data = similar(data)
-        @test_opt target_modules = (ClimaCore,) similar(data)
+        JETConfig.@test_with_jet similar(data)
     else
         FT = eltype(parent(data))
         LG = Geometry.LocalGeometryType(Geometry.ZPoint{FT}, FT, (3,))
         new_data = similar(data, LG)
-        @test_opt target_modules = (ClimaCore,) similar(data, LG)
+        JETConfig.@test_with_jet similar(data, LG)
     end
     DataLayouts.DataScope(data) == DataLayouts.ThisThread() &&
         DataLayouts.has_inferred_size(data) &&
