@@ -27,6 +27,7 @@ import ClimaCore.CommonSpaces
 import ClimaCore.Topologies
 import ClimaCore.Domains
 import ClimaCore.Hypsography
+import ClimaCore.MatrixFields
 
 export convergence_rate,
     PointSpace,
@@ -479,6 +480,39 @@ function slice_subscope_type(kernel)
         T <: DataLayouts.DataScope
     end
     return isempty(scopes) ? nothing : only(scopes)
+end
+
+"""
+    device_matches_cpu(field, field_cpu; rtol)
+
+Whether a field computed on the test device matches its CPU reference, with
+each variable of the field checked against its own scale: for every variable
+(a number, vector, or tensor in the field's nesting, such as `tracers.liq`), the
+largest difference must be within `rtol` times that variable's largest value
+(`0 ≤ rtol < 1`). A vector or tensor variable is checked as one unit, so a
+component that is zero up to round-off is measured against the variable's other
+components.
+"""
+function device_matches_cpu(field, field_cpu; rtol)
+    0 <= rtol < 1 || throw(ArgumentError("rtol must be in [0, 1), got $rtol"))
+    # Copy the device data into a CPU field with the same layout, so that the
+    # variables of both fields can be compared on the CPU.
+    device_array = Array(parent(field))
+    size(device_array) == size(parent(field_cpu)) || throw(
+        DimensionMismatch("device and CPU fields have different data layouts"),
+    )
+    field_from_device = similar(field_cpu)
+    parent(field_from_device) .= device_array
+    single_field_names =
+        MatrixFields.filtered_names(x -> eltype(x) <: Geometry.SingleValue, field_cpu)
+    isempty(single_field_names) &&
+        throw(ArgumentError("field has no numbers, vectors, or tensors to compare"))
+    return all(single_field_names) do name
+        device_values = Array(parent(MatrixFields.get_field(field_from_device, name)))
+        cpu_values = Array(parent(MatrixFields.get_field(field_cpu, name)))
+        scale = max(norm(device_values, Inf), norm(cpu_values, Inf))
+        norm(device_values .- cpu_values, Inf) <= rtol * scale
+    end
 end
 
 end

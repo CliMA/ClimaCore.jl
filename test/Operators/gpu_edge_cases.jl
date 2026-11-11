@@ -7,7 +7,6 @@
 # Registered :gpu_only because the point is the CPU-vs-GPU comparison; on a CPU
 # device it degenerates to comparing two CPU runs.
 using Test
-using LinearAlgebra: norm
 import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore:
@@ -23,17 +22,16 @@ import ClimaCore:
 import ClimaCore.CommonSpaces:
     MultiColumnSpace, ColumnSpace, ExtrudedCubedSphereSpace, CellCenter
 
+import ClimaCore  # for `pkgdir` below
+@isdefined(TU) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+);
+import .TestUtilities as TU
+using .TestUtilities: device_matches_cpu
+
 const test_device = ClimaComms.device()
 const cpu_device = ClimaComms.CPUSingleThreaded()
 @info "gpu_edge_cases: comparing $test_device against $cpu_device"
-
-# Compare a field computed on the test device against the CPU reference.
-device_matches_cpu(field, field_cpu; rtol) = isapprox(
-    Array(parent(field)),
-    parent(field_cpu),
-    rtol = rtol,
-    norm = x -> norm(x, Inf),
-)
 
 function periodic_1x1_space(::Type{FT}, device) where {FT}
     context = ClimaComms.SingletonCommsContext(device)

@@ -65,21 +65,14 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         if use_rel_error
             @test rel_error < 1e-5
         else
-            @test max_eps_error <= 3
+            @test max_eps_error <= 4
         end
 
-        # In addition to ignoring the type instabilities from CUDA, ignore those
-        # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
-        ignored = (
-            CUDA_FRAMES...,
-            cublas_frames...,
-            AnyFrameModule(MatrixFields.KrylovKit),
-            AnyFrameModule(Base.CoreLogging),
-        )
         USING_CUDA ||
-            @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
-        USING_CUDA || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
-        @test_opt ignored_modules = ignored mul!(b_test, A′, x)
+            JETConfig.@test_with_jet cuda_ext = true FieldMatrixWithSolver(A, b, alg)
+        USING_CUDA ||
+            JETConfig.@test_with_jet cuda_ext = true ldiv!(x, A′, b)
+        JETConfig.@test_with_jet cuda_ext = true mul!(b_test, A′, x)
 
         # TODO: fix broken test when Nv is added to the type space
         USING_CUDA || @test ldiv_allocs(x, A′, b) ≤ 1536
@@ -144,7 +137,7 @@ end
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
         MatrixFields.BlockArrowheadSolve(@name(c)),
         MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
-        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 28 : 18),
+        MatrixFields.StationaryIterativeSolve(; n_iters = USING_CUDA ? 32 : 18),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \

@@ -3,6 +3,9 @@ using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 
 import ClimaCore:
     ClimaCore,
@@ -56,10 +59,7 @@ import ClimaCore.DataLayouts: level
     for field in (copy(x), copy(ww))
         buffer = Spaces.create_dss_buffer(field)
         Spaces.weighted_dss!(field, buffer) # compile
-        @test_opt ignored_modules = (Base.CoreLogging,) Spaces.weighted_dss!(
-            field,
-            buffer,
-        )
+        JETConfig.@test_with_jet Spaces.weighted_dss!(field, buffer)
         @test dss_allocs(field, buffer) == 0
         @test all(isfinite, parent(field))
     end

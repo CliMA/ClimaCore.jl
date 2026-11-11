@@ -3,6 +3,7 @@ import Random
 import ClimaComms
 import ClimaCore.DataLayouts
 import StaticArrays
+import UnrolledUtilities
 
 import ClimaCore  # for `pkgdir` below
 @isdefined(TU) || include(
@@ -388,9 +389,11 @@ end
     sums = test_data(device, FT, 1, 4)
     sum_args!(sums, args) = DataLayouts.foreach_column(sums, args) do sums, args
         fill!(sums, 0)
-        for n in 1:40
-            @. sums += n * args[n]
-        end
+        UnrolledUtilities.unrolled_foreach(
+            (n, a) -> (@. sums += n * a),
+            1:length(args),
+            args,
+        )
     end
     sum_args!(sums, args)
     @test Array(parent(sums)) == sum(n -> n .* Array(parent(args[n])), 1:40)
