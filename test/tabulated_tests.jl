@@ -41,11 +41,12 @@ UnitTest(
 ) = UnitTest(name, filename, 0.0, 0.0, 0.0, 0, meta, tier, subsystem, slow)
 
 """
-    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, exclude_subsystem = nothing, tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
+    filter_tests(unit_tests::Vector{UnitTest}; tier = nothing, exclude_tier = nothing, subsystem = nothing, exclude_subsystem = nothing, tag = nothing, exclude_tag = nothing, fast::Bool = false, exclude_slow::Bool = false)
 
 Filters unit tests based on tier, excluded tier(s) (comma-separated, e.g.
 `"conv,inference"`), subsystem, excluded subsystem(s) (comma-separated),
-case-insensitive substring match, or `slow`. Selecting a subsystem and
+case-insensitive substring match, excluded substring(s) (comma-separated,
+matched like `tag`), or `slow`. Selecting a subsystem and
 excluding its complement partitions the suite into shards that together cover
 every test (see the sharded coverage job in `.github/workflows/UnitTests.yml`).
 """
@@ -56,6 +57,7 @@ function filter_tests(
     subsystem = nothing,
     exclude_subsystem = nothing,
     tag = nothing,
+    exclude_tag = nothing,
     fast::Bool = false,
     exclude_slow::Bool = false,
 )
@@ -70,6 +72,14 @@ function filter_tests(
         [
             Symbol(strip(s)) for
             s in split(String(exclude_subsystem), ","; keepempty = false)
+        ]
+    end
+    excluded_tags = if isnothing(exclude_tag)
+        String[]
+    else
+        [
+            lowercase(strip(s)) for
+            s in split(String(exclude_tag), ","; keepempty = false)
         ]
     end
     return filter(unit_tests) do t
@@ -96,6 +106,10 @@ function filter_tests(
             matches_name = occursin(tag_str, lowercase(t.name))
             matches_file = occursin(tag_str, lowercase(t.filename))
             (matches_name || matches_file) || return false
+        end
+        for tag_str in excluded_tags
+            occursin(tag_str, lowercase(t.name)) && return false
+            occursin(tag_str, lowercase(t.filename)) && return false
         end
         return true
     end

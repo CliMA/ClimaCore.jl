@@ -16,6 +16,10 @@ Construct a `FieldVector` wrapping `field1, field2, ...` under the names
 `name1, name2, ...`. `Real` components are wrapped in a `ScalarWrapper` and
 `NamedTuple` components become nested `FieldVector`s (see `Fields.wrap`). The
 element type `T` is the promotion of the component element types.
+
+`ClimaComms.context` and `ClimaComms.device` of a `FieldVector` are those of its
+first `Field` at any nesting depth that is not a `PointField`, or else of its
+first `PointField`. A `FieldVector` without a `Field` has neither.
 """
 struct FieldVector{T, M} <: BlockArrays.AbstractBlockVector{T}
     values::M
@@ -797,15 +801,19 @@ _array_type(x::A) where {A <: AbstractArray} =
     parent(x) === x ? Base.typename(A).wrapper : _array_type(parent(x))
 
 ClimaComms.device(x::FieldVector) = ClimaComms.device(ClimaComms.context(x))
+# Devices and contexts have no promotion, so one Field decides. A PointField can
+# store its data on a different device from the other Fields to avoid scalar
+# indexing on GPUs, and scalars and plain arrays have no context.
 function ClimaComms.context(x::FieldVector)
-    isempty(field_vector_values(x)) && error("Empty FieldVector has no device or context")
-    # We don't have promotion for devices or contexts, so we use the first value
-    # that isn't a PointField (a PointField's data can be stored on a different
-    # device from other Fields to avoid scalar indexing on GPUs). If there is no
-    # such value, fall back to using the first PointField.
-    index = unrolled_findfirst(Base.Fix1(!isa, PointField), field_vector_values(x))
-    return ClimaComms.context(field_vector_values(x)[isnothing(index) ? 1 : index])
+    fields = _fields_at_any_depth(x)
+    isempty(fields) && error("FieldVector without a Field has no device or context")
+    index = unrolled_findfirst(!Base.Fix2(isa, PointField), fields)
+    return ClimaComms.context(fields[isnothing(index) ? 1 : index])
 end
+_fields_at_any_depth(x) = ()
+_fields_at_any_depth(x::Field) = (x,)
+_fields_at_any_depth(x::FieldVector) =
+    unrolled_flatmap(_fields_at_any_depth, field_vector_values(x))
 
 function __rprint_diff(
     io::IO,

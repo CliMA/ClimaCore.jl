@@ -170,6 +170,7 @@ block in `runtests.jl`). Set them in the shell (or via `ENV`) before invoking:
 | `TEST_EXCLUDE_TIER`     | drop tiers (comma-separated), e.g. `TEST_EXCLUDE_TIER=conv,inference` |
 | `TEST_SUBSYSTEM`        | run only a given subsystem, e.g. `TEST_SUBSYSTEM=operators`   |
 | `TEST_TAG`              | case-insensitive substring match on test name or filename, e.g. `TEST_TAG=dss` |
+| `TEST_EXCLUDE_TAG`      | drop tests whose name or filename matches any of these substrings (comma-separated, matched like `TEST_TAG`), e.g. `TEST_EXCLUDE_TAG=operators/integrals.jl` |
 | `TEST_FAST=true`        | run only the `:unit` tier (drops conv/inference/smoke/...)          |
 | `TEST_EXCLUDE_SLOW=true` | drop tests marked `slow = true` (see "Cost" below)           |
 | `TEST_FAIL_FAST=false`  | run all tests and summarize failures at the end (default stops at the first failing file) |

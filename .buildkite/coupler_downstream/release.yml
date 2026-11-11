@@ -1,0 +1,25 @@
+# Uploaded by upload.sh for PRs that change the version. The group name
+# matches the one in pipeline.yml, so these steps join that group.
+steps:
+  - group: "Downstream tests"
+    steps:
+      - label: ":rocket: Downstream: trigger ClimaCoupler CI (release)"
+        depends_on: ~
+        trigger: "climacoupler-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+        soft_fail: true # downstream test failures don't block a merge
+
+      - label: ":rocket: Downstream: trigger ClimaCoupler nightly (release)"
+        depends_on: ~
+        trigger: "climacoupler-coarse-nightly-amip"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+            NEW_T_END: "2hours"
+        async: true # downstream test failures don't block a merge

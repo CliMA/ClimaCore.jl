@@ -338,8 +338,8 @@ tracer mass of each element up to the relative tolerance `limiter.rtol`.
 Each element is processed by [`apply_limit_slab!`](@ref), with the density `ρ` times the
 quadrature weights as the weights of the least-squares redistribution. When some element
 fails to converge, `limiter.convergence_stats` is updated. On CPU devices with
-`warn = true`, the accumulated convergence statistics are printed with `@warn` after each
-call.
+`warn = true`, a call in which some element fails to converge prints the accumulated
+convergence statistics with `@warn`.
 
 Return `ρq` on CPU devices and `nothing` on CUDA devices.
 """
@@ -377,14 +377,14 @@ function apply_limiter!(
                 apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             converged &= _converged
             max_rel_err = max(slab_max_rel_err, max_rel_err)
-            min_tracer_mass = max(min_tracer_mass, slab_min_tracer_mass)
+            min_tracer_mass = min(min_tracer_mass, slab_min_tracer_mass)
         end
     end
     if !converged
         lcs = limiter.convergence_stats
         update_convergence_stats!(lcs, max_rel_err, min_tracer_mass)
     end
-    if warn
+    if warn && !converged
         lcs = limiter.convergence_stats
         msg = convergence_stats_str(lcs)
         msg *= "Use `warn = false` in `Limiters.apply_limiter!` to suppress this message.\n"
@@ -411,7 +411,7 @@ end
 # require it to be wrapped in a Core.Box
 @inline function slab_total_mass(slab_ρ, slab_WJ, Ni, Nj)
     total_mass = zero(eltype(parent(slab_ρ)))
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         total_mass += slab_ρ[1, i, j, 1] * slab_WJ[1, i, j, 1]
     end
     return total_mass
@@ -479,8 +479,8 @@ function apply_limit_slab_field!(
     (_, Ni, Nj, _) = size(field_ρq)
     maxiter = Ni * Nj
 
-    q_min = field_q_bounds[1, 1, 1, 1]
-    q_max = field_q_bounds[1, 2, 1, 1]
+    q_min = @inbounds field_q_bounds[1, 1, 1, 1]
+    q_max = @inbounds field_q_bounds[1, 2, 1, 1]
 
     converged = true
     max_rel_err = zero(rtol)
@@ -489,7 +489,7 @@ function apply_limit_slab_field!(
 
     # 2) compute ∫ρq
     tracer_mass = zero(FT)
-    for j in 1:Nj, i in 1:Ni
+    @inbounds for j in 1:Nj, i in 1:Ni
         tracer_mass += field_ρq[1, i, j, 1] * slab_WJ[1, i, j, 1]
     end
 
@@ -502,7 +502,7 @@ function apply_limit_slab_field!(
     q_max = max(q_max, q_avg)
 
     # 3) modify ρq
-    for iter in 1:maxiter
+    @inbounds for iter in 1:maxiter
         Δtracer_mass = zero(FT)
         for j in 1:Nj, i in 1:Ni
             ρ = slab_ρ[1, i, j, 1]
@@ -519,7 +519,11 @@ function apply_limit_slab_field!(
             end
         end
 
-        rel_err = abs(Δtracer_mass) / abs(tracer_mass)
+        # Clipping that moves no mass has converged, including in a slab with
+        # no tracer mass, where the ratio would be 0 / 0.
+        rel_err =
+            iszero(Δtracer_mass) ? zero(FT) :
+            abs(Δtracer_mass) / abs(tracer_mass)
         max_rel_err = max(max_rel_err, rel_err)
         min_tracer_mass = min(min_tracer_mass, abs(tracer_mass))
         if rel_err <= rtol

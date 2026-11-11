@@ -5,7 +5,7 @@ struct FaceToFace <: AbstractMatrixShape end
 struct CenterToCenter <: AbstractMatrixShape end
 struct CenterToFace <: AbstractMatrixShape end
 
-matrix_shape(matrix_field) = matrix_shape(matrix_field, axes(matrix_field))
+@inline matrix_shape(matrix_field) = matrix_shape(matrix_field, axes(matrix_field))
 
 """
     matrix_shape(matrix_field, [matrix_space])
@@ -21,7 +21,7 @@ diagonal indices of `matrix_field` are `Int`s or `PlusHalf`s and whether
 When `matrix_space` is a spectral element or point space, only the `Square()` shape
 is supported, and `matrix_field` must have `DiagonalMatrixRow` entries.
 """
-matrix_shape(matrix_field, matrix_space) = _matrix_shape(
+@inline matrix_shape(matrix_field, matrix_space) = _matrix_shape(
     eltype(outer_diagonals(eltype(matrix_field))),
     matrix_space.staggering,
 )
@@ -50,7 +50,7 @@ Return the space that corresponds to the columns of `matrix_field`, i.e., the
 `matrix_space` is the space that corresponds to the rows of `matrix_field`, and it
 defaults to `axes(matrix_field)`.
 """
-column_axes(matrix_field, matrix_space = axes(matrix_field)) =
+@inline column_axes(matrix_field, matrix_space = axes(matrix_field)) =
     _column_axes(matrix_shape(matrix_field, matrix_space), matrix_space)
 
 _column_axes(::Square, space) = space

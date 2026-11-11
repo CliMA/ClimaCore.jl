@@ -81,26 +81,26 @@ and/or lazy broadcasts over columns.
 
 # Buffer reuse invariant
 
-On GPUs, buffers of equal byte size can be assigned to the same shared memory
-when they are allocated in separately compiled functions (see
-`DataLayouts.scoped_static_array`), so each `apply_operator` method keeps at most
-one buffer of each size live at a time, separating every reuse from the previous
-use with a `DataLayouts.synchronize`. A finite difference operator with
-cached arguments (see [`cached_arg`](@ref)) is applied before any expression that
-contains it is cached or evaluated, so only one application's cached arguments are
-live at a time; only `FCTZalesak` caches two, on different staggerings, whose buffers
-can only have equal byte sizes on very short columns. The destination stays live for
-the whole application and may alias a *different* live application's destination
-(as in `@. wdiv(grad(a)) + wdiv(grad(b))`), so it lives in per-thread registers
-([`register_similar`](@ref)), as do temporaries materialized inside a fused
-slice loop; [`materialize_buffer`](@ref) republishes register-resident values
-whenever an operator must read them across threads. Two configurations rely on
-their allocation sites compiling into one unit (equal-size globals merge only
-across separately compiled functions): interpolation to an equal or lower
-degree gives a buffered argument and `sequential_muladd_slab!`'s partial result
-the same byte size, and `SplitDivergence`'s buffered second argument stays live
-across its equal-size per-dimension intermediates. Both are pinned by GPU value
-tests in `test/Operators/spectralelement/gpu_rectilinear.jl`.
+On GPUs, every buffer of a slice (see `DataLayouts.scoped_static_array`) is placed at the
+start of its scope's shared memory unless it is given a byte offset, so buffers share
+memory by default, and every allocation synchronizes its scope first, which retires the
+buffers it overlaps (no other synchronization does; the explicit ones publish values that
+one thread writes and others read, and an allocation serves as one when it comes between
+the writes and the reads). Buffers that are
+live at the same time are only allocated within one `apply_operator` method, which places
+each one after the others (see [`buffer_similar`](@ref) and [`shared_buffer_bytes`](@ref)):
+the cached arguments of a finite difference operator's pass (see [`cached_arg`](@ref)),
+`SplitDivergence`'s cached second argument and a per-dimension intermediate, the buffered
+argument and partial result of `Interpolate` and `Restrict`, and the two buffers of
+`LumpedRestriction`. Per-dimension intermediates are retired before the next one is
+allocated, and a spectral element operator is applied before the operator that reads its
+result allocates any buffers. The destination stays live for the whole application and may
+alias a *different* live application's destination (as in `@. wdiv(grad(a)) + wdiv(grad(b))`),
+so it lives in per-thread registers ([`register_similar`](@ref)), as do temporaries
+materialized inside a fused slice loop; [`materialize_buffer`](@ref) republishes
+register-resident values whenever an operator must read them across threads. The
+co-live pairs are pinned by GPU value tests in
+`test/Operators/spectralelement/gpu_rectilinear.jl`.
 """
 function apply_operator end
 

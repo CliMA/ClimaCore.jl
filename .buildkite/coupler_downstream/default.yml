@@ -1,0 +1,17 @@
+# Uploaded by upload.sh. The group name matches the one in pipeline.yml, so
+# these steps join that group.
+steps:
+  - group: "Downstream tests"
+    steps:
+      # DOWNSTREAM_CI limits ClimaCoupler to the steps needed for upstream
+      # changes
+      - label: ":rocket: Downstream: trigger ClimaCoupler CI"
+        depends_on: ~
+        trigger: "climacoupler-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+            DOWNSTREAM_CI: "ClimaCore downstream test"
+        soft_fail: true # temporary, until the ClimaCoupler PR that fixes its failures (which waits on this PR) is merged

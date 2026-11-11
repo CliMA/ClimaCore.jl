@@ -100,14 +100,15 @@ an analytic surface.
     `CommonSpaces` constructors or as the second argument of
     `Meshes.IntervalMesh`. The rules, with `η = (z − z₀)/(z₁ − z₀)`:
 
-    | Rule                                                         | Parameters                                          | Spacing                                                                                                                                            |
-    |:------------------------------------------------------------ |:--------------------------------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------- |
-    | `Meshes.Uniform()`                                           | none                                                | Equal cells.                                                                                                                                       |
-    | `Meshes.ExponentialStretching(H)`                            | `H`: scale height [m]                               | Uniform in `ζ = (1 − e^(−η/h)) / (1 − e^(−1/h))` with `h = H / (z₁ − z₀)`; cells grow exponentially with height (`H ≈ 7.5 km` for the atmosphere). |
-    | `Meshes.GeneralizedExponentialStretching(dz_bottom, dz_top)` | target cell heights at the bottom and top [m]       | Exponential growth whose rate is solved from the two target spacings.                                                                              |
-    | `Meshes.HyperbolicTangentStretching(dz_surface)`             | `dz_surface`: target cell height at the surface [m] | Uniform in `ζ` with `η = 1 − tanh[γ (1 − ζ)] / tanh γ`; `γ` is solved so the first cell has height `dz_surface`.                                   |
+    | Rule                                                                         | Parameters                                                                               | Spacing                                                                                                                                                          |
+    |:---------------------------------------------------------------------------- |:---------------------------------------------------------------------------------------- |:---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `Meshes.Uniform()`                                                           | none                                                                                     | Equal cells.                                                                                                                                                     |
+    | `Meshes.ExponentialStretching(H)`                                            | `H`: scale height [m]                                                                    | Uniform in `ζ = (1 − e^(−η/h)) / (1 − e^(−1/h))` with `h = H / (z₁ − z₀)`; cells grow exponentially with height (`H ≈ 7.5 km` for the atmosphere).               |
+    | `Meshes.GeneralizedExponentialStretching(dz_bottom, dz_top)`                 | target cell heights at the bottom and top [m]                                            | Exponential growth whose rate is solved from the two target spacings.                                                                                            |
+    | `Meshes.HyperbolicTangentStretching(dz_surface)`                             | `dz_surface`: target cell height at the surface [m]                                      | Uniform in `ζ` with `η = 1 − tanh[γ (1 − ζ)] / tanh γ`; `γ` is solved so the first cell has height `dz_surface`.                                                 |
+    | `Meshes.BoundaryLayerHyperbolicTangentStretching(dz_surface, dz_top, z_pbl)` | target cell heights at the surface and top [m]; `z_pbl`: boundary-layer scale height [m] | Hyperbolic-tangent background matching `dz_surface` and `dz_top`, plus a `tanh(z / z_pbl)` profile that concentrates the remaining levels in the boundary layer. |
 
-    All three stretched rules take `reverse_mode = true` to put the thin cells
+    All four stretched rules take `reverse_mode = true` to put the thin cells
     at the top instead, the arrangement of a land model. The CliMA atmosphere
     uses hyperbolic-tangent stretching with a 30 m surface cell in a 30 km
     domain of 43 levels [Yatunin2026](@cite):

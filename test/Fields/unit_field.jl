@@ -682,6 +682,40 @@ end
     @test ClimaComms.array_type(Fields.FieldVector(z = 1.0f0)) == Array
 end
 
+@testset "FieldVector device and context" begin
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    space = TU.SpectralElementSpace1D(Float32; context)
+    x = Fields.coordinate_field(space).x
+    y = Fields.FieldVector(; x)
+    @test ClimaComms.context(y) == context
+    @test (@inferred ClimaComms.device(y)) == device
+    point_device =
+        device isa ClimaComms.CPUSingleThreaded ? ClimaComms.CPUMultiThreaded() :
+        ClimaComms.CPUSingleThreaded()
+    point_context = ClimaComms.SingletonCommsContext(point_device)
+    point_space = Spaces.PointSpace(point_context, Geometry.ZPoint(1.0f0))
+    p = ones(point_space)
+    a = fill!(similar(parent(x), 3), 1)
+    for fv in (
+        Fields.FieldVector(; p, x),
+        Fields.FieldVector(; p, c = (; x)),
+        Fields.FieldVector(; c = (; p), x),
+        Fields.FieldVector(; c = (; t = 1.0f0), x),
+        Fields.FieldVector(; t = 1.0f0, p, x),
+        Fields.FieldVector(; a, x),
+    )
+        @test ClimaComms.context(fv) == context
+        @test (@inferred ClimaComms.device(fv)) == device
+    end
+    @test (@inferred ClimaComms.device(Fields.FieldVector(; p))) == point_device
+    @test (@inferred ClimaComms.device(Fields.FieldVector(; t = 1.0f0, p))) ==
+          point_device
+    for fv in (Fields.FieldVector(; t = 1.0f0), Fields.FieldVector(; a))
+        @test_throws "without a Field" ClimaComms.device(fv)
+    end
+end
+
 @testset "FieldVector basetype replacement and deepcopy" begin
     device = ClimaComms.CPUSingleThreaded() # constructing space_vijfh is broken
     context = ClimaComms.SingletonCommsContext(device)
@@ -902,6 +936,20 @@ end
               view(coords, Nv * Ni * Nj + Nv * Ni + Nv + 1)
         @test view(Spaces.column(coords, 2, 2, 2), 2) ==
               view(coords, Nv * Ni * Nj + Nv * Ni + Nv + 2)
+    end
+end
+
+@testset "Point loops over Fields and DataLayouts" begin
+    FT = Float64
+    for VIJH in (DataLayouts.VIJFH, DataLayouts.VIJHF)
+        space = TU.CenterExtrudedFiniteDifferenceSpace(FT; VIJH)
+        field = Fields.coordinate_field(space).z .+ 1
+        data = similar(Fields.field_values(field))
+        double!(dest_point, src_point) = (dest_point[] = 2 * src_point[]; nothing)
+        foreach_point(double!, data, field)
+        @test data == Fields.field_values(2 .* field)
+        foreach_point(double!, field, data)
+        @test Fields.field_values(field) == 2 .* data
     end
 end
 

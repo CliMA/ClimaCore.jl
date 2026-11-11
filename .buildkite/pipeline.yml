@@ -160,6 +160,27 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
           TEST_SUBSYSTEM: "{{matrix.subsystem}}"
           TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
+          # Runs in its own step below (it matches only that file, so it is safe
+          # for every subsystem).
+          TEST_EXCLUDE_TAG: "operators/integrals.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20G
+
+      # The column integral tests compile about 20 minutes of GPU kernels, which
+      # pushed the operators job past its time limit.
+      - label: "Unit (GPU) - operators integrals"
+        key: unit_curated_suite_gpu_operators_integrals
+        retry: *retry_policy
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/runtests.jl"
+        timeout_in_minutes: 60
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+          TEST_SUBSYSTEM: "operators"
+          TEST_TAG: "operators/integrals.jl"
+          TEST_EXCLUDE_TIER: "conv,inference,allocs,gpu,smoke"
         agents:
           slurm_gpus: 1
           slurm_mem: 20G
@@ -507,6 +528,8 @@ steps:
         env:
           CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          # On L40S nodes, UCX's cuda_ipc transport drops messages above its rendezvous threshold.
+          UCX_TLS: "^cuda_ipc"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -537,6 +560,8 @@ steps:
         env:
           CLIMACOMMS_CONTEXT: "MPI"
           CLIMACOMMS_DEVICE: "CUDA"
+          # On L40S nodes, UCX's cuda_ipc transport drops messages above its rendezvous threshold.
+          UCX_TLS: "^cuda_ipc"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -1318,6 +1343,8 @@ steps:
         retry: *retry_policy
         command: "julia --color=yes --project=.buildkite perf/invalidations.jl"
   - group: "Downstream tests"
+    depends_on: ~ # downstream builds should not depend on any steps in this
+                  # pipeline
     steps:
       # Downstream test: run ClimaAtmos CI against this ClimaCore commit.
       # ClimaAtmos's pipeline sees UPSTREAM_PACKAGES and
@@ -1337,6 +1364,20 @@ steps:
           env:
             UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT} ClimaCoreSpectra#${BUILDKITE_COMMIT} ClimaCoreTempestRemap#${BUILDKITE_COMMIT}"
         soft_fail: true # downstream test failures don't block a merge
+
+      - label: ":rocket: Downstream: trigger ClimaLand CI"
+        trigger: "climaland-downstream"
+        build:
+          branch: "main"
+          message: "Downstream test: ClimaCore ${BUILDKITE_BRANCH} @ ${BUILDKITE_COMMIT:0:8}"
+          env:
+            UPSTREAM_PACKAGES: "ClimaCore#${BUILDKITE_COMMIT}"
+
+      # PRs that change the version run all of ClimaCoupler's CI and its
+      # nightly AMIP; other builds run a subset of ClimaCoupler's CI
+      - label: ":rocket: Downstream: select ClimaCoupler steps"
+        retry: *retry_policy
+        command: "bash .buildkite/coupler_downstream/upload.sh"
 
   - wait
 

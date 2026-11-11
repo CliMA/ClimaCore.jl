@@ -54,6 +54,7 @@ DataLayouts.release_pool_threads
 DataLayouts.synchronize
 DataLayouts.scoped_array
 DataLayouts.scoped_static_array
+DataLayouts.scoped_buffer_bytes
 DataLayouts.strided_access
 DataLayouts.subscope_indices
 ```

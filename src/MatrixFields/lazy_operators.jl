@@ -49,22 +49,22 @@ Base.Broadcast.broadcasted(::LazyOperatorStyle, f::F, args...) where {F} =
 Fields.shared_space(bc::LazyOperatorBroadcasted) =
     Fields.shared_space_ignoring_staggering(bc.args)
 
-function Base.Broadcast.materialize(bc::LazyOperatorBroadcasted)
+@inline function Base.Broadcast.materialize(bc::LazyOperatorBroadcasted)
     space = Fields.shared_space(bc)
     isnothing(space) && error("Cannot materialize broadcast expression with \
                                AbstractLazyOperator because it does not contain any Fields")
     return Base.Broadcast.materialize(replace_lazy_operators(space, bc))
 end
 
-Base.Broadcast.materialize!(dest::Fields.Field, bc::LazyOperatorBroadcasted) =
+@inline Base.Broadcast.materialize!(dest::Fields.Field, bc::LazyOperatorBroadcasted) =
     Base.Broadcast.materialize!(dest, replace_lazy_operators(axes(dest), bc))
 
-replace_lazy_operators(_, arg) = arg
-replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
+@inline replace_lazy_operators(_, arg) = arg
+@inline replace_lazy_operators(space, bc::LazyOperatorBroadcasted) =
     bc.f isa AbstractLazyOperator ? replace_lazy_operator(space, bc.f) :
     Base.Broadcast.broadcasted(
         bc.f,
-        unrolled_map(Base.Fix1(replace_lazy_operators, space), bc.args)...,
+        unrolled_map(@inline(arg -> replace_lazy_operators(space, arg)), bc.args)...,
     )
 
 """

@@ -14,6 +14,7 @@ using IntervalSets
 using Test
 using LinearAlgebra
 import ClimaComms
+import ClimaCore
 import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.Operators
@@ -448,5 +449,36 @@ The GitHub Actions job runs the suite through `Pkg.test`, which passes
 gate there.
 """
 allocation_checks_meaningful() = Base.JLOptions().check_bounds == 0
+
+"""
+    recorded_kernels(f)
+
+The CUDA kernels that `f()` launches, in order, recorded by the CUDA extension.
+"""
+function recorded_kernels(f)
+    ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
+    empty!(ext.RECORDED_KERNELS)
+    ext.RECORD_KERNELS[] = true
+    try
+        f()
+    finally
+        ext.RECORD_KERNELS[] = false
+    end
+    return splice!(ext.RECORDED_KERNELS, eachindex(ext.RECORDED_KERNELS))
+end
+
+"""
+    slice_subscope_type(kernel)
+
+The type of the subscope that a slice loop kernel from [`recorded_kernels`](@ref) assigned
+every slice to, captured by the kernel's function (see the CUDA extension's
+`_foreach_slice`), or `nothing` for other kernels.
+"""
+function slice_subscope_type(kernel)
+    scopes = filter(collect(fieldtypes(typeof(kernel).parameters[1]))) do T
+        T <: DataLayouts.DataScope
+    end
+    return isempty(scopes) ? nothing : only(scopes)
+end
 
 end

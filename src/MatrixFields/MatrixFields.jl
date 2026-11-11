@@ -93,18 +93,18 @@ include("field_matrix_with_solver.jl")
 
 # Extend the recursion limit removal in Operators to the methods defined above.
 @drop_recursion_limits Operators.stencil_value, Operators.stencil_interior,
-multiply_matrix_row, matrix_row_value, projected_value
-@drop_constprop Operators.stencil_value, multiply_matrix_row, matrix_row_value
+matrix_row_value, projected_value
+@drop_constprop Operators.stencil_value, matrix_row_value
 
 # Evaluate multiplications in left-associative order. This should technically be
 # right-associative, but flipping the order worsens performance in GPU kernels,
 # where the second argument of each matrix product is cached. Left-associativity
 # makes the first argument grow in bandwidth when multiplying a chain of
 # matrices, whereas right-associativity makes the second argument grow instead.
-Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
-    unrolled_reduce((x, y) -> Base.broadcasted(*, x, y), args; init = arg)
+@inline Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
+    unrolled_reduce(@inline((x, y) -> Base.broadcasted(*, x, y)), args; init = arg)
 
-Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
+@inline Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
     check_entry(FieldNamePair, x) && check_entry(FieldName, y) ?
     Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, projected_operand(x, y)) :
     auto_broadcasted(style, *, (x, y))
