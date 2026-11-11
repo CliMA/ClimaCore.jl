@@ -16,7 +16,8 @@ import ClimaCore:
     Geometry,
     Operators,
     DeviceSideContext,
-    DeviceSideDevice
+    DeviceSideDevice,
+    to_device
 
 using ClimaCore.CommonSpaces
 using ClimaCore.Utilities.Cache
@@ -136,14 +137,18 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     c_no_mask = Fields.Field(FT, ᶜspace_no_mask)
     @test_throws DimensionMismatch @. c_no_mask + ᶜf
     ᶠf_no_mask = Fields.Field(FT, ᶠspace_no_mask)
-    if ClimaComms.device(ᶜspace_no_mask) isa ClimaComms.CUDADevice
+    # Without a mask, sqrt(-1) is evaluated everywhere and throws a DomainError.
+    # On GPU, it raises from inside the kernel and arrives as a
+    # CUDA.KernelException. Kernels run asynchronously, so the exception is only
+    # raised once the device is synchronized.
+    device = ClimaComms.device(ᶜspace_no_mask)
+    no_mask_sqrt() = ClimaComms.@cuda_sync device begin
         @. c_no_mask = div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-        @test count(isnan, parent(c_no_mask)) == 49600
+    end
+    if device isa ClimaComms.CUDADevice
+        @test_throws CUDA.KernelException no_mask_sqrt()
     else
-        @test_throws DomainError begin
-            @. c_no_mask =
-                div(Geometry.WVector(foo(ᶠf_no_mask, ᶠcoords_no_mask)))
-        end
+        @test_throws DomainError no_mask_sqrt()
     end
 
 end
@@ -313,12 +318,17 @@ end
     @test length(Spaces.unique_nodes(hspace)) == 4
     @test length(Spaces.all_nodes(hspace)) == 4
 
+    # These spaces are built on the CPU, and CUDA's KernelAdaptor rejects CPU
+    # arrays, so they are moved to the GPU before being adapted for a kernel.
     @static if on_gpu
-        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), c_space)
+        gpu = ClimaComms.CUDADevice()
+        adapted_space =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, c_space))
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
 
-        adapted_hspace = Adapt.adapt(CUDA.KernelAdaptor(), hspace)
+        adapted_hspace =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, hspace))
         @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
         @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
     end
@@ -405,8 +415,12 @@ end
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
 
+    # The space is built on the CPU, and CUDA's KernelAdaptor rejects CPU
+    # arrays, so it is moved to the GPU before being adapted for a kernel.
     @static if on_gpu
-        adapted_space = Adapt.adapt(CUDA.KernelAdaptor(), space)
+        gpu = ClimaComms.CUDADevice()
+        adapted_space =
+            Adapt.adapt(CUDA.KernelAdaptor(), to_device(gpu, space))
         @test ClimaComms.context(adapted_space) == DeviceSideContext()
         @test ClimaComms.device(adapted_space) == DeviceSideDevice()
     end

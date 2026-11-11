@@ -1,5 +1,9 @@
 using Test
 using JET
+import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 
 import ClimaCore:
     Geometry, Domains, Meshes, Spaces, Fields, MatrixFields, CommonSpaces
@@ -135,7 +139,7 @@ end
         for (key, entry) in MatrixFields.scalar_field_matrix(A)
             @test test_get(A, entry, key)
             @test (@allocated test_get(A, entry, key)) == 0
-            @test_opt test_get(A, entry, key)
+            @test_opt ignored_modules = JETConfig.ignored_modules() test_get(A, entry, key)
         end
 
         function scalar_field_matrix_wrapper(field_matrix_of_tensors)
@@ -145,7 +149,9 @@ end
 
         scalar_field_matrix_wrapper(A)
         @test (@allocated scalar_field_matrix_wrapper(A)) == 0
-        @test_opt MatrixFields.scalar_field_matrix(A)
+        @test_opt ignored_modules = JETConfig.ignored_modules() MatrixFields.scalar_field_matrix(
+            A,
+        )
 
         A_with_tree =
             MatrixFields.replace_name_tree(A, MatrixFields.FieldNameTree(b))

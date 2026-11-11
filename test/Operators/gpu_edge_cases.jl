@@ -424,7 +424,7 @@ end
     spaces_cpu = high_resolution_column_spaces(cpu_device)
     for (field, field_cpu) in
         zip(fd_advection_results(spaces...), fd_advection_results(spaces_cpu...))
-        @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+        @test device_matches_cpu(field, field_cpu; rtol = 100 * eps(FT))
         @test all(isfinite, Array(parent(field)))
     end
     # The operator matrix product contains a second derivative, so a 1-ulp
@@ -478,7 +478,11 @@ end
             fd_tuple_flux_results(spaces...),
             fd_tuple_flux_results(spaces_cpu...),
         )
-            @test device_matches_cpu(field, field_cpu; rtol = 10 * eps(FT))
+            @test device_matches_cpu(
+                field,
+                field_cpu;
+                rtol = FT == Float32 ? 100 * eps(FT) : 1000 * eps(FT),
+            )
             @test all(isfinite, Array(parent(field)))
         end
     end

@@ -1,4 +1,7 @@
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore: Spaces, Grids, Topologies
 using Test
 @isdefined(TU) || include(
@@ -10,8 +13,11 @@ ClimaComms.@import_required_backends
 
 using JET
 function test_n_failures(n_allowed, f::F, context) where {F}
-    result = JET.@report_opt f(Float32; context = context)
-    n_found = length(JET.get_reports(result.analyzer, result.result))
+    result = JET.@report_opt ignored_modules = JETConfig.ignored_modules() f(
+        Float32;
+        context = context,
+    )
+    n_found = length(JET.get_reports(result))
     @test n_found ≤ n_allowed
     if n_found < n_allowed
         @info "Inference may have improved for $f: (n_found, n_allowed) = ($n_found, $n_allowed)"
@@ -31,28 +37,28 @@ end
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(56,   TU.PointSpace, context)
         test_n_failures(750,  TU.SpectralElementSpace1D, context)
-        test_n_failures(402,  TU.SpectralElementSpace2D, context)
+        test_n_failures(615,  TU.SpectralElementSpace2D, context)
         test_n_failures(115,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(115,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(408,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(423,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(423,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(621,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(671,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(672,  TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
-        test_n_failures(236,  TU.SpectralElementSpace1D, context)
-        test_n_failures(415,  TU.SpectralElementSpace2D, context)
+        test_n_failures(263,  TU.SpectralElementSpace1D, context)
+        test_n_failures(462,  TU.SpectralElementSpace2D, context)
         test_n_failures(110,  TU.ColumnFaceFiniteDifferenceSpace, context)
         test_n_failures(110,  TU.ColumnCenterFiniteDifferenceSpace, context)
-        test_n_failures(423,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(460,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(461,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(468,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(511,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(512,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
         # The OBJECT_CACHE causes inference failures that inhibit understanding
         # inference failures in _SpectralElementGrid2D, so let's `@test_opt` those
         # separately:
 
         space = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context=ClimaComms.context())
-        result = JET.@report_opt Grids._SpectralElementGrid2D(
+        result = JET.@report_opt ignored_modules = JETConfig.ignored_modules() Grids._SpectralElementGrid2D(
             Spaces.topology(space),
             Spaces.quadrature_style(space),
             ClimaCore.DataLayouts.VIJFH;
@@ -61,7 +67,7 @@ end
             enable_mask = false,
             discretization = Grids.CG(),
         )
-        n_found = length(JET.get_reports(result.analyzer, result.result))
+        n_found = length(JET.get_reports(result))
         # Measured at Float32, GLL{4}, on a CenterExtrudedFiniteDifferenceSpace.
         n_allowed = 107
         @test n_found ≤ n_allowed

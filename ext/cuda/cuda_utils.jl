@@ -298,7 +298,7 @@ maxregs_kwarg(maxregs::Int) = (; maxregs)
 function shmem_level_error_bytes(err::CUDA_COMPILER.GPUCompiler.InvalidIRError)
     bytes = 0
     for (_, _, meta) in err.errors
-        meta isa String || continue
+        meta isa Union{String, SubString{String}} || continue
         startswith(meta, SHMEM_LEVEL_ERROR) || continue
         digits = chop(
             meta;
