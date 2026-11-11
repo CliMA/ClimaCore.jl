@@ -17,6 +17,13 @@ const MAX_SUBBLOCK_LAUNCH_THREADS = 128
 const DEVICE_ASSUMPTIONS_CHECKED = Ref(false)
 function check_device_assumptions()
     DEVICE_ASSUMPTIONS_CHECKED[] && return true
+    # The cached attributes may have been read before a device was chosen (see
+    # attribute_device), and the levels of shared memory compiled from them.
+    device_attributes() == uncached_device_attributes(CUDA.device()) ||
+        throw(ArgumentError("The attributes of $(CUDA.device()) differ from those that \
+                             ClimaCore read before its CUDA context was created; choose \
+                             the device (CUDA.device!) before the first use of ClimaCore \
+                             on a GPU"))
     (; threads_per_warp, max_threads_per_block, max_shmem_per_block) =
         device_attributes()
     if THREADS_PER_WARP != threads_per_warp ||
