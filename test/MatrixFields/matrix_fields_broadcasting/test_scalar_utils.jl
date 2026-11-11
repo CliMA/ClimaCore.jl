@@ -71,13 +71,13 @@ function opt_test_field_broadcast_against_array_reference(
     # Test get_result and set_result! for type instabilities, and test
     # set_result! for allocations. Ignore the type instabilities in CUDA and
     # the allocations they incur.
-    @test_opt ignored_modules = CUDA_FRAMES materialize(bc)
-    @test_opt ignored_modules = CUDA_FRAMES set_result!(result, bc)
+    @test_opt ignored_modules = JETConfig.ignored_modules() materialize(bc)
+    @test_opt ignored_modules = JETConfig.ignored_modules() set_result!(result, bc)
     USING_CUDA || @test set_result_allocs(result, bc) == 0
 
     # Test ref_set_result! for type instabilities and allocations to ensure
     # that the performance comparison is fair.
-    @test_opt ignored_modules = CUDA_FRAMES call_ref_set_result!(
+    @test_opt ignored_modules = JETConfig.ignored_modules() call_ref_set_result!(
         ref_set_result!,
         ref_result_arrays,
         inputs_arrays,

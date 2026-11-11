@@ -3,6 +3,9 @@
 # and views from getproperty (48-96 bytes each), and whether the compiler
 # elides them depends on how much of its inference budget is used up.
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 using ClimaComms
 ClimaComms.@import_required_backends
 using BenchmarkTools
@@ -409,10 +412,13 @@ function alloc_test_nested_expressions_13(
         fynt = fnt_i.fy
         a_up_bcs = a_bcs(FT, i)
         Iaf1 = Operators.InterpolateC2F(; a_up_bcs...)
+        # The same expression as below, so that its broadcast is compiled here
         @. fynt =
-            -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
-            (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
-            (fx * Iaf1(cxnt) * I0f(cϕ)) +
+            (
+                -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
+                (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
+                (fx * Iaf1(cxnt) * I0f(cϕ))
+            ) +
             fψ
     end
 
@@ -435,7 +441,9 @@ function alloc_test_nested_expressions_13(
         end
         #! format: on
         if VERSION ≥ v"1.11.0-beta"
-            TU.@test_allocations p_i == 0
+            # A CUDA launch allocates its wrappers on the host, so the count is
+            # only checked on the CPU, as in the tests above.
+            USING_CUDA || TU.@test_allocations p_i == 0
         else
             @test_broken p_i == 0
         end
@@ -472,7 +480,10 @@ end
     if !(ClimaComms.device(ffield) isa ClimaComms.CUDADevice)
         # TODO: this fails, but it may not actually be important
         # JET.@test_call jet_test_f2c_interp2(cfield, ffield)
-        JET.@test_opt jet_test_f2c_interp2(cfield, ffield)
+        JET.@test_opt ignored_modules = JETConfig.ignored_modules() jet_test_f2c_interp2(
+            cfield,
+            ffield,
+        )
     end
 
     alloc_test_c2f_interp(

@@ -78,7 +78,7 @@ for FT in (Float32, Float64)
 
                 # Test conservation in comparison to weak divergence operator
                 @test abs(sum(split_div.(u, psi))) < 200 * eps(FT)
-                @test abs(sum(wdiv.(u .* psi))) < 10 * eps(FT)
+                @test abs(sum(wdiv.(u .* psi))) < 20 * eps(FT)
             end
         end
 

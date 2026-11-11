@@ -138,6 +138,11 @@ Shared setup lives in:
  - `TestUtilities/TestUtilities.jl` — space constructors (`all_spaces`,
    `SphereSpectralElementSpace`, ...), the `@test_precisions` dual-precision
    sweep macro, and allocation helpers.
+ - `TestUtilities/JETConfig.jl` — the JET reports that every test ignores.
+   Every JET check passes `ignored_modules = JETConfig.ignored_modules()`, and
+   the ones that skip calls by function pass
+   `function_filter = JETConfig.function_filter`; add to these lists rather
+   than to a call site.
  - `CommonSpaces/`, `CommonGrids/` — convenience constructors for common
    spaces and grids.
 

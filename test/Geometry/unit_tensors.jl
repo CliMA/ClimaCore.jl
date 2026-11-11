@@ -2,6 +2,9 @@ using Test, JET
 using ClimaCore.Geometry, ClimaCore.DataLayouts
 using LinearAlgebra, StaticArrays
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 
 @testset "Tensors" begin
     x = Geometry.Covariant12Vector(1.0, 2.0)
@@ -12,7 +15,7 @@ import ClimaCore
     @test x.u₃ === 0.0
 
     f(x) = x.u₁ + x.u₂ + x.u₃
-    @test_opt f(x)
+    @test_opt ignored_modules = JETConfig.ignored_modules() f(x)
 
     ref = Ref(zero(x))
     ref[] = Geometry.Covariant12Vector(1, 2) # Int components instead of Float64

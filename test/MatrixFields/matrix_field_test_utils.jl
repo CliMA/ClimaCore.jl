@@ -17,10 +17,6 @@ if !@isdefined(USING_JET)
         export @test_opt, @test_call
         end
         using .JET
-        struct AnyFrameModule
-
-            m::Any
-        end
         false
     end
     # JET is often present but fails to load (e.g. a compat clash with the
@@ -33,6 +29,11 @@ import Dates
 import Random: seed!
 import ClimaCore
 import ClimaComms
+USING_JET && (
+    @isdefined(JETConfig) || include(
+        joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+    )
+)
 if !@isdefined(USING_BT)
     const USING_BT = try
         import BenchmarkTools as BT
@@ -104,7 +105,7 @@ macro test_all(expression)
         # so the allocation check is CPU-only. The type-stability check runs on
         # both devices, since a type instability is what breaks GPU compilation.
         USING_CUDA || @test call_allocs(test_func) ≤ 48 # allocations
-        @test_opt ignored_modules = CUDA_FRAMES test_func() # type instabilities
+        @test_opt ignored_modules = JETConfig.ignored_modules() test_func() # type instabilities
     end
 end
 
@@ -130,20 +131,6 @@ const comms_device = ClimaComms.device()
 const USING_CUDA = comms_device isa ClimaComms.CUDADevice
 cuda_module(ext) = USING_CUDA ? ext.CUDA : ext
 const CUDA_MOD = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
-const CLIMACORE_CUDA_MOD = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
-const CUDA_FRAMES =
-    USING_CUDA ?
-    (
-        AnyFrameModule(CUDA_MOD),
-        AnyFrameModule(CLIMACORE_CUDA_MOD),
-        # `Field == Field` bottoms out in GPUArrays' generic `==` for device
-        # arrays, whose `mapreduce` accumulator inference cannot resolve. The
-        # dispatches are reported against `Base` frames reached through
-        # GPUArrays, so only `AnyFrameModule`, which matches any frame in the
-        # stack rather than the innermost, excludes them.
-        AnyFrameModule(CUDA_MOD.GPUArrays),
-    ) : ()
-const cublas_frames = USING_CUDA ? (AnyFrameModule(CUDA_MOD.CUBLAS),) : ()
 const invalid_ir_error = USING_CUDA ? CUDA_MOD.InvalidIRError : ErrorException
 
 # Test the allocating and non-allocating versions of a field broadcast against
@@ -207,14 +194,17 @@ function test_field_broadcast(;
         # Test get_result and set_result! for type instabilities, and test
         # set_result! for allocations. Ignore the type instabilities in CUDA and
         # the allocations they incur.
-        @test_opt ignored_modules = CUDA_FRAMES materialize(get_result)
-        @test_opt ignored_modules = CUDA_FRAMES materialize!(result, set_result)
+        @test_opt ignored_modules = JETConfig.ignored_modules() materialize(get_result)
+        @test_opt ignored_modules = JETConfig.ignored_modules() materialize!(
+            result,
+            set_result,
+        )
         USING_CUDA || @test materialize_allocs(result, set_result) == 0
 
         if !isnothing(ref_set_result)
             # Test ref_set_result! for type instabilities and allocations to
             # ensure that the performance comparison is fair.
-            @test_opt ignored_modules = CUDA_FRAMES materialize!(
+            @test_opt ignored_modules = JETConfig.ignored_modules() materialize!(
                 ref_result,
                 ref_set_result,
             )
@@ -544,7 +534,7 @@ function perf_apply_operators(bc)
     bc_column = column_broadcast(bc)
     call_apply_operators(bc_column)
     time = time_and_units_str(BT.@belapsed call_apply_operators($bc_column))
-    @test_opt call_apply_operators(bc_column)
+    @test_opt ignored_modules = JETConfig.ignored_modules() call_apply_operators(bc_column)
     @info "apply_operators time per column = $time"
     return nothing
 end
