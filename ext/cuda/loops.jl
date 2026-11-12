@@ -5,6 +5,8 @@ has_inferred_slice_size(op::O, arg) where {O} =
     end
 has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
     unrolled_all(Base.Fix1(has_inferred_slice_size, op), arg)
+# Point slices of DataLayout broadcasts are zero-dimensional: no need to infer their views.
+has_inferred_slice_size(::typeof(view), ::DataLayouts.LazyDataLayout) = true
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
 
