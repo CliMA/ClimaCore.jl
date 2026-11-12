@@ -319,9 +319,9 @@ const LAUNCH_CONFIGURATION_CACHE = Dict{
 const LAUNCH_CONFIGURATION_CACHE_LOCK = ReentrantLock()
 
 """
-    launch_configuration(kernel; [max_waves], [granularity], [shmem])
-    launch_configuration(kernel, max_threads; strict = true, [max_waves], [granularity], [shmem])
-    launch_configuration(kernel, max_threads_per_block, max_blocks; [max_waves], [granularity], [shmem])
+    launch_configuration(cu_func; [max_waves], [granularity], [shmem])
+    launch_configuration(cu_func, max_threads; strict = true, [max_waves], [granularity], [shmem])
+    launch_configuration(cu_func, max_threads_per_block, max_blocks; [max_waves], [granularity], [shmem])
 
 Analogue of `CUDA.launch_configuration` optimized for single-stream execution,
 which maximizes occupancy across the entire device instead of just one
@@ -375,14 +375,13 @@ lock is used to prevent multiple threads from updating the cache simultaneously,
 since a `Dict` should never be read as it is being rehashed.
 """
 function launch_configuration(
-    kernel::CUDA.HostKernel,
+    cu_func::CUDA.CuFunction,
     config_args...;
     strict = true,
     max_waves = MAX_WAVES[],
     granularity = nothing,
     shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
 )
-    cu_func = kernel.fun
     cache_key = (
         cu_func.handle,
         strict,
@@ -596,8 +595,8 @@ end
 Launch a cuda kernel, using `launch_configuration` to determine the number of
 threads and blocks.
 
-The threads and blocks are computed from the compiled kernel by `config` if it is
-given, or else so that each of `nitems` items gets its own thread; otherwise, the
+The threads and blocks are computed by `config` from the compiled kernel's `CuFunction`
+if it is given, or else so that each of `nitems` items gets its own thread; otherwise, the
 suggested threads and blocks (`threads_s`, `blocks_s`) are used. The kernel is launched
 with the [`DynamicShmem`](@ref) `shmem` evaluated at its number of threads per block (none
 by default), which a `config` must also pass to `launch_configuration`, since the launch
@@ -691,11 +690,11 @@ function auto_launch!(
     kernel = compile_kernel(call, kernel_name; maxregs)
     kernel isa CUDA.HostKernel || return kernel # the bytes of a buffer beyond the level
     if !isnothing(config)
-        (; threads, blocks) = config(kernel)
+        (; threads, blocks) = config(kernel.fun)
     elseif isnothing(nitems)
         (threads, blocks) = (threads_s, blocks_s)
     else
-        threads = launch_configuration(kernel, nitems; strict = false, shmem).threads
+        threads = launch_configuration(kernel.fun, nitems; strict = false, shmem).threads
         blocks = cld(nitems, threads)
     end
     launch_kernel(kernel, call, threads, blocks, shmem(prod(threads)))
