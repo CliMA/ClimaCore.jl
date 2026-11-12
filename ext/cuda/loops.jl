@@ -1,6 +1,8 @@
 has_inferred_slice_size(op::O, arg) where {O} =
-    Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
-        slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
+    Val{true} == Utilities.return_type(
+        Tuple{typeof(arg), eltype(DataLayouts.each_slice_index(op, arg))},
+    ) do arg, index
+        slice = op(arg, Tuple(index)...)
         Val(DataLayouts.has_inferred_size(slice))
     end
 has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
