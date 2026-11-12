@@ -60,9 +60,27 @@ ThisHost() = ThisHost{:auto, :auto}()
 # Bytes of dynamic shared memory per thread at a level of DataLayouts.foreach_slice (:auto is
 # chosen per loop; see slice_subscope_at_level), for slices of N threads. They are a type
 # parameter of ThisSubBlock, so they are read from the device once per process by a generated
-# function; no slice loop runs while the extension precompiles.
+# function. Code that is compiled into an image (a precompiled package or a system image)
+# would keep the bytes of the device it was compiled on, so it reads them from the device
+# when it runs instead (see shmem_level_bytes_code).
 @generated shmem_level_bytes(::Val{L}, ::Val{N}) where {L, N} =
-    L isa Integer ? Int(L) : L == :none ? 0 : device_shmem_level_bytes(L, N)
+    shmem_level_bytes_code(L, N, ccall(:jl_generating_output, Cint, ()) != 0)
+
+# The body of shmem_level_bytes: the bytes of the level as a constant, or for a level of
+# the device in code of an image, a call that reads them when the code runs.
+shmem_level_bytes_code(L, N, in_image) =
+    L isa Integer ? Int(L) :
+    L == :none ? 0 :
+    in_image ? :(image_shmem_level_bytes($(QuoteNode(L)), $N)) :
+    device_shmem_level_bytes(L, N)
+
+@noinline function image_shmem_level_bytes(L, N)
+    @warn "A GPU loop over slices was compiled while a package was precompiled (or a \
+           system image was built), so its launches read the shared memory levels of \
+           the device at run time, which is slower. Do not launch or precompile GPU \
+           loops in a precompile workload." maxlog = 1
+    return device_shmem_level_bytes(L, N)
+end
 DataLayouts.with_shared_memory(::ThisHost{<:Any, R}, ::Val{L}) where {L, R} =
     ThisHost{L, R}()
 DataLayouts.with_register_cap(::ThisHost{L}, ::Val{R}) where {L, R} = ThisHost{L, R}()
