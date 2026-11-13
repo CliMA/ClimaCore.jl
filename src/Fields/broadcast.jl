@@ -323,12 +323,30 @@ Base.similar(bc::LazyField, ::Type{T}) where {T} =
 
 # The mask is an optional positional argument, as for DataLayouts (see the
 # copyto! methods in DataLayouts/loops.jl).
-@inline function Base.copyto!(
+@inline Base.copyto!(
     dest::Field,
     bc::LazyField,
     mask::DataLayouts.DataMask = get_mask(axes(dest)),
+) = copyto_capped!(dest, bc, nothing, mask)
+
+"""
+    copyto_capped!(dest, bc, maxregs, mask = get_mask(axes(dest)))
+
+Evaluate `bc` into `dest` under the register cap `maxregs`; see
+[`DataLayouts.copyto_capped!`](@ref).
+"""
+@inline function copyto_capped!(
+    dest::Field,
+    bc::LazyField,
+    maxregs,
+    mask::DataLayouts.DataMask = get_mask(axes(dest)),
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(field_values(bc)), mask)
+    DataLayouts.copyto_capped!(
+        field_values(dest),
+        Base.Broadcast.instantiate(field_values(bc)),
+        maxregs,
+        mask,
+    )
     return dest
 end
 
