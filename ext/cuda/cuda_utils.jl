@@ -3,8 +3,17 @@ import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.Utilities
 
-function uncached_device_attributes()
-    device = CUDA.device()
+# Unlike CUDA.device(), this creates no context, so it can be called from generated funcs
+function attribute_device()
+    try
+        return CUDA.current_device()
+    catch error
+        error isa UndefRefError || rethrow()
+        return CUDA.CuDevice(0)
+    end
+end
+
+function uncached_device_attributes(device = attribute_device())
     get_attr(code) = Int(CUDA.attribute(device, code))
     sm_version = (
         get_attr(CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR),
@@ -71,6 +80,7 @@ if done more than once, so all attributes are cached after the first call. An
 `Atomic` initialization flag is used to ensure that every thread either sees a
 fully written cache or sets the cache itself. Any thread can set the cache, as
 ClimaComms only targets one device from threads launched by the same process.
+The attributes are read without creating a CUDA context (see `attribute_device`).
 """
 function device_attributes()
     DEVICE_ATTRIBUTE_CACHE_INITIALIZED[] && return DEVICE_ATTRIBUTE_CACHE[]
