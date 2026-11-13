@@ -17,13 +17,16 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Plots at its compat floor resolves to GR 0.72, whose libGRM.so needs the
+    # system libxml2.so.2, which ubuntu-26.04 (ubuntu-latest) no longer ships.
+    runs-on: ubuntu-24.04
     strategy:
-      # Report both versions: without this, a failure on one cancels the other
-      # and hides whether it would have failed too (UnitTests.yml does the same).
       fail-fast: false
       matrix:
-        version: ['1.10', '1.11']
+        # Minimum compat bounds are only checked on the oldest supported Julia:
+        # several dependency floors (e.g. LLVM 9.0, Unitful 1.24) predate and
+        # cannot load on newer Julia releases such as 1.13.
+        version: ['1.10']
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@latest
@@ -37,7 +40,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
         with:
-          # Nothing here uploads coverage. Instrumented runs on 1.11 are also
+          # Nothing here uploads coverage. Instrumented runs on 1.11 were also
           # killed partway through Remapping/unit_distributed_remapping.jl, while
           # uninstrumented ones on the same commit and runner finish.
           coverage: false

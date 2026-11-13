@@ -1,5 +1,9 @@
 using Test
 using JET
+import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import Random
 using StaticArrays: @SMatrix
 
@@ -40,7 +44,7 @@ function test_mul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
 
         @test max_error <= 1                     # correctness
         @test (@allocated f(x, y, lg)) == 0      # allocations
-        @test_opt f(x, y, lg)                    # type instabilities
+        @test_opt ignored_modules = JETConfig.ignored_modules() f(x, y, lg)                    # type instabilities
 
         @test result_type == typeof(result)      # inferred type
     end

@@ -8,6 +8,9 @@ using JET
 using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts:
     foreach_point, foreach_level, foreach_slab, foreach_column
@@ -41,8 +44,12 @@ function test_fused_loop(foreach_slice, space, subspace)
     foreach_slice(fused_loop!, dest, src1, src2)
     @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
 
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
+    @test_opt ignored_modules = JETConfig.ignored_modules() foreach_slice(
+        fused_loop!,
+        dest,
+        src1,
+        src2,
+    )
 end
 
 # As in test_fused_loop, but with spectral element operators in place of the
@@ -132,8 +139,12 @@ function test_fused_column_loop(space, subspace)
         )^2
     ) / 2
 
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_column(fused_loop!, dest, src1, src2)
+    @test_opt ignored_modules = JETConfig.ignored_modules() foreach_column(
+        fused_loop!,
+        dest,
+        src1,
+        src2,
+    )
 end
 
 has_center_columns(space) =

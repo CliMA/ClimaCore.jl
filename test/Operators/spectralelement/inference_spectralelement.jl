@@ -1,5 +1,9 @@
 using Test
 using JET
+import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 using ClimaComms
 using LinearAlgebra, IntervalSets
 
@@ -117,34 +121,39 @@ end
 
 @static if @isdefined(var"@test_opt")
 
-    # Also ignore the runtime dispatch in Threads.threading_run as of Julia
-    # 1.10 (UnionAll construction in typejoin, reached through the error
-    # message machinery of sprint), used by parallelize_over
-    filter(@nospecialize f) =
-        f !== Base.mapreduce_empty && f !== Core.UnionAll
-
     function test_operators(field, vfield)
-        @test_opt opt_Gradient(field)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_Gradient(field)
         opt_WeakGradient(field)
 
-        @test_opt opt_LumpedRestriction(field)
-        @test_opt opt_LumpedRestriction_GradientNorm(field)
-        @test_opt opt_LumpedRestriction_Gradient(field)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_LumpedRestriction(field)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_LumpedRestriction_GradientNorm(
+            field,
+        )
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_LumpedRestriction_Gradient(
+            field,
+        )
 
         covfield = Geometry.CovariantVector.(vfield)
-        @test_opt function_filter = filter opt_Curl(covfield)
-        @test_opt function_filter = filter opt_WeakCurl(covfield)
-        @test_opt opt_CurlCurl(covfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_Curl(covfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_WeakCurl(covfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_CurlCurl(covfield)
 
-        @test_opt opt_Divergence(vfield)
-        @test_opt opt_WeakDivergence(vfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_Divergence(vfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() opt_WeakDivergence(vfield)
 
-        @test_opt function_filter = filter opt_ScalarDSS(field)
-        @test_opt function_filter = filter opt_VectorDss_Curl(covfield)
-        @test_opt function_filter = filter opt_VectorDss_DivGrad(vfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_ScalarDSS(field)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_VectorDss_Curl(covfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_VectorDss_DivGrad(vfield)
 
-        @test_opt function_filter = filter opt_ScalarHyperdiffusion(field)
-        @test_opt function_filter = filter opt_VectorHyperdiffusion(covfield)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_ScalarHyperdiffusion(field)
+        @test_opt ignored_modules = JETConfig.ignored_modules() function_filter =
+            JETConfig.function_filter opt_VectorHyperdiffusion(covfield)
     end
 end
 
@@ -187,11 +196,14 @@ end
                 Spaces.SpectralElementSpace2D(Spaces.topology(space), Iquad)
 
             I = Operators.Interpolate(Ispace)
-            @test_opt opt_Interpolate(I, field)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_Interpolate(
+                I,
+                field,
+            )
 
             Ifield = opt_Interpolate(I, field)
             R = Operators.Restrict(space)
-            @test_opt opt_Restrict(R, Ifield)
+            @test_opt ignored_modules = JETConfig.ignored_modules() opt_Restrict(R, Ifield)
 
             test_operators(field, vfield)
         end

@@ -388,9 +388,9 @@ end
     sums = test_data(device, FT, 1, 4)
     sum_args!(sums, args) = DataLayouts.foreach_column(sums, args) do sums, args
         fill!(sums, 0)
-        for n in 1:40
-            @. sums += n * args[n]
-        end
+        # Static indices: on Julia 1.13, indexing a 40-field NamedTuple with a
+        # runtime index heap-allocates a copy of the tuple on every iteration.
+        Base.Cartesian.@nexprs 40 n -> (@. sums += n * args[n])
     end
     sum_args!(sums, args)
     @test Array(parent(sums)) == sum(n -> n .* Array(parent(args[n])), 1:40)

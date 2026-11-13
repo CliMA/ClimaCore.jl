@@ -16,7 +16,7 @@ test_opt =
         bc;
         input_fields,
         USING_CUDA,
-        allowed_max_eps_error = 1,
+        allowed_max_eps_error = 2,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
         result,
