@@ -25,8 +25,12 @@ end
 @inline all_indexables(::NamedTuple{()}) = ()
 
 @inline first_indexable(arg) = arg
+@inline first_indexable(::Union{Tuple{}, NamedTuple{()}}) = nothing
 @inline first_indexable(args::Union{Tuple, NamedTuple}) =
-    first_indexable(first(all_indexables(args)))
+    unrolled_any(Base.Fix2(isa, Union{Tuple, NamedTuple}), args) ?
+    unrolled_reduce(args; init = nothing) do indexable, arg
+        isnothing(indexable) ? first_indexable(arg) : indexable
+    end : first_indexable(first(args))
 
 # Unmasked point loops use linear indices when every argument supports them,
 # avoiding the integer divisions of linear-to-Cartesian conversion. Static sizes
@@ -96,11 +100,13 @@ the number of points per thread.
 slice a scope with a statically known number of threads.
 """
 @inline function slice_subscope(scope, op::O, args...) where {O}
-    partition(scope) == ThisThread() && return ThisThread()
-    # In a slice loop, a loop over one slice keeps the outer slice's scope: the subsets of
-    # the scope that got no slice would skip every barrier of the slice's function. A point
-    # has no barriers, and only one thread may update it.
+    # In a slice loop, a loop over one slice keeps the outer slice's scope, even when the
+    # scope's partition is a single thread: the subsets of the scope that got no slice would
+    # skip every barrier of the slice's function, and the values that the threads of the
+    # scope keep in registers can only be read by the threads that own them (see
+    # RegisterArray). A point has no barriers, and only one thread may update it.
     op !== view && is_nested_slice(scope, op, first_indexable(args)) && return scope
+    partition(scope) == ThisThread() && return ThisThread()
     max_slice_points =
         unrolled_maximum(Base.Fix1(num_slice_points, op), all_indexables(args))
     return points_subscope(scope, max_slice_points)
@@ -108,6 +114,16 @@ end
 @inline is_nested_slice(scope, op, arg) =
     !isnothing(static_num_threads(scope)) && !needs_loop_setup(scope) &&
     has_inferred_size(arg) && isone(length(each_slice_index(op, arg)))
+
+# The scope of every slice of a loop: one thread in a serial loop (see foreach_slice), and
+# otherwise the slice_subscope. A loop over one slice in a slice loop ignores serial, since
+# the threads of the outer slice keep values of the slice in registers that only they can
+# read (e.g., temporaries of the outer loop's function; see RegisterArray), so every one of
+# them calls the function of the loop, whose work on the whole slice is done by one thread
+# once it can read every value (see scan_points).
+@inline loop_subscope(scope, op::O, serial, args...) where {O} =
+    serial isa Val{true} && !is_nested_slice(scope, op, first_indexable(args)) ?
+    ThisThread() : slice_subscope(scope, op, args...)
 
 # Recursing on the precomputed point count (rather than on op and args) keeps
 # the descent from re-materializing the argument tuple and re-slicing every
@@ -126,17 +142,23 @@ end
     !isnothing(static_num_threads(scope)) &&
     something(static_num_threads(subscope), typemax(Int)) < max_slice_points
 
+# Whether foreach_slice can run f on every slice of args in one fused loop over scope with
+# the given mask; scopes with limits on fused loops (like GPU kernel parameter memory)
+# extend this.
+fits_slice_loop(scope, op, f, mask, args...) = true
+
 # The single definition of the slice-loop keyword defaults; every entry point
 # slurps its keyword arguments and unpacks them here.
 @inline function slice_loop_flags(;
     mask = NoMask(),
     enumerate = Val(false),
+    serial = Val(false),
     shmem = Val(:auto),
     maxregs = Val(:auto),
 )
     validate_shmem_level(shmem)
     validate_register_cap(maxregs)
-    return (mask, enumerate, shmem, maxregs)
+    return (mask, enumerate, serial, shmem, maxregs)
 end
 
 # The named levels of shared memory, whose bytes per thread the device sets (see
@@ -194,7 +216,9 @@ Bytes of the shared memory of the slices' [`DataScope`](@ref) that the buffers o
 or `nothing` when they cannot be known. Slice loops at the `:auto` level of `shmem` (see
 [`foreach_slice`](@ref)) use this to choose the level of a loop; `nothing` by default,
 since the buffers of an arbitrary function cannot be known, and extended for
-`Operators.apply_operators!` (the function of a broadcast).
+`Operators.apply_operators!` (the function of a broadcast) and for the functions of the
+column loops of `Operators.column_reduce!`, `Operators.column_accumulate!`, and the
+`MatrixFields` solvers.
 """
 required_shared_memory(f::F, slices...) where {F} = nothing
 
@@ -212,8 +236,8 @@ in registers.
 uses_shared_memory(f::F, slices...) where {F} = true
 
 """
-    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
-    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
+    foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), serial = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
+    foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), serial = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
 
 Apply `f` to slices of every [`DataLayout`](@ref) or similarly indexable argument,
 as a generalization of `eachslice`/`mapslices`. The slice operator `op` can be any
@@ -255,6 +279,15 @@ end
 
 Julia does not infer calls that splat more than 32 values, which would leave dynamic calls
 in GPU kernels, so a loop over more than 31 arguments should group them into containers.
+
+Setting `serial` to `Val(true)` assigns every slice to [`ThisThread`](@ref), so that
+one thread does the work of each slice, instead of a thread for every point of the
+slice (e.g., for a scan with an operator that is not associative; see
+[`scan_points`](@ref)). A loop over a slice in the function of another slice loop ignores
+`serial`: the threads of the outer slice keep the values of temporaries in registers that
+only they can read (see `RegisterArray`), so `f` is called by every one of them, and work
+that one thread does at every point (like a scan with [`scan_points`](@ref)) first copies
+such values into buffers that every thread can read.
 
 On GPUs, `shmem` sets how much of a block's shared memory each slice can use for the
 buffers of the operators in `f` (see `Operators.apply_operator`), per thread of the slice.
@@ -304,12 +337,14 @@ can run faster under a cap that keeps more of its blocks resident, while a point
 expression that needs many registers runs slower under any cap. The cap is ignored on CPUs.
 """
 @inline function foreach_slice(op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
-    return foreach_slice_with_options(shmem, maxregs, op, f, mask, enumerate, args...)
+    (mask, enumerate, serial, shmem, maxregs) = slice_loop_flags(; kwargs...)
+    return foreach_slice_with_options(
+        shmem, maxregs, op, f, mask, enumerate, serial, args...,
+    )
 end
 
-@inline _foreach_slice(op::O, f::F, mask, enumerate, args...) where {O, F} =
-    foreach_slice_with_options(nothing, nothing, op, f, mask, enumerate, args...)
+@inline _foreach_slice(op::O, f::F, mask, enumerate, serial, args...) where {O, F} =
+    foreach_slice_with_options(nothing, nothing, op, f, mask, enumerate, serial, args...)
 
 @inline function foreach_slice_with_options(
     shmem,
@@ -318,6 +353,7 @@ end
     f::F,
     mask,
     enumerate,
+    serial,
     args...,
 ) where {O, F}
     indexables = all_indexables(args)
@@ -333,9 +369,15 @@ end
     # forwarding layer adds a method instance per loop, inferred with the whole
     # loop inlined into it.
     return needs_loop_setup(scope) ?
-           _foreach_slice(scope, op, f, mask, enumerate, args...) :
+           _foreach_slice(scope, op, f, mask, enumerate, serial, args...) :
            scoped_slice_loop(
-        slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
+        loop_subscope(scope, op, serial, args...),
+        scope,
+        op,
+        f,
+        mask,
+        enumerate,
+        args...,
     )
 end
 
@@ -352,15 +394,15 @@ for (name, op, ref) in (
     # loop inlined into it, whether or not it is @inline.
     @eval begin
         """
-            $($name)(f, args...; mask = NoMask(), enumerate = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
+            $($name)(f, args...; mask = NoMask(), enumerate = Val(false), serial = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
 
         Run [`foreach_slice`](@ref) with $($ref) as the slice operator. The `shmem` and
         `maxregs` keywords are experimental, and may change in future.
         """
         @inline function $name(f::F, args...; kwargs...) where {F}
-            (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
+            (mask, enumerate, serial, shmem, maxregs) = slice_loop_flags(; kwargs...)
             return foreach_slice_with_options(
-                shmem, maxregs, $op, f, mask, enumerate, args...,
+                shmem, maxregs, $op, f, mask, enumerate, serial, args...,
             )
         end
     end
@@ -370,16 +412,21 @@ end
 # done by the scope's own _foreach_slice method; extend alongside every method.
 @inline needs_loop_setup(::DataScope) = false
 
-# A thread pool has to be resolved before looping over it, and given back afterward.
+# A thread pool has to be resolved before looping over it, and given back afterward. The
+# setup is not inlined, so that every entry point of a loop is not optimized with a copy.
+# Every function of a loop that is not inlined takes its arguments as a Vararg of static
+# length: Julia compiles a function of args... for the types of its other arguments and of
+# only the first value in args (the others are Any), even when it unpacks or reads them.
 @inline needs_loop_setup(::ThisThreadPool) = true
-@inline function _foreach_slice(
+@noinline function _foreach_slice(
     scope::ThisThreadPool,
     op::O,
     f::F,
     mask,
     enumerate,
-    args...,
-) where {O, F}
+    serial,
+    args::Vararg{Any, N},
+) where {O, F, N}
     # A single-threaded pool takes a shortcut around the whole claim/release
     # protocol. This is exactly equivalent to running it: claim_pool_threads
     # returns 0 without touching POOL_THREADS_IN_USE when the pool has one
@@ -394,14 +441,22 @@ end
     # The thread count stays an Int: a run-time-typed scope is a union in every call below.
     threads =
         one_thread ? 1 : (in_pool ? num_threads(scope) : resolve_pool_threads())
+    # The loop is not inlined into the try block: in a function that calls sigsetjmp, LLVM
+    # copies the loop-carried value of a loop between two registers on every iteration, and
+    # every layer that inlines a loop is optimized with a copy of it.
     try
         return isone(threads) ?
-               scoped_slice_loop(
-            ThisThread(), ThisThread(), op, f, mask, enumerate, args...,
+               @noinline(
+            scoped_slice_loop(ThisThread(), ThisThread(), op, f, mask, enumerate, args...)
         ) :
                parallelize_over(
             () -> scoped_slice_loop(
-                slice_subscope(scope, op, args...), scope, op, f, mask, enumerate,
+                loop_subscope(scope, op, serial, args...),
+                scope,
+                op,
+                f,
+                mask,
+                enumerate,
                 args...,
             ),
             scope,
@@ -412,24 +467,30 @@ end
 end
 
 @inline _foreach_slice(
-    scope::DataScope, op::O, f::F, mask, enumerate, args...,
+    scope::DataScope, op::O, f::F, mask, enumerate, serial, args...,
 ) where {O, F} =
     scoped_slice_loop(
-        slice_subscope(scope, op, args...), scope, op, f, mask, enumerate, args...,
+        loop_subscope(scope, op, serial, args...),
+        scope,
+        op,
+        f,
+        mask,
+        enumerate,
+        args...,
     )
 
 @inline function foreach_slice(
     scope::DataScope, op::O, f::F, args...; kwargs...,
 ) where {O, F}
-    (mask, enumerate, shmem, maxregs) = slice_loop_flags(; kwargs...)
+    (mask, enumerate, serial, shmem, maxregs) = slice_loop_flags(; kwargs...)
     scope = with_register_cap(with_shared_memory(scope, shmem), maxregs)
-    return _foreach_slice(scope, op, f, mask, enumerate, args...)
+    return _foreach_slice(scope, op, f, mask, enumerate, serial, args...)
 end
 
 # The loop body lives behind a function barrier so that the subscope is a
 # dispatch argument: a run-time slice size would then split a Union of scopes
 # once instead of forcing correlated unions of all the argument slices at the
-# call to f. The mask and enumerate flags are positional: another keyword layer
+# call to f. The mask, enumerate, and serial flags are positional: another keyword layer
 # would add a Core.kwcall method and a hidden body method per loop, each
 # re-optimized with the whole loop inlined.
 #
@@ -443,10 +504,11 @@ end
 # (68 kB per hyperdiffusion tendency for slab loops alone, 21 MB with point
 # loops too).
 @inline function scoped_slice_loop(
-    subscope, scope, op::O, f::F, mask, enumerate, args...,
-) where {O, F}
+    subscope, scope, op::O, f::F, mask, enumerate, args::Vararg{Any, N},
+) where {O, F, N}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
-    scoped_args = unrolled_map(@inline(arg -> reassign(arg, subscope)), args)
+    # The call is inlined so that the extent assumptions reassign makes reach the loop.
+    scoped_args = unrolled_map(@inline(arg -> @inline(reassign(arg, subscope))), args)
     @simd_if (op == view && simd_over_indices(indices)) for i in index_positions(indices)
         index = @inbounds slice_index(indices, i)
         slices = @inbounds slice_every_arg(op, index, scoped_args...)
@@ -519,7 +581,7 @@ result, so that `f` can read values that every thread of the scope must read tog
         (@inbounds point[] = updated_value(op, point, @inline f(index)))
     scope = DataScope(data)
     needs_loop_setup(scope) ?
-    _foreach_slice(slice_op, update_point!, NoMask(), Val(true), data) :
+    _foreach_slice(slice_op, update_point!, NoMask(), Val(true), Val(false), data) :
     scoped_slice_loop(
         slice_subscope(scope, slice_op, data),
         scope,
@@ -531,13 +593,14 @@ result, so that `f` can read values that every thread of the scope must read tog
     )
     return data
 end
+
 @inline updated_value(::Nothing, _, value) = value
 @inline updated_value(op::O, point, value) where {O} = op(point[], value)
 
 # Alternative to scoped_slice_loop that generates ordinary, unfused for loops,
 # with every slice processed by the full scope instead of a slice_subscope.
 @inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
-    (mask, enumerate, _, _) = slice_loop_flags(; kwargs...)
+    (mask, enumerate, _, _, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
         slices = @inbounds slice_every_arg(op, index, args...)
         enumerate isa Val{true} ? f(index, slices...) : f(slices...)
@@ -625,67 +688,227 @@ end
     eachindex(arg)
 
 # Reduce all points assigned to this thread with safe_mapreduce (pairwise
-# splitting for logarithmic roundoff, @simd for vectorization); Base's pairwise
-# mapreduce has an empty-collection error path that cannot compile in GPU
-# kernels. The @simd loops only vectorize sums and products, whose
-# floating-point operations LLVM may reassociate, and only when the point
-# values are read by inlined code. Inlining into other reductions (e.g., with
-# the NaN-aware comparisons of min and max) can double their compilation time,
-# while making them at most 20% faster.
+# splitting for logarithmic roundoff, accumulators or @simd for vectorization);
+# Base's pairwise mapreduce has an empty-collection error path that cannot compile
+# in GPU kernels. The point values are read by inlined code, which lets the
+# loops vectorize sums and products, and which makes other reductions (e.g.,
+# max and min) several times faster. A GPU thread, whose strided subset of points
+# is not looped over with @simd, folds its points in order instead, which avoids
+# compiling the recursion and the accumulators of safe_mapreduce.
 #
 # A thread can be assigned no points (slice_subscope rounds a slice up to a
 # power of two, or a mask leaves fewer active points than threads). Such a
 # thread folds a duplicate of the first point's value; every scope that can
-# leave a thread empty excludes it from its own fold (see num_reduced_threads
-# in the CUDA extension). A mask can also leave a whole kernel block empty,
-# which the grid-level fold cannot exclude, so masked kernel reductions
-# require an init value (enforced in the CUDA extension). With no points at
-# all, only an init value can define the result, so empty reductions still
-# require one.
+# leave a thread empty excludes it from its own fold. A mask can also leave
+# a whole kernel block empty, which the grid-level fold cannot exclude, so
+# masked kernel reductions require an init value (enforced in the CUDA
+# extension). With no points at all, only an init value can define the result,
+# so empty reductions still require one.
 @inline function reduce_points(::ThisThread, op::O, arg; mask, init...) where {O}
     all_indices = reduced_point_indices(arg, mask)
     indices = @inbounds subscope_indices(ThisThread(), DataScope(arg), all_indices)
-    value =
-        op isa Union{typeof(+), typeof(*), typeof(Base.add_sum), typeof(Base.mul_prod)} ?
-        @inline(index -> @inbounds arg[index]) : (index -> @inbounds arg[index])
+    # The threads of a pool read values at a single thread's scope and fold their positions
+    # in all_indices, so that they share the compiled fold of a reduction on one thread.
+    thread_arg = DataScope(arg) isa ThisThreadPool ? reassign(arg, ThisThread()) : arg
+    value = @inline(index -> @inbounds thread_arg[index])
+    # A reduction over at most one point per thread (as known from the inferred size of arg
+    # and the compile-time thread count of its scope) is the value at that point, combined
+    # with init, if it is given, so it needs no loop. Every thread reads one value, at one
+    # site, so that lazy values are compiled once and read by all threads together. As
+    # below, a thread without a point returns init, or a duplicate of the first point, and
+    # with no points at all (as a mask can leave), every thread returns init.
+    if has_inferred_size(arg) &&
+       prod(inferred_size(arg)) <= something(static_num_threads(DataScope(arg)), 0)
+        if isempty(all_indices)
+            @assert !isempty(init) # all_indices must be nonempty if init is missing
+            return init[:init]
+        end
+        index =
+            isempty(indices) ?
+            convert(eltype(indices), @inbounds(all_indices[firstindex(all_indices)])) :
+            @inbounds(indices[firstindex(indices)])
+        point_value = value(index)
+        isempty(init) && return point_value
+        return isempty(indices) ? init[:init] : op(init[:init], point_value)
+    end
     isempty(init) &&
         isempty(indices) &&
         !isempty(all_indices) &&
         return value(@inbounds all_indices[firstindex(all_indices)])
-    return safe_mapreduce(value, op, indices; init...)
+    # LLVM vectorizes the reads of a fold over a UnitRange, but not over a OneTo.
+    if simd_over_indices(indices)
+        positions = eachindex(IndexLinear(), all_indices)
+        return safe_mapreduce(
+            value,
+            op,
+            all_indices isa Base.OneTo ? UnitRange(all_indices) : all_indices,
+            @inbounds(subscope_indices(ThisThread(), DataScope(arg), positions));
+            init...,
+            is_contiguous_itr = Val(has_one_inferred_axis(arg)),
+        )
+    end
+    next = iterate(indices)
+    if isempty(init)
+        @assert !isnothing(next) # indices must be nonempty if init is missing
+        (index, state) = next
+        result = value(index)
+        next = iterate(indices, state)
+    else
+        result = init[:init]
+    end
+    while !isnothing(next)
+        (index, state) = next
+        result = op(result, value(index))
+        next = iterate(indices, state)
+    end
+    return result
+end
+
+# Bytes of the shared memory in which the threads of a scope combine values of type T in
+# reduce_points and scan_points, which scopes that combine them otherwise do not need.
+combined_values_bytes(scope, ::Type{T}) where {T} = 0
+
+# Whether scans using op can be parallelized by combining point values in any
+# grouping (leaving the order unchanged), with identical results up to roundoff.
+is_associative(_) = false
+is_associative(::Union{typeof(+), typeof(Base.add_sum)}) = true
+is_associative(::Union{typeof(*), typeof(Base.mul_prod)}) = true
+is_associative(::Union{typeof(max), typeof(min), typeof(&), typeof(|)}) = true
+
+# Whether reductions can use op to combine values of type T in any order, as
+# reduce_points does. Despite being associative, products of matrices do not commute, and
+# neither do products of values that contain matrices and are multiplied componentwise
+# (AutoBroadcasters and other auto-broadcastable values, like NamedTuples of matrices).
+is_commutative(op::O, _) where {O} = is_associative(op)
+is_commutative(::Union{typeof(*), typeof(Base.mul_prod)}, ::Type{T}) where {T} =
+    !contains_matrices(T)
+contains_matrices(::Val{T}) where {T} = contains_matrices(T)
+contains_matrices(::Type{T}) where {T} =
+    T <: AbstractMatrix ||
+    isconcretetype(T) && (T <: AutoBroadcaster || is_auto_broadcastable(T)) &&
+    unrolled_any(contains_matrices, fieldtype_vals(T))
+
+# The values of a layout or lazy layout in a buffer at a byte offset of its scope's memory,
+# which every thread of the scope can read: each thread evaluates its own points (the only
+# ones that it can read in registers; see RegisterArray), and then waits for the others. The
+# buffer is viewed with the element type of the values (such as an AutoBroadcaster). Values
+# are copied point by point, which compiles much faster in GPU kernels than copyto!.
+@inline function shared_values(scope, arg, offset = Val(0))
+    buffer = buffer_similar(arg, drop_auto_broadcasters(safe_eltype(arg)), offset)
+    for index in @inbounds subscope_indices(ThisThread(), scope, Base.OneTo(length(arg)))
+        @inbounds buffer[index] = arg[index]
+    end
+    synchronize(scope)
+    return unchecked_rebuild(buffer, parent(buffer), safe_eltype(arg))
+end
+
+"""
+    scan_points(f, op, arg, [reverse], [init])
+
+Combine all values of a [`DataLayout`](@ref) or similarly indexable argument with
+`op`, as a generalization of `accumulate!`, calling `f(index, value)` at
+every index into `arg` with the currently accumulated value. In contrast to
+[`reduce_points`](@ref), which traverses `arg` in an arbitrary order,
+accumulation always uses a fixed order: increasing by default, and decreasing
+when `reverse` is set to `true`. GPU devices can parallelize accumulation over
+multiple threads when `op` is associative, but other operators are applied in order
+by one thread, which also passes every accumulated value to `f`.
+"""
+@inline_types_only scan_points(
+    f::F,
+    op::O,
+    arg,
+    reverse = false,
+    init = NoInit(),
+) where {F, O} = scan_points(DataScope(arg), f, op, arg, reverse, init)
+
+# Generic operators can have side effects or read memory that the scan writes (as in an
+# in-place accumulation), so they are only applied by the first thread, in order, which
+# shares the result with the other threads. That thread reads lazy values and values in
+# registers (like temporaries of an enclosing slice loop, which other threads own; see
+# RegisterArray) from a buffer of shared_values. Only the final result is buffered, since
+# accumulated values can be too large to store in shared memory for every point, so the
+# first thread also calls f at every point, which cannot write values in registers.
+@inline function scan_points(scope, f::F, op::O, arg, reverse, init) where {F, O}
+    values =
+        arg isa LazyDataLayout || stored_in_registers(arg) ? shared_values(scope, arg) : arg
+    T = return_type(
+        scan_points,
+        Tuple{ThisThread, F, O, typeof(values), typeof(reverse), typeof(init)},
+    )
+    # The result is placed after the values, and its allocation synchronizes the scope,
+    # which waits for the statements that wrote values the first thread reads.
+    result_buffer = scoped_static_array(scope, T, 1, shared_buffer_bytes(values))
+    isone(thread_rank(scope)) && (@inbounds result_buffer[1] =
+        scan_points(ThisThread(), f, op, values, reverse, init))
+    synchronize(scope)
+    return @inbounds result_buffer[1]
+end
+
+@inline scan_points(::ThisThreadPool, f::F, op::O, arg, reverse, init) where {F, O} =
+    scan_points(ThisThread(), f, op, arg, reverse, init)
+
+# The loop applies op at one site, so that op is compiled once. It also combines init with
+# the first value, unless op changes the type of init: then that is done before the loop, so
+# that the accumulated value has one type. Neither method is constant-propagated: a closure
+# f with constant fields (e.g., the offset of column_accumulate!) would infer both again.
+@inline_types_only function scan_points(
+    ::ThisThread,
+    f::F,
+    op::O,
+    arg,
+    reverse,
+    init,
+) where {F, O}
+    n = length(arg)
+    point_index(position) = reverse ? n + 1 - position : position
+    init_in_loop =
+        !(init isa NoInit) &&
+        Core.Compiler.return_type(op, Tuple{typeof(init), eltype(arg)}) <: typeof(init)
+    if init_in_loop
+        value = init
+    else
+        @inbounds first_value = arg[point_index(1)]
+        value = init isa NoInit ? first_value : op(init, first_value)
+        f(point_index(1), value)
+    end
+    for position in (init_in_loop ? 1 : 2):n
+        value = op(value, @inbounds arg[point_index(position)])
+        f(point_index(position), value)
+    end
+    return value
 end
 
 # Type of the fold of op over a thread's points of arg (see reduce_points(::ThisThread)
 # above), which an init value of a wider type than the points widens (e.g., a Float64 init
-# over Float32 points), found by inference on arg at a thread's scope: the results of the
-# threads of a multi-thread reduction are stored with this type, so that none is converted.
+# over Float32 points): the results of the threads of a multi-thread reduction are stored
+# with this type, so that none is converted. It is found by inferring the call that the
+# threads of a pool make, so that they reuse the inference instead of repeating it.
 @inline thread_fold_type(op::O, arg; kwargs...) where {O} =
     return_type(Tuple{typeof(values(kwargs))}) do kwargs
-        reduce_points(ThisThread(), op, reassign(arg, ThisThread()); kwargs...)
+        reduce_points(ThisThread(), op, arg; kwargs...)
     end
 
 """
-    column_reduce!(op, dest, arg; mask = NoMask(), flip = Val(false), [init])
+    fold_points(op, arg, [reverse], [init])
 
-Use [`foreach_column`](@ref) to combine the levels of each column of `arg` with
-`op`, storing the results in the corresponding columns of `dest`. Setting `flip`
-to `Val(true)` changes the order of reduction from left-associative (default) to
-right-associative, and `init` seeds the fold when it is given.
+Analogue of [`reduce_points`](@ref) that combines values in a fixed order whenever
+the order matters: increasing by default, and decreasing when `reverse` is set to
+`true`. If `op` is commutative, this calls [`reduce_points`](@ref); otherwise, it
+calls the more generic [`scan_points`](@ref).
+If `op` is commutative, `init` is combined with the result, so that the reduction
+compiles the same code with or without `init`; otherwise, `init` is combined with the
+first value, so that it can set the type of the result.
 """
-@inline column_reduce!(
-    op::O,
-    dest,
-    arg;
-    mask = NoMask(),
-    flip = Val(false),
-    init...,
-) where {O} =
-    foreach_column(dest, arg; mask) do dest_column, arg_column
-        maybe_reverse = flip isa Val{true} ? reverse : identity
-        fill!(dest_column, reduce(op, maybe_reverse(arg_column); init...))
+@inline fold_points(op::O, arg, reverse = false, init = NoInit()) where {O} =
+    if is_commutative(op, eltype(arg))
+        # Every thread would combine init with its own values in reduce_points, so init is
+        # handled separately.
+        result = reduce_points(op, arg)
+        init isa NoInit ? result : op(init, result)
+    else
+        scan_points(Returns(nothing), op, arg, reverse, init)
     end
-
-# TODO: Extend this to column_accumulate!
 
 # A single point that every thread of a scope stores in registers (see register_similar) is
 # written by every thread, once the statements before it are done.
@@ -696,7 +919,7 @@ right-associative, and `init` seeds the fold when it is given.
 end
 
 # After a writer that only writes the copy of the thread that owns a single point in registers
-# (like an operator), every thread copies the owner's value.
+# (like an operator or a column reduction), every thread copies the owner's value.
 @inline function share_single_point!(data)
     stored_in_registers(data) && isone(register_stride(parent(data))) || return nothing
     value = shared_level_value(DataScope(data), data, 1)
@@ -777,6 +1000,7 @@ end
         dest_point -> (@inbounds dest_point[] = first(bc_without_axes)),
         mask,
         Val(false),
+        Val(false),
         written_layout(dest),
     )
     synchronize_shared_points(DataScope(dest), dest)
@@ -827,6 +1051,7 @@ end
             (@inbounds dest_point[] = bc_with_axes[CartesianIndices(dest)[index]]),
         mask,
         Val(true),
+        Val(false),
         dest,
     )
     call_post_op_callback() && post_op_callback(dest, dest, bc; mask)
@@ -853,6 +1078,7 @@ end
                 Broadcast._broadcast_getindex(arg_point, CartesianIndex())
         end,
         mask,
+        Val(false),
         Val(false),
         dest_and_arg,
     )
@@ -923,6 +1149,13 @@ end
     arg::MaybeLazyDataLayout;
     kwargs...,
 ) where {O} = reduce(op, arg; kwargs...)
+
+# Base's maximum and minimum are not specialized on f, which they only pass on, so their
+# mapreduce call is compiled for both methods above.
+@inline Base.maximum(f::F, arg::MaybeLazyDataLayout; kwargs...) where {F} =
+    mapreduce(f, max, arg; kwargs...)
+@inline Base.minimum(f::F, arg::MaybeLazyDataLayout; kwargs...) where {F} =
+    mapreduce(f, min, arg; kwargs...)
 
 # Optimize unmasked equality checks for similar layouts with the same packed
 # (un-padded) element types by deferring to their parent arrays. Padded values

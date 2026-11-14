@@ -45,7 +45,7 @@ module MatrixFields
 import LinearAlgebra: I, UniformScaling, Adjoint
 import Base: inv
 import LinearAlgebra: norm, ldiv!, mul!
-import StaticArrays: SMatrix, SVector
+import StaticArrays: SMatrix, SVector, MArray
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import KrylovKit
 import ClimaComms
@@ -54,7 +54,7 @@ import Adapt
 using UnrolledUtilities
 
 import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype, return_type
-import ..Utilities: @drop_recursion_limits, @drop_constprop
+import ..Utilities: @drop_recursion_limits, @drop_constprop, @inline_types_only
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
@@ -86,7 +86,6 @@ include("field_name.jl")
 include("field_name_set.jl")
 include("field_name_dict.jl")
 include("single_field_solver.jl")
-include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 include("field_matrix_with_solver.jl")

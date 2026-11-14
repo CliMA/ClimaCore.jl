@@ -26,9 +26,12 @@ Broadcast.BroadcastStyle(style::DataStyle, ::Broadcast.DefaultArrayStyle{0}) = s
 Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 
 # Enable automatic nested broadcasting over supported types of iterators.
-# The wrappers keep the entries per value, so the parent check can be skipped.
+# The wrappers keep the entries per value, so the parent check can be skipped. The layout is
+# rebuilt over its stored array, which keeps its type (the parent of a compact kernel argument
+# is another array): operators broadcast over the local geometry of a space recursively, and a
+# broadcast that changed its type would be widened by the inference recursion limit.
 @inline Broadcast.broadcastable(data::DataLayout) =
-    unchecked_rebuild(data, parent(data), add_auto_broadcasters(eltype(data)))
+    unchecked_rebuild(data, getfield(data, :array), add_auto_broadcasters(eltype(data)))
 @inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
