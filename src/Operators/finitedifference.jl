@@ -922,6 +922,36 @@ end
     return dest
 end
 
+# Evaluate stencil expressions that cache no arguments over columns of one size into Fields in
+# registers (each paired with its expression), in one loop over points (see apply_stencil!),
+# so that the loads of all of them are issued together: a statement waits for its loads
+# before the next one issues its own. The loop of the first Field stores the others at every
+# point it visits (a thread without a point only writes its own registers). Expressions over
+# columns of other sizes are evaluated in loops of their own.
+@inline function apply_stencils!(pairs)
+    isempty(pairs) && return nothing
+    size_of(pair) = DataLayouts.inferred_size(Fields.field_values(pair[1]))
+    (loop_pairs, other_pairs) =
+        unrolled_split(pair -> size_of(pair) == size_of(pairs[1]), pairs)
+    datas = unrolled_map(pair -> Fields.field_values(pair[1]), loop_pairs)
+    updates = unrolled_map(loop_pairs) do (_, bc)
+        StencilPointUpdate(
+            stencil_arg(pointwise_stencil(bc, caching_fusion(bc)), Val(false)),
+            Fields.shared_space(bc),
+        )
+    end
+    DataLayouts.update_points!(nothing, datas[1], view) do index
+        Base.@constprop :none
+        unrolled_foreach(Base.tail(updates), Base.tail(datas)) do update, data
+            (point,) = @inbounds DataLayouts.slice_every_arg(view, index, data)
+            @inline update(index, point)
+        end
+        (; stencil_bc, space) = updates[1]
+        @inbounds column_value(stencil_bc, space, vertical_index(space, index))
+    end
+    return apply_stencils!(other_pairs)
+end
+
 # Point update of apply_stencil! (see above); constant propagation would re-infer its body.
 struct StencilPointUpdate{B, S}
     stencil_bc::B

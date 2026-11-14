@@ -93,6 +93,19 @@ macro inline_types_only(definition)
 end
 
 """
+    @disable_licm for ... end
+
+Keep LLVM's loop-invariant code motion from hoisting values out of a `for` loop. Use
+this for loops in GPU kernels whose bodies read many arrays: hoisting all of their
+addresses keeps them live across iterations, which makes the kernel spill registers,
+while recomputing each address where it is used costs a few integer instructions.
+"""
+macro disable_licm(loop)
+    push!(loop.args[2].args, Expr(:loopinfo, (Symbol("llvm.licm.disable"),)))
+    return esc(loop)
+end
+
+"""
     ConvertTo{T}()
 
 GPU-compatible callable that converts its argument to type `T`, equivalent to

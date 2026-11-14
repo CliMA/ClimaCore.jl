@@ -148,8 +148,10 @@ down to the buffer alignment), which is set by the level of the slice loop that 
 slice to the sub-block (see [`ThisHost`](@ref)) and is the `:medium` level by default.
 Sub-blocks of the same threads are the same subscope, whatever their shared memory (e.g.,
 for `is_subscope`, which finds a slice loop's sub-block among the partitions of a kernel).
+A third parameter is whether the slice loop has a register cap (see `thread_rank` below).
 """
-struct ThisSubBlock{N, B} <: ThisCooperativeGroup end
+struct ThisSubBlock{N, B, R} <: ThisCooperativeGroup end
+ThisSubBlock{N, B}() where {N, B} = ThisSubBlock{N, B, false}()
 ThisSubBlock{N}() where {N} = ThisSubBlock{N, shmem_level_bytes(Val(:medium), Val(N))}()
 Base.:(==)(::ThisSubBlock{N}, ::ThisSubBlock{N}) where {N} = true
 
@@ -173,16 +175,27 @@ register_cap(::Val{R}, _) where {R} = Int(R)
 # Sub-blocks are halved until they hold MIN_THREADS_PER_SUBBLOCK threads, which
 # are partitioned into single threads. Halving keeps every sub-block aligned
 # with the lanes of a warp, which thread_rank and synchronize below rely on.
-@inline DataLayouts.partition(::ThisSubBlock{N, B}) where {N, B} =
-    N <= MIN_THREADS_PER_SUBBLOCK ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2, B}()
+@inline DataLayouts.partition(::ThisSubBlock{N, B, R}) where {N, B, R} =
+    N <= MIN_THREADS_PER_SUBBLOCK ? DataLayouts.ThisThread() : ThisSubBlock{N ÷ 2, B, R}()
 @inline DataLayouts.num_threads(::ThisSubBlock{N}) where {N} = N % UInt32
 @inline DataLayouts.static_num_threads(::ThisSubBlock{N}) where {N} = N
+
 # A sub-block holds consecutive ranks of its block (or warp), so its ranks are remainders.
-@inline function DataLayouts.thread_rank(::ThisSubBlock{N}) where {N}
-    N == THREADS_PER_WARP && return CUDA.laneid() % UInt32
-    rank = DataLayouts.thread_rank(N > THREADS_PER_WARP ? ThisBlock() : ThisWarp())
+# In a loop with a register cap, a sub-block reads its rank with an opaque instruction, so
+# that every statement of a fused column loop (e.g., in a FieldMatrixSolver) recomputes its
+# addresses, instead of keeping those of earlier statements in registers for the rest of
+# the kernel. Other loops reuse ranks, e.g., in every level of nested stencils.
+@inline function DataLayouts.thread_rank(::ThisSubBlock{N, <:Any, R}) where {N, R}
+    N == THREADS_PER_WARP && !R && return CUDA.laneid() % UInt32
+    rank =
+        R ?
+        LLVM.Interop.@asmcall("mov.u32 \$0, %tid.x;", "=r", true, UInt32, Tuple{}) +
+        one(UInt32) :
+        DataLayouts.thread_rank(N > THREADS_PER_WARP ? ThisBlock() : ThisWarp())
     return rem(rank - one(rank), N % UInt32) + one(rank)
 end
+DataLayouts.with_register_cap(::ThisSubBlock{N, B}, ::Val{R}) where {N, B, R} =
+    ThisSubBlock{N, B, R isa Integer}()
 @inline DataLayouts.synchronize(::ThisSubBlock{N}) where {N} =
     N > THREADS_PER_WARP ? DataLayouts.synchronize(ThisBlock()) : CUDA.sync_warp()
 
@@ -316,6 +329,9 @@ DataLayouts.total_buffer_limit(::Union{ThisHost, ThisKernel}) = typemax(Int)
 DataLayouts.total_buffer_limit(::ThisBlock) = MAX_SHMEM_PER_BLOCK
 @inline DataLayouts.total_buffer_limit(::ThisSubBlock{N, B}) where {N, B} =
     region_bytes(N, B)
+
+DataLayouts.optional_buffer_scope(::ThisSubBlock{N, B, R}) where {N, B, R} =
+    ThisSubBlock{N, shmem_level_bytes(Val(:large), Val(N)), R}()
 
 # A GPU thread keeps the factors of its column's solves in local memory when they take at
 # most 4 KB, and the threads of a block solve the columns whose factors take more.

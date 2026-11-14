@@ -218,6 +218,9 @@ function child_names(name, tree)
     subtree isa FieldNameTreeNode || error("$name does not have child names")
     return unrolled_map(subsubtree -> subsubtree.name, subtree.subtrees)
 end
+is_node_name(name, tree) =
+    !isnothing(tree) && is_valid_name(name, tree) &&
+    get_subtree_at_name(name, tree) isa FieldNameTreeNode
 get_subtree_at_name(name, tree) =
     if name == tree.name
         tree

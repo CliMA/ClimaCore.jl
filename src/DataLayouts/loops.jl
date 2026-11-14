@@ -235,6 +235,13 @@ in registers.
 """
 uses_shared_memory(f::F, slices...) where {F} = true
 
+# A value that the function of a slice loop needs on every slice and that only the types of
+# the slices determine (e.g., an offset in shared memory after buffers of known bytes; see
+# required_shared_memory), found once per loop by inference, and the function with it,
+# which the loop calls instead: nothing and the function itself by default.
+slice_parameter(f::F, slices...) where {F} = nothing
+with_slice_parameter(f::F, _) where {F} = f
+
 """
     foreach_slice(op, f, args...; mask = NoMask(), enumerate = Val(false), serial = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
     foreach_slice(scope, op, f, args...; mask = NoMask(), enumerate = Val(false), serial = Val(false), shmem = Val(:auto), maxregs = Val(:auto))
@@ -368,9 +375,13 @@ end
     # Go straight onto the loop barrier for scopes without setup: every
     # forwarding layer adds a method instance per loop, inferred with the whole
     # loop inlined into it.
-    return needs_loop_setup(scope) ?
-           _foreach_slice(scope, op, f, mask, enumerate, serial, args...) :
-           scoped_slice_loop(
+    needs_loop_setup(scope) &&
+        return _foreach_slice(scope, op, f, mask, enumerate, serial, args...)
+    # A loop over one slice in a slice loop is a statement of the outer loop, whose threads
+    # can read and write points of other threads, so it waits for the statements around it.
+    is_nested = is_nested_slice(scope, op, first_indexable(args))
+    is_nested && synchronize(scope)
+    scoped_slice_loop(
         loop_subscope(scope, op, serial, args...),
         scope,
         op,
@@ -379,6 +390,8 @@ end
         enumerate,
         args...,
     )
+    is_nested && synchronize(scope)
+    return nothing
 end
 
 for (name, op, ref) in (
