@@ -426,7 +426,8 @@ Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 Base.similar(field::Field, ::Type{T}) where {T} =
     Field(similar(field_values(field), T), axes(field))
 
-# fields on different spaces
+# fields on different spaces, allocated in the scope of field; in a slice loop, the result is
+# a buffer that other threads can only read after a barrier, like that of similar(field)
 function Base.similar(field::Field, space_to::AbstractSpace)
     similar(field, space_to, eltype(field))
 end
@@ -435,7 +436,9 @@ function Base.similar(
     space_to::AbstractSpace,
     ::Type{Eltype},
 ) where {Eltype}
-    Field(Eltype, space_to)
+    scope = DataLayouts.DataScope(field_values(field))
+    data = DataLayouts.reassign(Spaces.coordinates_data(space_to), scope)
+    Field(similar(data, Eltype), space_to)
 end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))

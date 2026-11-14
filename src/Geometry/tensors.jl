@@ -455,7 +455,7 @@ apply_f(f, x::Tensor) = Tensor(f(parent(x)), axes(x))
 
 function reshape_and_apply_f(f::F, args...) where {F}
     unrolled_foreach(Base.Fix2(check_ndims, ndims(args[1])), args)
-    bases = unrolled_map(combine_components, unrolled_map(axes, args)...)
+    bases = map(combine_components, unrolled_map(axes, args)...)
     components = f(unrolled_map(x -> parent(reshape(x, bases)), args)...)
     components isa AbstractArray || return components  # return scalar values
     return Tensor(components, bases)               # add bases to non-scalars

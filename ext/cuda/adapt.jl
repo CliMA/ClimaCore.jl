@@ -8,6 +8,9 @@ import ClimaCore: Grids, Spaces, Topologies
 const CuRefType = isdefined(CUDA, :CUDACore) ? CUDA.CUDACore.CuRefType : CUDA.CuRefType
 Utilities.unsafe_eltype(::CuRefType{T}) where {T} = Type{T}
 
+ClimaComms.assert(::ClimaCore.DeviceSideDevice, cond::C, text::T) where {C, T} =
+    ClimaComms.assert(ClimaComms.CUDADevice(), cond, text)
+
 Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     grid::Grids.ExtrudedFiniteDifferenceGrid,

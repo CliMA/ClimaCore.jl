@@ -333,9 +333,10 @@ end
 # A projection that reads the local geometry is not recomputed (the Fix2 form above can be).
 Operators.recomputable_node(::ProjectForMul) = false
 
-# Rows read only their own row of matrix1, and the second argument at fixed offsets.
-Operators.reads_neighbors(::MultiplyColumnwiseBandMatrixField, _, _) =
-    (Val(false), Val(true))
+# Rows read only their own row of matrix1, and the second argument at fixed offsets (only at
+# their own point if matrix1 is diagonal).
+Operators.reads_neighbors(::MultiplyColumnwiseBandMatrixField, matrix1, _) =
+    (Val(false), Val(!(eltype(matrix1) <: DiagonalMatrixRow)))
 Operators.reads_without_branching(::MultiplyColumnwiseBandMatrixField) = true
 
 # Whether every row band of a matrix in space lies in column_space (folds at compile time).

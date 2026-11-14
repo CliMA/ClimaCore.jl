@@ -54,13 +54,16 @@ import Adapt
 using UnrolledUtilities
 
 import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype, return_type
-import ..Utilities: @drop_recursion_limits, @drop_constprop, @inline_types_only
+import ..Utilities:
+    @drop_recursion_limits, @drop_constprop, @inline_types_only, @disable_licm
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
+import ..column
 import ..DataLayouts: DataLayout
 import ..Geometry
 import ..Topologies
+import ..Grids
 import ..Spaces
 import ..Fields
 import ..Operators
@@ -90,10 +93,17 @@ include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 include("field_matrix_with_solver.jl")
 
-# Extend the recursion limit removal in Operators to the methods defined above.
+# Extend the recursion limit removal in Operators to the methods defined above. The solver
+# methods recurse through nested algorithms whose lazy right-hand sides grow with the depth
+# of the nesting, which inference would otherwise widen.
 @drop_recursion_limits Operators.stencil_value, Operators.stencil_interior,
-matrix_row_value, projected_value
+matrix_row_value, projected_value, run_field_matrix_solver!, solver_bytes
 @drop_constprop Operators.stencil_value, matrix_row_value
+
+# The solver methods compute every type-level quantity (buffer bytes, register placement)
+# from argument types, so constant propagation only infers their bodies again.
+@drop_constprop run_field_matrix_solver!, solve_columns!, single_column_solve!,
+evaluated, apply_preconditioner, parallel_band_matrix_solve!, lazy_residual, lazy_mul
 
 # Evaluate multiplications in left-associative order. This should technically be
 # right-associative, but flipping the order worsens performance in GPU kernels,
