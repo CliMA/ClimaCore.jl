@@ -16,6 +16,8 @@ end
 @inline is_valid_slice_mask(::IJHMask, ::typeof(view)) = true
 @inline is_valid_slice_mask(::IJHMask, ::typeof(column)) = true
 @inline is_valid_slice_mask(::IJHMask, _) = false
+@inline is_valid_slice_mask(::LevelAlignedOrder, ::typeof(view)) = true
+@inline is_valid_slice_mask(::LevelAlignedOrder, _) = false
 
 @inline all_indexables(arg) = (arg,)
 @inline all_indexables(arg::Tuple) =
@@ -46,11 +48,14 @@ end
     ActiveColumnIndices(mask)
 @inline each_maskable_slice_index(mask::IJHMask, ::typeof(view), args...) =
     ActivePointIndices{nlevels(first_indexable(args))}(mask)
+@inline each_maskable_slice_index(::LevelAlignedOrder, ::typeof(view), args...) =
+    LevelAlignedIndices(first_indexable(args))
 
 # Every valid mask and slice operator combination has indexable slice indices:
-# NoMask uses the full index ranges, and IJHMask (which only supports column
-# and view slices) uses compacted active indices, so no combination requires
-# filtering the indices with a per-slice mask lookup.
+# NoMask uses the full index ranges, IJHMask (which only supports column
+# and view slices) uses compacted active indices, and LevelAlignedOrder uses
+# the full set in another order, so no combination requires filtering the
+# indices with a per-slice mask lookup.
 @noinline throw_invalid_slice_mask(mask, op::O) where {O} =
     throw(ArgumentError(invalid_mask_string(mask, op)))
 @generated invalid_mask_string(

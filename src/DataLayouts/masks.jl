@@ -2,7 +2,8 @@
     DataMask
 
 Abstract type for masks that mark points in a discretized domain as active or
-inactive. Subtypes: [`NoMask`](@ref) and [`IJHMask`](@ref).
+inactive. Subtypes: [`NoMask`](@ref), [`IJHMask`](@ref) and
+[`LevelAlignedOrder`](@ref).
 """
 abstract type DataMask end
 
@@ -137,3 +138,53 @@ const ActiveIndices = Union{ActiveColumnIndices, ActivePointIndices}
 Base.size(inds::ActiveIndices) = (length(inds.indices),)
 Base.@propagate_inbounds Base.getindex(inds::ActiveIndices, n::Int) =
     active_index(inds, inds.indices[n])
+
+"""
+    LevelAlignedOrder()
+
+A [`DataMask`](@ref) that marks every point active, as [`NoMask`](@ref) does,
+and orders the points of a `VIJFH` or `VIJHF` layout horizontally instead of
+vertically: consecutive threads take cells of one level, so a warp covers two
+spectral elements at one height rather than 32 heights of one column.
+
+The arithmetic is unchanged and no point is skipped, so a loop under this order
+writes the same values as one under `NoMask`. What changes is which points share
+a warp, which is what a point body with a per-point early-out is paid in: a
+criterion that holds at a height holds across a level-aligned warp and is spread
+across 32 vertical ones. The reads become strided rather than contiguous, so this
+is only worth asking for on a loop whose body is far from its memory roofline.
+
+Only `view` slices have an order to change; a column of a level-aligned loop is
+not contiguous, so [`column`](@ref) slices are rejected.
+"""
+struct LevelAlignedOrder <: DataMask end
+
+@propagate_inbounds should_compute(::LevelAlignedOrder, _) = true
+
+# The cell grid in iteration order, (Ni, Nj, Nh, Nv), presented as the
+# (v, i, j, h) indices the layout is indexed by. `indices` is the subset of
+# positions the calling subscope was given, as in ActiveIndices.
+struct LevelAlignedIndices{D, V} <: AbstractVector{CartesianIndex{4}}
+    dims::D
+    indices::V
+end
+Adapt.@adapt_structure LevelAlignedIndices
+
+@noinline throw_unorderable_size(size) = throw(
+    ArgumentError(
+        "LevelAlignedOrder needs a (v, i, j, h) point layout, got a size of $size",
+    ),
+)
+
+@inline function LevelAlignedIndices(arg)
+    dims = size(arg)
+    length(dims) == 4 || throw_unorderable_size(dims)
+    (Nv, Ni, Nj, Nh) = dims
+    return LevelAlignedIndices((Ni, Nj, Nh, Nv), Base.OneTo(Nv * Ni * Nj * Nh))
+end
+
+Base.size(inds::LevelAlignedIndices) = (length(inds.indices),)
+Base.@propagate_inbounds function Base.getindex(inds::LevelAlignedIndices, n::Int)
+    index = cartesian_index_from_linear(inds.dims, inds.indices[n])
+    return CartesianIndex(index[4], index[1], index[2], index[3])
+end

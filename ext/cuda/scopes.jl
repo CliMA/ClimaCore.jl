@@ -338,6 +338,7 @@ DataLayouts.simd_over_indices(::DataLayouts.StridedCartesianIndices) = false
 DataLayouts.simd_over_indices(::DataLayouts.StridedRange{UInt32}) = false
 DataLayouts.simd_over_indices(::SubArray{<:Any, 1, <:DataLayouts.ActiveIndices}) = false
 DataLayouts.simd_over_indices(::DataLayouts.ActiveIndices) = false
+DataLayouts.simd_over_indices(::DataLayouts.LevelAlignedIndices) = false
 
 @inline function DataLayouts.subscope_index_view(
     ::Union{ThisKernel, ThisCooperativeGroup},
@@ -370,6 +371,14 @@ Base.@propagate_inbounds function DataLayouts.subscope_index_view(
     view_range,
 ) where {Nv}
     return DataLayouts.ActivePointIndices{Nv}(indices.mask, indices.indices[view_range])
+end
+
+Base.@propagate_inbounds function DataLayouts.subscope_index_view(
+    ::Union{ThisKernel, ThisCooperativeGroup},
+    indices::DataLayouts.LevelAlignedIndices,
+    view_range,
+)
+    return DataLayouts.LevelAlignedIndices(indices.dims, indices.indices[view_range])
 end
 
 # A unit range indexed at the positions in view_range is the same range of
