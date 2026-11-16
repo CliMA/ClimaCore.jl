@@ -516,8 +516,10 @@ const MAX_WAVES = Ref{Int}(1)
 const DSS_MAX_THREADS = Ref{Int}(256)
 const AUTO_REGISTER_CAP = Ref{Bool}(false)
 const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(8)
+const AUTO_REGISTER_CAP_MAX_WARPS = Ref{Int}(16)
 const AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT = Ref{Int}(25)
 const AUTO_REGISTER_CAP_LOCAL_SLACK = Ref{Int}(32)
+const AUTO_REGISTER_CAP_EXEMPT = Ref{Vector{String}}(String[])
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
@@ -532,6 +534,12 @@ function __init__()
         _getenv_bool("CLIMA_AUTO_REGISTER_CAP"; default = false)
     AUTO_REGISTER_CAP_MAX_SHED[] =
         _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 8; min = 0)
+    AUTO_REGISTER_CAP_MAX_WARPS[] =
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_WARPS", 16; min = 0)
+    AUTO_REGISTER_CAP_EXEMPT[] = filter(
+        !isempty,
+        strip.(split(get(ENV, "CLIMA_AUTO_REGISTER_CAP_EXEMPT", ""), ",")),
+    )
     AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT[] =
         _getenv_int("CLIMA_AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT", 25; min = 0)
     AUTO_REGISTER_CAP_LOCAL_SLACK[] =
@@ -680,13 +688,28 @@ auto_cap_decisions() = @lock AUTO_CAP_DECISIONS_LOCK copy(AUTO_CAP_DECISIONS)
 #
 # What a cap costs is spill, which cannot be predicted from the source but can
 # be read off a second compile, so this decides rather than predicts: cap only
-# when the edge is close, the request is honored, it buys warps, and the local
-# frame grows by less than the budget. The last test is the one that matters.
+# when the kernel is short of residency, the edge is close, the request is
+# honored, it buys warps, and the local frame grows by less than the budget.
 # Capping one kernel here from 255 registers to 64 bought four times the
 # occupancy, grew its spill by 343x and cost 5.5% of wall clock; the same kernel
 # capped to 128 gained 0.4%. The budget has an absolute floor because most
 # kernels compile with no local frame at all, where any spill at all is an
 # infinite relative growth.
+#
+# The residency test is what keeps the rest honest. Occupancy has sharply
+# diminishing returns and the evidence for trading spill for it covers one step,
+# from 12 warps to 16 on the hot microphysics kernel; against a 64-warp ceiling
+# a policy that ignores residency treats nearly every kernel as register-limited.
+# A kernel already holding 20 or more warps is not starved the way that one was,
+# so capping it spends spill on latency hiding it already has.
+#
+# None of these tests is sound in general, and the reason is that spill is a
+# proxy rather than the mechanism: ptxas can also meet a tighter budget by
+# rematerializing values instead of spilling them, which costs instructions and
+# is invisible to every measurement here. A ClimaLand `turbulent_fluxes` kernel
+# regressed 21% while spilling only 44 bytes. `CLIMA_AUTO_REGISTER_CAP_EXEMPT`
+# is the escape hatch for a kernel this gets wrong, and it matches on the kernel
+# name, so it needs `CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE` set as well.
 #
 # Decided once per specialization and cached: the first launch of a kernel
 # compiles twice, every later launch compiles once, as it does with no policy.
@@ -707,7 +730,12 @@ function auto_register_cap_for(call, name, key::Tuple{Type, Type})
     )
     (capped_regs, capped_local, capped_warps) = (-1, -1, -1)
     reason = :capped
-    if isnothing(edge)
+    if !isnothing(name) &&
+       any(p -> occursin(p, name), AUTO_REGISTER_CAP_EXEMPT[])
+        reason = :exempt
+    elseif warps > AUTO_REGISTER_CAP_MAX_WARPS[]
+        reason = :already_resident
+    elseif isnothing(edge)
         reason = :no_band_below
     elseif regs - edge > AUTO_REGISTER_CAP_MAX_SHED[]
         reason = :edge_too_far
