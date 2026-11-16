@@ -142,6 +142,39 @@ function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     return (max_blocks_per_sm * attrs.sm_count, limit)
 end
 
+# Resident warps per SM that a register count allows, by the register rules of
+# max_active_blocks above, so the two cannot disagree. Block size does not
+# enter: the register file bounds warps per scheduler, and that is the bound a
+# cap moves.
+function max_warps_per_sm_by_regs(regs_per_thread::Int)
+    attrs = device_attributes()
+    warps_per_sm = fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
+    iszero(regs_per_thread) && return warps_per_sm
+    regs_per_thread > attrs.max_regs_per_thread && return 0
+    allocated_regs_per_warp =
+        cld(regs_per_thread * attrs.threads_per_warp, attrs.regs_per_allocation) *
+        attrs.regs_per_allocation
+    max_regs_per_scheduler = fld(attrs.max_regs_per_sm, attrs.schedulers_per_sm)
+    by_regs = fld(max_regs_per_scheduler, allocated_regs_per_warp) * attrs.schedulers_per_sm
+    return min(warps_per_sm, by_regs)
+end
+
+# The largest register count below `regs` that allows more resident warps, or
+# nothing when none does. Registers are allocated in granules, so warps fall in
+# bands: capping between this count and `regs` buys nothing, and capping below
+# it spends registers for no further warps, so it is the only cap worth asking
+# for. Memoized because the search is per compile and the answer is per device.
+const BAND_EDGE_CACHE = Dict{Int, Union{Int, Nothing}}()
+const BAND_EDGE_CACHE_LOCK = ReentrantLock()
+band_edge_below(regs::Int) =
+    @lock BAND_EDGE_CACHE_LOCK get!(BAND_EDGE_CACHE, regs) do
+        warps = max_warps_per_sm_by_regs(regs)
+        for edge in (regs - 1):-1:1
+            max_warps_per_sm_by_regs(edge) > warps && return edge
+        end
+        return nothing
+    end
+
 """
     DynamicShmem(region_bytes, region_threads)
 
@@ -474,13 +507,17 @@ function _getenv_int(
 end
 
 # Refs to hold settings read from environment variables in __init__: kernel
-# naming from stack traces, per-launch kernel statistics, and the wave count
-# used by the launch-configuration search.
+# naming from stack traces, per-launch kernel statistics, the wave count used by
+# the launch-configuration search, and the automatic register cap below.
 const NAME_KERNELS_FROM_STACK_TRACE = Ref{Bool}(false)
 const COLLECT_KERNEL_STATS =
     _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
 const MAX_WAVES = Ref{Int}(1)
 const DSS_MAX_THREADS = Ref{Int}(256)
+const AUTO_REGISTER_CAP = Ref{Bool}(false)
+const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(8)
+const AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT = Ref{Int}(25)
+const AUTO_REGISTER_CAP_LOCAL_SLACK = Ref{Int}(32)
 
 # Always reload when module is imported so precompilation doesn't make it "stick"
 function __init__()
@@ -491,9 +528,18 @@ function __init__()
     # 1024 is CUDA's threads-per-block limit; this cap feeds block sizes
     # directly, so a larger value would fail at the first kernel launch.
     DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
+    AUTO_REGISTER_CAP[] =
+        _getenv_bool("CLIMA_AUTO_REGISTER_CAP"; default = false)
+    AUTO_REGISTER_CAP_MAX_SHED[] =
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 8; min = 0)
+    AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT[] =
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT", 25; min = 0)
+    AUTO_REGISTER_CAP_LOCAL_SLACK[] =
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_LOCAL_SLACK", 32; min = 0)
 end
 
 name_kernels_from_stack_trace() = NAME_KERNELS_FROM_STACK_TRACE[]
+auto_register_cap() = AUTO_REGISTER_CAP[]
 
 # Modules to ignore when constructing kernel names from stack traces
 const IGNORE_MODULES = (
@@ -587,6 +633,104 @@ else
         shmem,
         convert = Val(false),
     )
+end
+
+# What a kernel compiled, what capping it at its band edge compiled, and which
+# of the two was launched. One record per kernel specialization, so a policy
+# that costs time somewhere is attributable to the kernel it fired on.
+const AutoCapDecision = @NamedTuple{
+    cap::Union{Int, Nothing},
+    reason::Symbol,
+    regs::Int,
+    warps::Int,
+    local_bytes::Int,
+    edge::Union{Int, Nothing},
+    local_budget::Int,
+    capped_regs::Int,
+    capped_local::Int,
+    capped_warps::Int,
+}
+const AUTO_CAP_DECISIONS = Dict{Tuple{Type, Type}, AutoCapDecision}()
+const AUTO_CAP_DECISIONS_LOCK = ReentrantLock()
+
+"""
+    auto_cap_decisions()
+
+Every automatic register-cap decision this process has made (see
+`CLIMA_AUTO_REGISTER_CAP`), keyed by the kernel function's type and the tuple
+type of its arguments. Each record carries the registers and local frame that
+the kernel compiled to, the band edge considered, the warps per multiprocessor
+each allows, and `cap`, which is the edge when the kernel was launched capped
+and `nothing` when it was not; `reason` says which test decided it.
+"""
+auto_cap_decisions() = @lock AUTO_CAP_DECISIONS_LOCK copy(AUTO_CAP_DECISIONS)
+
+# The cap to compile a kernel with when its caller named none: the band edge
+# below the registers it compiles to, or nothing to leave it alone.
+#
+# A kernel's register count sets its launch geometry (see
+# uncached_launch_configuration), and registers are allocated in granules, so a
+# kernel that compiles a few registers past a band edge loses a fifth to a
+# quarter of its resident warps -- `ptxas` optimizes instructions against a
+# budget nobody gave it, and has no reason to stop at the edge.
+#
+# What a cap costs is spill, which cannot be predicted from the source but can
+# be read off a second compile, so this decides rather than predicts: cap only
+# when the edge is close, the request is honored, it buys warps, and the local
+# frame grows by less than the budget. The last test is the one that matters.
+# Capping one kernel here from 255 registers to 64 bought four times the
+# occupancy, grew its spill by 343x and cost 5.5% of wall clock; the same kernel
+# capped to 128 gained 0.4%. The budget has an absolute floor because most
+# kernels compile with no local frame at all, where any spill at all is an
+# infinite relative growth.
+#
+# Decided once per specialization and cached: the first launch of a kernel
+# compiles twice, every later launch compiles once, as it does with no policy.
+function auto_register_cap_for(call, name, key::Tuple{Type, Type})
+    decided = @lock AUTO_CAP_DECISIONS_LOCK get(AUTO_CAP_DECISIONS, key, nothing)
+    isnothing(decided) || return decided.cap
+    plain = compile_kernel(call, name)
+    # Not a kernel: the bytes of a buffer past its shared memory level, which
+    # the caller handles by relaunching at the next level (see launch_slice_loop).
+    plain isa CUDA.HostKernel || return nothing
+    regs = Int(CUDA.registers(plain))
+    local_bytes = _memory_bytes(CUDA.memory(plain), :local)
+    warps = max_warps_per_sm_by_regs(regs)
+    edge = band_edge_below(regs)
+    local_budget = max(
+        fld(local_bytes * (100 + AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT[]), 100),
+        local_bytes + AUTO_REGISTER_CAP_LOCAL_SLACK[],
+    )
+    (capped_regs, capped_local, capped_warps) = (-1, -1, -1)
+    reason = :capped
+    if isnothing(edge)
+        reason = :no_band_below
+    elseif regs - edge > AUTO_REGISTER_CAP_MAX_SHED[]
+        reason = :edge_too_far
+    else
+        capped = compile_kernel(call, name; maxregs = edge)
+        if !(capped isa CUDA.HostKernel)
+            reason = :capped_compile_failed
+        else
+            capped_regs = Int(CUDA.registers(capped))
+            capped_local = _memory_bytes(CUDA.memory(capped), :local)
+            capped_warps = max_warps_per_sm_by_regs(capped_regs)
+            if capped_regs > edge
+                reason = :cap_not_honored
+            elseif capped_warps <= warps
+                reason = :buys_no_warps
+            elseif capped_local > local_budget
+                reason = :spill_over_budget
+            end
+        end
+    end
+    cap = reason === :capped ? edge : nothing
+    decision = AutoCapDecision((
+        cap, reason, regs, warps, local_bytes, edge, local_budget,
+        capped_regs, capped_local, capped_warps,
+    ))
+    @lock AUTO_CAP_DECISIONS_LOCK AUTO_CAP_DECISIONS[key] = decision
+    return cap
 end
 
 """
@@ -687,6 +831,12 @@ function auto_launch!(
 
     # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
     call = converted_kernel_call(f!, args)
+    # A caller that named a cap keeps it, in both directions: an explicit cap is
+    # a call site that knows its kernel, and an explicit `:none` is one that
+    # knows a cap would cost it (see register_cap).
+    if auto_register_cap() && isnothing(maxregs)
+        maxregs = auto_register_cap_for(call, kernel_name, (F!, typeof(args)))
+    end
     kernel = compile_kernel(call, kernel_name; maxregs)
     kernel isa CUDA.HostKernel || return kernel # the bytes of a buffer beyond the level
     if !isnothing(config)
