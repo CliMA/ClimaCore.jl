@@ -173,8 +173,7 @@ largest_application_bytes(bc::OperatorBroadcasted) = max(
 # Recursively replace all operator broadcasts with the result of apply_operator.
 apply_operators(arg) = arg
 apply_operators(bc::NonPointwiseBroadcasted) = apply_pointwise_operators(bc.style, bc)
-apply_operators(bc::OperatorBroadcasted) = inline_apply_operators(bc)
-@inline inline_apply_operators(bc) =
+apply_operators(bc::OperatorBroadcasted) =
     apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
 
 # The evaluation of pointwise functions of operators can depend on the style.
