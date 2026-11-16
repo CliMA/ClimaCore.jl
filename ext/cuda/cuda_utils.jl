@@ -515,7 +515,7 @@ const COLLECT_KERNEL_STATS =
 const MAX_WAVES = Ref{Int}(1)
 const DSS_MAX_THREADS = Ref{Int}(256)
 const AUTO_REGISTER_CAP = Ref{Bool}(true)
-const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(8)
+const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(12)
 const AUTO_REGISTER_CAP_MAX_WARPS = Ref{Int}(16)
 const AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT = Ref{Int}(25)
 const AUTO_REGISTER_CAP_LOCAL_SLACK = Ref{Int}(32)
@@ -537,8 +537,14 @@ function __init__()
     # should do upstream.
     AUTO_REGISTER_CAP[] =
         _getenv_bool("CLIMA_AUTO_REGISTER_CAP"; default = true)
+    # 12 rather than the 8 the opt-in branch defaults to. A census over the
+    # coupled model found five kernels inside 12 registers of a band whose
+    # spill stays under budget, against three inside 8; the two it adds are
+    # 7.7% of device time, and the spill budget admitted them with 12% to
+    # spare rather than trivially. Measuring the wider setting keeps those two
+    # in the profile, where their rows price them one at a time.
     AUTO_REGISTER_CAP_MAX_SHED[] =
-        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 8; min = 0)
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 12; min = 0)
     AUTO_REGISTER_CAP_MAX_WARPS[] =
         _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_WARPS", 16; min = 0)
     AUTO_REGISTER_CAP_EXEMPT[] = filter(
