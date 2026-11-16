@@ -642,6 +642,7 @@ end
 const AutoCapDecision = @NamedTuple{
     cap::Union{Int, Nothing},
     reason::Symbol,
+    name::Union{String, Nothing},
     regs::Int,
     warps::Int,
     local_bytes::Int,
@@ -662,7 +663,9 @@ Every automatic register-cap decision this process has made (see
 type of its arguments. Each record carries the registers and local frame that
 the kernel compiled to, the band edge considered, the warps per multiprocessor
 each allows, and `cap`, which is the edge when the kernel was launched capped
-and `nothing` when it was not; `reason` says which test decided it.
+and `nothing` when it was not; `reason` says which test decided it. `name` is
+the kernel's name when `CLIMA_NAME_CUDA_KERNELS_FROM_STACK_TRACE` is set, which
+is what makes a decision attributable to a call site.
 """
 auto_cap_decisions() = @lock AUTO_CAP_DECISIONS_LOCK copy(AUTO_CAP_DECISIONS)
 
@@ -727,7 +730,7 @@ function auto_register_cap_for(call, name, key::Tuple{Type, Type})
     end
     cap = reason === :capped ? edge : nothing
     decision = AutoCapDecision((
-        cap, reason, regs, warps, local_bytes, edge, local_budget,
+        cap, reason, name, regs, warps, local_bytes, edge, local_budget,
         capped_regs, capped_local, capped_warps,
     ))
     @lock AUTO_CAP_DECISIONS_LOCK AUTO_CAP_DECISIONS[key] = decision
