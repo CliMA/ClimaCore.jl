@@ -469,6 +469,35 @@ error_message(f) =
     end
 end
 
+# A kernel that calls the undefined function of check_shmem_level for 64 bytes.
+@eval shmem_marker_kernel() = (
+    ccall($(QuoteNode(Symbol(CUDA_EXT.SHMEM_LEVEL_ERROR, "_64_bytes"))), Cvoid, ());
+    nothing
+)
+
+@testset "bytes of shared memory in compile errors" begin
+    # GPUCompiler reports the call to the undefined function as a call to an external C
+    # function named by a String, or as a call to a lazy-initialized function named by a
+    # SubString, next to an external call with no name (as Julia 1.12 and later emit it).
+    GPUCompiler = CUDA_EXT.CUDA_COMPILER.GPUCompiler
+    err = try
+        CUDA.cufunction(shmem_marker_kernel, Tuple{})
+    catch err
+        err
+    end
+    @test err isa GPUCompiler.InvalidIRError
+    @test CUDA_EXT.shmem_level_error_bytes(err) == 64
+    (_, bt, _) = first(err.errors)
+    marker(bytes) = SubString("$(CUDA_EXT.SHMEM_LEVEL_ERROR)_$(bytes)_bytes")
+    error_bytes(errors...) =
+        CUDA_EXT.shmem_level_error_bytes(GPUCompiler.InvalidIRError(err.job, [errors...]))
+    (external, lazy) = (GPUCompiler.CCALL_FUNCTION, GPUCompiler.LAZY_FUNCTION)
+    @test error_bytes((external, bt, String(marker(64)))) == 64
+    @test error_bytes((external, bt, nothing), (lazy, bt, marker(64))) == 64
+    @test error_bytes((lazy, bt, marker(32)), (lazy, bt, marker(96))) == 96
+    @test error_bytes((external, bt, nothing)) == 0
+end
+
 @testset "register caps of foreach_slice" begin
     # No cap by default, for every kind of slice; the cap tested below is the count that
     # keeps half of a multiprocessor's threads resident (64 on an A100).
