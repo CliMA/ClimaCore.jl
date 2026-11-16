@@ -869,7 +869,11 @@ the entry point inlining.
         view,
         dest_and_arg_point -> begin
             @inbounds (dest_point, arg_point) = dest_and_arg_point.args
-            @inbounds dest_point[] = arg_point[]
+            # _broadcast_getindex skips getindex's wrappers, which GPU compilation
+            # re-optimizes per kernel. Point slices are 0-dimensional; the empty
+            # index avoids a constant to propagate.
+            @inbounds dest_point[] =
+                Broadcast._broadcast_getindex(arg_point, CartesianIndex())
         end,
         mask,
         Val(false),
@@ -884,7 +888,8 @@ end
     synchronize_shared_points(DataScope(bc), bc)
     foreach_point(bc; kwargs...) do bc_point
         unrolled_foreach(bc_point.pairs) do (dest_point, arg_point)
-            @inbounds dest_point[] = arg_point[]
+            @inbounds dest_point[] =
+                Broadcast._broadcast_getindex(arg_point, CartesianIndex())
         end
     end
     synchronize_shared_points(DataScope(bc), bc)

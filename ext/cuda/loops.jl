@@ -1,10 +1,14 @@
 has_inferred_slice_size(op::O, arg) where {O} =
-    Val{true} == Utilities.return_type(Tuple{typeof(arg)}) do arg
-        slice = op(arg, Tuple(first(DataLayouts.each_slice_index(op, arg)))...)
+    Val{true} == Utilities.return_type(
+        Tuple{typeof(arg), eltype(DataLayouts.each_slice_index(op, arg))},
+    ) do arg, index
+        slice = op(arg, Tuple(index)...)
         Val(DataLayouts.has_inferred_size(slice))
     end
 has_inferred_slice_size(op::O, arg::Union{Tuple, NamedTuple}) where {O} =
     unrolled_all(Base.Fix1(has_inferred_slice_size, op), arg)
+# Point slices of DataLayout broadcasts are zero-dimensional: no need to infer their views.
+has_inferred_slice_size(::typeof(view), ::DataLayouts.LazyDataLayout) = true
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
 
@@ -136,7 +140,7 @@ function launch_slice_loop(
 ) where {R, O, F}
     kernel_function = slice_loop_kernel(subscope, op, f, mask, enumerate)
     granularity = mask isa DataLayouts.NoMask ? nothing : THREADS_PER_WARP
-    config = kernel -> launch_configuration(kernel, max_slices; strict = false, granularity)
+    config = fun -> launch_configuration(fun, max_slices; strict = false, granularity)
     auto_launch!(
         kernel_function,
         compact_args;
@@ -190,15 +194,15 @@ function launch_subblock_loop(
     max_block_threads = max_subblock_launch_threads(subscope)
     shmem = subblock_shmem(subscope)
     config =
-        kernel ->
+        fun ->
             max_block_threads == subblock_threads ?
             launch_configuration(
-                kernel, subblock_threads, max_slices;
+                fun, subblock_threads, max_slices;
                 granularity = subblock_threads,
                 shmem,
             ) :
             launch_configuration(
-                kernel, max_slices * subblock_threads;
+                fun, max_slices * subblock_threads;
                 strict = false,
                 granularity = subblock_threads,
                 shmem,
@@ -429,7 +433,7 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
         results, finished_blocks, arg, UInt32(1),
     )
     shmem = block_reduction_shmem(T)
-    (; threads, blocks) = launch_configuration(kernel, length(arg); shmem)
+    (; threads, blocks) = launch_configuration(kernel.fun, length(arg); shmem)
     results = DataLayouts.scoped_array(scope, T, blocks; buffer = true)
 
     fill!(finished_blocks, UInt32(0))
