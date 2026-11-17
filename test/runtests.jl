@@ -199,6 +199,7 @@ unit_tests = [
     UnitTest("GPU - cuda"                               ,"gpu/cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("GPU - compiler stress regression"         ,"gpu/compiler_stress_regression.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("GPU - kernel renaming"                    ,"gpu/kernel_renaming.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
+    UnitTest("GPU - automatic register cap"             ,"gpu/auto_register_cap.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("GPU - data"                               ,"DataLayouts/gpu_cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :gpu),
     UnitTest("DataLayouts - CUDA threadblocks"          ,"DataLayouts/gpu_cuda_threadblocks.jl"; meta = :gpu_only, tier = :gpu, subsystem = :datalayouts),
     UnitTest("Spaces - CUDA extruded spaces"            ,"Spaces/extruded_cuda.jl"; meta = :gpu_only, tier = :gpu, subsystem = :spaces),
