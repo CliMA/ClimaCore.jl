@@ -514,8 +514,8 @@ const COLLECT_KERNEL_STATS =
     _getenv_bool("CLIMA_COLLECT_KERNEL_STATS"; default = false)
 const MAX_WAVES = Ref{Int}(1)
 const DSS_MAX_THREADS = Ref{Int}(256)
-const AUTO_REGISTER_CAP = Ref{Bool}(false)
-const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(8)
+const AUTO_REGISTER_CAP = Ref{Bool}(true)
+const AUTO_REGISTER_CAP_MAX_SHED = Ref{Int}(12)
 const AUTO_REGISTER_CAP_MAX_WARPS = Ref{Int}(16)
 const AUTO_REGISTER_CAP_LOCAL_GROWTH_PCT = Ref{Int}(25)
 const AUTO_REGISTER_CAP_LOCAL_SLACK = Ref{Int}(32)
@@ -530,10 +530,17 @@ function __init__()
     # 1024 is CUDA's threads-per-block limit; this cap feeds block sizes
     # directly, so a larger value would fail at the first kernel launch.
     DSS_MAX_THREADS[] = _getenv_int("CLIMA_DSS_MAX_THREADS", 256; max = 1024)
+    # On by default. A census over the coupled AMIP model capped 5 of 690
+    # kernel specializations, leaving the other 685 compiling as they did
+    # before, and the five are 2.9% of device time; set
+    # CLIMA_AUTO_REGISTER_CAP=false to compile as if this were not here.
     AUTO_REGISTER_CAP[] =
-        _getenv_bool("CLIMA_AUTO_REGISTER_CAP"; default = false)
+        _getenv_bool("CLIMA_AUTO_REGISTER_CAP"; default = true)
+    # The same census found five kernels within 12 registers of a band edge
+    # whose capped local frame stays inside the budget below, against three
+    # within 8, and the two that 12 adds are 7.7% of device time.
     AUTO_REGISTER_CAP_MAX_SHED[] =
-        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 8; min = 0)
+        _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_SHED", 12; min = 0)
     AUTO_REGISTER_CAP_MAX_WARPS[] =
         _getenv_int("CLIMA_AUTO_REGISTER_CAP_MAX_WARPS", 16; min = 0)
     AUTO_REGISTER_CAP_EXEMPT[] = filter(
