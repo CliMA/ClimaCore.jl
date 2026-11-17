@@ -146,8 +146,10 @@ end
 # max_active_blocks above, so the two cannot disagree. Block size does not
 # enter: the register file bounds warps per scheduler, and that is the bound a
 # cap moves.
-function max_warps_per_sm_by_regs(regs_per_thread::Int)
-    attrs = device_attributes()
+max_warps_per_sm_by_regs(regs_per_thread::Int) =
+    max_warps_per_sm_by_regs(regs_per_thread, device_attributes())
+
+function max_warps_per_sm_by_regs(regs_per_thread::Int, attrs)
     warps_per_sm = fld(attrs.max_threads_per_sm, attrs.threads_per_warp)
     iszero(regs_per_thread) && return warps_per_sm
     regs_per_thread > attrs.max_regs_per_thread && return 0
@@ -168,12 +170,16 @@ const BAND_EDGE_CACHE = Dict{Int, Union{Int, Nothing}}()
 const BAND_EDGE_CACHE_LOCK = ReentrantLock()
 band_edge_below(regs::Int) =
     @lock BAND_EDGE_CACHE_LOCK get!(BAND_EDGE_CACHE, regs) do
-        warps = max_warps_per_sm_by_regs(regs)
-        for edge in (regs - 1):-1:1
-            max_warps_per_sm_by_regs(edge) > warps && return edge
-        end
-        return nothing
+        band_edge_below(regs, device_attributes())
     end
+
+function band_edge_below(regs::Int, attrs)
+    warps = max_warps_per_sm_by_regs(regs, attrs)
+    for edge in (regs - 1):-1:1
+        max_warps_per_sm_by_regs(edge, attrs) > warps && return edge
+    end
+    return nothing
+end
 
 """
     DynamicShmem(region_bytes, region_threads)
@@ -869,10 +875,12 @@ function auto_launch!(
 
     # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
     call = converted_kernel_call(f!, args)
-    # A caller that named a cap keeps it, in both directions: an explicit cap is
-    # a call site that knows its kernel, and an explicit `:none` is one that
-    # knows a cap would cost it (see register_cap).
-    if auto_register_cap() && isnothing(maxregs)
+    # A caller that named a cap keeps it, in both directions: a count is a call
+    # site that knows its kernel's band, and `:none` is one that knows a cap
+    # costs it (see register_cap).
+    if maxregs === :none
+        maxregs = nothing
+    elseif auto_register_cap() && isnothing(maxregs)
         maxregs = auto_register_cap_for(call, kernel_name, (F!, typeof(args)))
     end
     kernel = compile_kernel(call, kernel_name; maxregs)
