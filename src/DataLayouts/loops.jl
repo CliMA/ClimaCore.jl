@@ -833,29 +833,11 @@ end
     return dest
 end
 
-@inline Base.copyto!(
+# _broadcast_getindex skips getindex's wrappers, which GPU compilation re-optimizes per
+# kernel. Point slices are 0-dimensional; the empty index avoids a constant to propagate.
+@inline function Base.copyto!(
     dest::DataLayout,
     arg::MaybeLazyDataLayout,
-    mask::DataMask = NoMask(),
-) = copyto_capped!(dest, arg, nothing, mask)
-
-"""
-    copyto_capped!(dest, arg, maxregs, mask = NoMask())
-
-Copy `arg` into `dest` with the register cap `maxregs` (see `maxregs` in
-[`foreach_slice`](@ref)), or without one when it is `nothing`.
-
-A call site that knows its kernel sits at the top of an occupancy band can ask
-for the band's register count here, so that `ptxas` meets the budget instead of
-choosing one or two registers past the edge and costing the launch a quarter of
-its resident warps. The cap is positional rather than a keyword because a
-keyword adds a `Core.kwcall` method instance to every pointwise copy and stops
-the entry point inlining.
-"""
-@inline function copyto_capped!(
-    dest::DataLayout,
-    arg::MaybeLazyDataLayout,
-    maxregs,
     mask::DataMask = NoMask(),
 )
     scope = DataScope(dest, arg)
@@ -863,15 +845,10 @@ the entry point inlining.
     size(dest) == size(dest_and_arg) ||
         throw(DimensionMismatch("DataLayout broadcast result exceeds destination size"))
     synchronize_shared_points(scope, dest, arg)
-    foreach_slice_with_options(
-        nothing,
-        maxregs,
+    _foreach_slice(
         view,
         dest_and_arg_point -> begin
             @inbounds (dest_point, arg_point) = dest_and_arg_point.args
-            # _broadcast_getindex skips getindex's wrappers, which GPU compilation
-            # re-optimizes per kernel. Point slices are 0-dimensional; the empty
-            # index avoids a constant to propagate.
             @inbounds dest_point[] =
                 Broadcast._broadcast_getindex(arg_point, CartesianIndex())
         end,
