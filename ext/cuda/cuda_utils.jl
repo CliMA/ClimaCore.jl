@@ -534,26 +534,12 @@ end
 # converts them in a KernelCall, which also tracks the memory that they use, and CUDA.jl v5
 # kernel calls skip their own conversion with convert = Val(false) (isbits closures need no
 # conversion, so they skip Adapt).
-#
-# A compile error from a buffer that exceeds the shared memory level of its slice loop (see
-# check_shmem_level) is returned here as the bytes that the loop needs (see
-# shmem_level_error_bytes). The try block wraps the compilation, not the launch: a value
-# that is live in a try block is boxed on the heap, which would copy the launch's arguments.
 @static if isdefined(CUDA, :KernelCall)
-    converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
-    function compile_kernel(call, name; maxregs = nothing)
-        try
-            return compile_kernel_call(call, name, maxregs)
-        catch err
-            err isa CUDA_COMPILER.GPUCompiler.InvalidIRError || rethrow()
-            bytes = shmem_level_error_bytes(err)
-            iszero(bytes) && rethrow()
-            return bytes
-        end
-    end
-    compile_kernel_call(call, ::Nothing, maxregs) =
+    # F!: Julia doesn't specialize on a function argument that is only passed on.
+    converted_kernel_call(f!::F!, args) where {F!} = CUDA.KernelCall(f!, args...)
+    compile_kernel(call, ::Nothing, maxregs) =
         CUDA.kernel_compile(call; always_inline = true, maxregs_kwarg(maxregs)...)
-    compile_kernel_call(call, name, maxregs) =
+    compile_kernel(call, name, maxregs) =
         CUDA.kernel_compile(call; name, always_inline = true, maxregs_kwarg(maxregs)...)
     launch_kernel(kernel, call, threads, blocks, shmem) =
         CUDA.kernel_launch(kernel, call; threads, blocks, shmem)
@@ -563,21 +549,11 @@ else
         args = map(CUDA.cudaconvert, args),
         source = (f!, args),
     )
-    compile_kernel(call, name; maxregs = nothing) =
+    compile_kernel(call, name, maxregs) =
         compile_function(call.f!, argument_types(call), name, maxregs)
-    function compile_function(f!::F!, tt, name, maxregs) where {F!}
-        try
-            return compile_function_call(f!, tt, name, maxregs)
-        catch err
-            err isa CUDA_COMPILER.GPUCompiler.InvalidIRError || rethrow()
-            bytes = shmem_level_error_bytes(err)
-            iszero(bytes) && rethrow()
-            return bytes
-        end
-    end
-    compile_function_call(f!, tt, ::Nothing, maxregs) =
+    compile_function(f!, tt, ::Nothing, maxregs) =
         CUDA.cufunction(f!, tt; always_inline = true, maxregs_kwarg(maxregs)...)
-    compile_function_call(f!, tt, name, maxregs) =
+    compile_function(f!, tt, name, maxregs) =
         CUDA.cufunction(f!, tt; name, always_inline = true, maxregs_kwarg(maxregs)...)
     argument_types(call) = Tuple{map(Core.Typeof, call.args)...}
     launch_kernel(kernel, call, threads, blocks, shmem) = GC.@preserve call kernel(
@@ -587,6 +563,38 @@ else
         shmem,
         convert = Val(false),
     )
+end
+
+# The bytes that a slice loop needs, from the compile error of a buffer beyond its shared
+# memory level (see check_shmem_level). Call it in a catch block: other errors are rethrown.
+# It is compiled once for all kernels.
+@noinline function level_error_bytes(@nospecialize(err))
+    err isa CUDA_COMPILER.GPUCompiler.InvalidIRError || rethrow()
+    bytes = shmem_level_error_bytes(err)
+    iszero(bytes) && rethrow()
+    return bytes
+end
+
+# Launch dimensions (threads, blocks, dynamic shared memory). A CuFunction has the same type
+# for every kernel and the other arguments come from the call site, so this is compiled once
+# per call site.
+@noinline function launch_dims(
+    fun::CUDA.CuFunction,
+    nitems,
+    config,
+    threads_s,
+    blocks_s,
+    shmem::DynamicShmem,
+)
+    if !isnothing(config)
+        (; threads, blocks) = config(fun)
+    elseif isnothing(nitems)
+        (threads, blocks) = (threads_s, blocks_s)
+    else
+        threads = launch_configuration(fun, nitems; strict = false, shmem).threads
+        blocks = cld(nitems, threads)
+    end
+    return (threads, blocks, shmem(prod(threads)))
 end
 
 """
@@ -612,12 +620,12 @@ function auto_launch!(
     f!::F!,
     args;
     nitems = nothing,
-    config = nothing,
+    config::C = nothing, # C: config is only passed on (see converted_kernel_call)
     threads_s = nothing,
     blocks_s = nothing,
     shmem::DynamicShmem = NO_DYNAMIC_SHMEM,
     maxregs = nothing,
-) where {F!}
+) where {F!, C}
     # If desired, compute a kernel name from the stack trace and store in
     # a global Dict, which serves as an in memory cache
     kernel_name = nothing
@@ -687,17 +695,15 @@ function auto_launch!(
 
     # Alternative to CUDA.@cuda that passes the kernel to launch_configuration.
     call = converted_kernel_call(f!, args)
-    kernel = compile_kernel(call, kernel_name; maxregs)
-    kernel isa CUDA.HostKernel || return kernel # the bytes of a buffer beyond the level
-    if !isnothing(config)
-        (; threads, blocks) = config(kernel.fun)
-    elseif isnothing(nitems)
-        (threads, blocks) = (threads_s, blocks_s)
-    else
-        threads = launch_configuration(kernel.fun, nitems; strict = false, shmem).threads
-        blocks = cld(nitems, threads)
+    # The try block holds only the compilation: values that are live in it are boxed.
+    kernel = try
+        compile_kernel(call, kernel_name, maxregs)
+    catch err
+        return level_error_bytes(err)
     end
-    launch_kernel(kernel, call, threads, blocks, shmem(prod(threads)))
+    (threads, blocks, shmem_bytes) =
+        launch_dims(kernel.fun, nitems, config, threads_s, blocks_s, shmem)
+    launch_kernel(kernel, call, threads, blocks, shmem_bytes)
     RECORD_KERNELS[] && push!(RECORDED_KERNELS, kernel)
 
     if collect_kernel_stats() # only for development use
