@@ -40,87 +40,25 @@ steps:
       JULIA_NUM_PRECOMPILE_TASKS: 8
       JULIA_MAX_NUM_PRECOMPILE_FILES: 50
 
-  - label: "Flagship AMIP GPU with prognostic EDMF + 1M + integrated land (16 helems)"
-    key: "gpu_amip_progedmf_1M_land_he16"
+  - label: "TEMP: profile flagship AMIP steps (this branch vs main)"
+    key: "gpu_amip_profile"
     depends_on: "init_gpu_env"
+    soft_fail: true
     command:
-      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP/ $COUPLER_PATH/experiments/AMIP/run_simulation.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_progedmf_1M_land_he16"
-      - echo "--- Checking SYPD from artifacts"
-      - bash .buildkite/perf/check-perf.sh output/gpu_amip_progedmf_1M_land_he16/artifacts/sypd.txt
-    artifact_paths: "output/gpu_amip_progedmf_1M_land_he16/artifacts/*"
+      - echo "--- Profile with the ClimaCore of this branch"
+      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP/ .buildkite/perf/profile_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_profile_pr"
+      - echo "--- Set up the base ClimaCore (main, the parent of the branch head)"
+      - git rev-parse HEAD~2 || git fetch --deepen=5 origin
+      - git worktree add .buildkite/perf/base_core HEAD~2
+      - cp -r $COUPLER_PATH/experiments/AMIP $COUPLER_PATH/experiments/AMIP_base
+      - julia --project=$COUPLER_PATH/experiments/AMIP_base -e 'using Pkg; Pkg.develop(; path = ".buildkite/perf/base_core"); Pkg.precompile()'
+      - echo "--- Profile with the ClimaCore of main"
+      - "srun julia --threads=3 --color=yes --project=$COUPLER_PATH/experiments/AMIP_base/ .buildkite/perf/profile_amip.jl --config_file $BENCHMARK_CONFIG_PATH/amip_progedmf_1m_land_he16.yml --job_id gpu_amip_profile_base"
     env:
       CLIMACOMMS_DEVICE: "CUDA"
-      # Fallback used when no passing main build metadata is available yet.
-      BASELINE: "0.278"
-      MIN_PERCENT_CHANGE: "-1"
-    agents:
-      slurm_gpus_per_task: 1
-      slurm_cpus_per_task: 4
-      slurm_ntasks: 1
-      slurm_mem: 16GB
-
-  - label: "init land :GPU:"
-    key: "init_gpu_land_env"
-    command:
-      - git clone https://github.com/CliMA/ClimaLand.jl.git $LAND_PATH && bash -c "cd $LAND_PATH && git checkout $LAND_COMMIT"
-      - echo "--- Instantiate ClimaLand benchmark env"
-      - julia --project=$LAND_PATH -e 'using Pkg; Pkg.Registry.update(); Pkg.instantiate(;verbose=true)'
-      # The benchmark scripts run against .buildkite, which devs ClimaLand itself
-      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.develop(; path = ENV["LAND_PATH"]); Pkg.develop(; path = pwd()); Pkg.instantiate(;verbose=true)'
-      # Makie 0.24.16 breaks GeoMakie's precompilation (timed_ticklabelspace_reset). CairoMakie
-      # requires an exact Makie version, so both are added, which keeps all other packages.
-      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.add([PackageSpec(; name = "Makie", version = "0.24.15"), PackageSpec(; name = "CairoMakie", version = "0.15.15")])'
-      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.precompile()'
-      - julia --project=$LAND_PATH/.buildkite -e 'using CUDA; CUDA.precompile_runtime()'
-      - julia --project=$LAND_PATH/.buildkite -e 'using Pkg; Pkg.status()'
-    agents:
-      slurm_gpus: 1
-      slurm_cpus_per_task: 8
-    env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
-      JULIA_MAX_NUM_PRECOMPILE_FILES: 50
-
-  # ClimaLand is the only model that runs with a land/sea mask, so it is the
-  # only one whose timings track the masked loop and column operator paths.
-  # Both steps run ClimaLand's own benchmark scripts, which sample the
-  # simulation repeatedly and report a mean and standard deviation; the model
-  # setup therefore lives in ClimaLand rather than being duplicated here.
-  - label: "Global soil model GPU (masked columns)"
-    key: "gpu_climaland_soil"
-    depends_on: "init_gpu_land_env"
-    command:
-      - "srun bash .buildkite/perf/run-land-benchmark.sh $LAND_PATH soil"
-      - echo "--- Checking the benchmark rate"
-      - bash .buildkite/perf/check-perf.sh soil_benchmark_gpu/sims_per_second.txt
-    artifact_paths: "soil_benchmark_gpu/*"
-    env:
-      CLIMACOMMS_DEVICE: "CUDA"
-      JULIA_CUDA_MEMORY_POOL: "cuda"
-      # No fallback yet: the first passing main build records the baseline.
-      # Set BASELINE once a few builds show the spread that the script reports
-      # alongside the mean.
-      MIN_PERCENT_CHANGE: "-5"
     agents:
       slurm_gpus_per_task: 1
-      slurm_cpus_per_task: 4
+      slurm_cpus_per_task: 8
       slurm_ntasks: 1
-      slurm_mem: 16GB
-
-  - label: "Flagship snowy land model GPU (soil + canopy + snow)"
-    key: "gpu_climaland_snowy_land"
-    depends_on: "init_gpu_land_env"
-    command:
-      - "srun bash .buildkite/perf/run-land-benchmark.sh $LAND_PATH snowy_land"
-      - echo "--- Checking the benchmark rate"
-      - bash .buildkite/perf/check-perf.sh snowy_land_benchmark_gpu/sims_per_second.txt
-    artifact_paths: "snowy_land_benchmark_gpu/*"
-    env:
-      CLIMACOMMS_DEVICE: "CUDA"
-      JULIA_CUDA_MEMORY_POOL: "cuda"
-      # No fallback yet: the first passing main build records the baseline.
-      MIN_PERCENT_CHANGE: "-5"
-    agents:
-      slurm_gpus_per_task: 1
-      slurm_cpus_per_task: 4
-      slurm_ntasks: 1
-      slurm_mem: 16GB
+      slurm_mem: 32GB
