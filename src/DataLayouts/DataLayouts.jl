@@ -219,7 +219,7 @@ end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
 @inline reassign(arg::Union{Tuple, NamedTuple}, scope) =
-    unrolled_map(Base.Fix2(reassign, scope), arg)
+    unrolled_map(@inline(item -> reassign(item, scope)), arg)
 
 """
     layout_constructor(D, [T]; [params...])
