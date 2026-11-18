@@ -10,11 +10,12 @@ import ClimaComms
 import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
-import ..Utilities: @drop_recursion_limits, @drop_constprop
+import ..Utilities: @drop_recursion_limits, @drop_constprop, @inline_types_only
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
+import ..Utilities: AutoBroadcaster, is_auto_broadcastable
 import ..Utilities:
     stable_view, unchecked_stable_view, unionall_type, replace_type_parameter
-import ..Utilities: safe_mapreduce, linear_index_and_stride, UnitRangeSubArray
+import ..Utilities: safe_mapreduce, NoInit, linear_index_and_stride, UnitRangeSubArray
 import ..Utilities: fieldtype_vals, return_type, safe_eltype, unsafe_eltype
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..slab, ..column, ..level
@@ -213,7 +214,7 @@ in a `Tuple` or `NamedTuple` (e.g., a container of arguments of
 @inline function reassign(data, scope)
     array = parent(data)
     assume_extents(array, inferred_parent_extents(data, array)) # avoid extra size checks
-    return reassign(typeof(data), scope)(array)
+    return unchecked_rebuild(reassign(typeof(data), scope), array)
 end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
@@ -693,7 +694,6 @@ include("registers.jl")
 # constant propagation, since turning it off there shifts kernel codegen
 # enough to flip cases near the sm_60 register brink.
 @drop_constprop _foreach_slice, foreach_slice_with_options, unfused_slice_loop,
-foreach_point, foreach_level, foreach_slab, foreach_column, column_reduce!,
-Base.fill!, Base.copyto!
+foreach_point, foreach_level, foreach_slab, foreach_column, Base.fill!, Base.copyto!
 
 end # module

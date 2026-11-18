@@ -4,6 +4,34 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] `column_reduce!`, `column_accumulate!`, and
+  the `MatrixFields` single and block diagonal solvers loop over columns with
+  `DataLayouts.foreach_column`, so the threads of each column share its work on
+  GPUs: associative operators are reduced and accumulated with warp shuffles
+  (through the new `DataLayouts.fold_points` and `DataLayouts.scan_points`),
+  tri-diagonal systems are solved by parallel cyclic reduction, and the block
+  diagonal solver solves all of its band matrices in one loop when they fit in
+  the parameter memory of a GPU kernel.
+- ![][badge-✨feature/enhancement] `DataLayouts.foreach_slice` and its variants
+  take a `serial` keyword, which gives every slice one thread (e.g., for scans
+  with operators that are not associative), except in a loop over one slice
+  inside another slice loop, which keeps the threads of the outer slice.
+- ![][badge-✨feature/enhancement] The `MatrixFields` solvers support band
+  matrices with any numbers of diagonals through a generic form of Gaussian
+  elimination, instead of only tri-diagonal and penta-diagonal matrices.
+- ![][badge-🚀performance] On CPUs, `column_reduce!` vectorizes unmasked
+  reductions and inlines their reads, which speeds up `max` and `min`.
+- ![][badge-🔥behavioralΔ] Column reductions and accumulations with associative
+  operators (like `column_integral_definite!` and `column_integral_indefinite!`)
+  are regrouped on GPUs, and CPU reductions either interleave accumulators or
+  use `@simd` loops, so their results can change up to roundoff.
+- ![][badge-🔥behavioralΔ] `MatrixFields.single_field_solve!` needs no cache, so
+  `MatrixFields.single_field_solver_cache` returns `nothing`, which
+  `single_field_solve!(cache, x, A, b)` ignores.
+- ![][badge-🐛bugfix] Inside a GPU loop over columns, the output of
+  `column_reduce!` into a temporary with a single point is stored by every
+  thread of the column, so that every thread reads its value; only the thread
+  that owned the point used to write it.
 - ![][badge-🐛bugfix] `ClimaComms.context` and `ClimaComms.device` no longer
   throw a `TypeError` for every nonempty `FieldVector`. They return the context
   and device of the first `Field` at any nesting depth that is not a

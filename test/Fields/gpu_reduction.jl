@@ -189,9 +189,9 @@ end
     @test LinearAlgebra.norm(Yf, 3) ≈ LinearAlgebra.norm(Yf_cpu, 3)
     @test LinearAlgebra.norm(Yf, Inf) ≈ LinearAlgebra.norm(Yf_cpu, Inf)
 
-    # Tensor-valued fields are reduced one component at a time, which needs a
-    # shfl_recurse method for Tensors so that the warp shuffles in the reduction
-    # kernel can move them between lanes (see ext/cuda/loops.jl).
+    # Tensor-valued fields are reduced one component at a time, which needs the
+    # warp shuffles in the reduction kernel to move Tensors between lanes (see
+    # shuffle_components in ext/cuda/shuffles.jl).
     for (space, space_cpu) in (
         (hv_center_space, hv_center_space_cpu),
         (hv_face_space, hv_face_space_cpu),

@@ -291,9 +291,3 @@ function byslab(
         end
     end
 end
-
-universal_index(colidx::ColumnIndex{2}) =
-    CartesianIndex(1, colidx.ij[1], colidx.ij[2], colidx.h)
-
-universal_index(colidx::ColumnIndex{1}) =
-    CartesianIndex(1, colidx.ij[1], 1, colidx.h)
