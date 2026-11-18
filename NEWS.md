@@ -4,6 +4,20 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🚀performance] A GPU kernel is compiled with a register cap at the
+  edge of the occupancy band it would otherwise land just past, when a second
+  compile shows that the cap is honored, buys resident warps, and grows the
+  kernel's local frame by less than a budget. Since the launch geometry is
+  derived from the register count, those warps are resident threads. Over a
+  coupled AMIP configuration this capped 5 of 690 kernel specializations, left
+  the other 685 compiling as before, and lowered device time by 2.9%. Set
+  `CLIMA_AUTO_REGISTER_CAP=false` to compile as before, `maxregs = Val(:none)`
+  on one loop to exclude it, or `CLIMA_AUTO_REGISTER_CAP_EXEMPT` to exclude a
+  kernel by name; `ClimaCoreCUDAExt.auto_cap_decisions()` reports what was
+  decided and why.
+- ![][badge-🔥behavioralΔ] `maxregs = Val(:none)` and `maxregs = Val(:auto)` are
+  no longer synonyms in a loop over slices: `Val(:auto)` hands the choice to the
+  automatic cap above, and `Val(:none)` compiles with no cap.
 - ![][badge-🐛bugfix] `ClimaComms.context` and `ClimaComms.device` no longer
   throw a `TypeError` for every nonempty `FieldVector`. They return the context
   and device of the first `Field` at any nesting depth that is not a

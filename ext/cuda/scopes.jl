@@ -162,11 +162,11 @@ Operations that require dynamically-sized array allocations are not supported.
 const ThisWarp = ThisSubBlock{THREADS_PER_WARP}
 
 # Registers per thread that the kernel of a slice loop with the given subscope is compiled
-# with, at a register cap of DataLayouts.foreach_slice (see maxregs): nothing at :none and
-# at :auto, which leaves the count to ptxas, and the given count otherwise, under which
-# ptxas spills what does not fit to local memory. No cap is the default, since a cap that
-# suits one body (more blocks resident) pessimizes another (spills), so it is chosen per loop.
-register_cap(::Val{:none}, _) = nothing
+# with, at a register cap of DataLayouts.foreach_slice (see maxregs): the given count, under
+# which ptxas spills what does not fit to local memory; nothing at :auto, which hands the
+# choice to the automatic cap (see auto_register_cap_for); and :none to compile with no cap,
+# which is what a loop body that a cap pessimizes asks for.
+register_cap(::Val{:none}, _) = :none
 register_cap(::Val{:auto}, _) = nothing
 register_cap(::Val{R}, _) where {R} = Int(R)
 
