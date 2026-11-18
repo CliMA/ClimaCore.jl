@@ -4,8 +4,8 @@ import ..DataLayouts
 inv_mul(a, b) = inv(a) * b
 x_eltype(A::ScalingFieldMatrixEntry, b) =
     x_type(eltype(A), eltype(Base.broadcastable(b)))
-x_eltype(A::ColumnwiseBandMatrixField, b) =
-    x_type(eltype(eltype(A)), eltype(Base.broadcastable(b)))
+x_eltype(A, b) = x_type(eltype(eltype(A)), eltype(Base.broadcastable(b)))
+
 x_type(::Type{T_A}, ::Type{T_b}) where {T_A, T_b} = return_type(inv_mul, Tuple{T_A, T_b})
 
 ################################################################################
@@ -41,28 +41,38 @@ factors_type(::Type{R}, ::Type{T_b}) where {R, T_b} = Tuple{
 
 # Bytes of the buffers of a solve with arguments (x, A, b). A parallel solve buffers the rows
 # that its threads exchange (see pcr_neighbors). The one thread of any other solve buffers
-# the arguments in registers (see register_values_buffer) and the factors that it computes.
-# A loop needs the most that one of its solves needs, since every buffer of a solve is
-# retired before the next solve allocates its own (see the buffer reuse invariant in
-# Operators.apply_operator).
+# the arguments in registers, or lazy ones in band_solve_steps (see shared_values and
+# register_values_buffer), and the factors that it computes. A loop needs the most that one
+# of its solves needs, since every buffer of a solve is retired before the next solve
+# allocates its own (see the buffer reuse invariant in Operators.apply_operator). Only data
+# in registers counts for x: a Field in registers from similar_to_x stands for a shared
+# buffer in band_solve_steps.
 column_rows_bytes(x, A, b) =
     use_parallel_solver(A) ?
     exchanged_rows_bytes(
         DataLayouts.DataScope(x),
         x,
         sizeof(eltype(A)) + sizeof(eltype(Base.broadcastable(b))),
-    ) : register_values_bytes(x) + register_values_bytes(A) + register_values_bytes(b)
+    ) : register_values_bytes(x) + shared_values_bytes(A) + shared_values_bytes(b)
 column_factors_bytes(x, A, b) =
     use_parallel_solver(A) ? 0 : column_rows_bytes(x, A, b) + factors_bytes(x, A, b)
 factors_bytes(x, A, b) = DataLayouts.scoped_buffer_bytes(
     DataLayouts.DataScope(x),
     DataLayouts.nlevels(x) * sizeof(factors_type(eltype(A), eltype(Base.broadcastable(b)))),
 )
-register_values_bytes(arg) =
-    DataLayouts.stored_in_registers(arg) ?
+shared_values_bytes(arg) =
+    Operators.is_cached(arg) ?
     DataLayouts.scoped_buffer_bytes(
         DataLayouts.DataScope(arg),
-        length(arg) * sizeof(eltype(arg)),
+        Operators.single_field_buffer_bytes(arg, eltype(arg)),
+    ) : register_values_bytes(arg)
+
+register_values_bytes(_) = 0
+register_values_bytes(data::DataLayouts.MaybeLazyDataLayout) =
+    DataLayouts.stored_in_registers(data) ?
+    DataLayouts.scoped_buffer_bytes(
+        DataLayouts.DataScope(data),
+        length(data) * sizeof(eltype(data)),
     ) : 0
 
 loop_bytes(_, ::Tuple{}) = 0
@@ -103,18 +113,19 @@ struct ColumnSolves{C, F}
 end
 @inline (solves::ColumnSolves{C})(columns) where {C} =
     @inline solves.f(Val(C ? :copies : shared_buffers(columns)), columns)
+DataLayouts.required_shared_memory(::ColumnSolves, columns) = shared_solve_bytes(columns)
+DataLayouts.uses_shared_memory(solves::ColumnSolves, columns) =
+    DataLayouts.required_shared_memory(solves, columns) > 0
 
 # Bytes of shared memory that the solves of a loop need (see shared_buffers): the rows that
 # parallel solves exchange, so that the loop is launched at a level that holds them (and
 # with one thread per column beyond the largest level), and the factors of the other
 # solves when they fit at the level of the columns' scope.
-function DataLayouts.required_shared_memory(::ColumnSolves, columns)
-    factors = loop_bytes(column_factors_bytes, columns)
-    limit = DataLayouts.total_buffer_limit(DataLayouts.DataScope(columns[1]))
-    return max(loop_bytes(column_rows_bytes, columns), factors <= limit ? factors : 0)
+function shared_solve_bytes(args)
+    factors = loop_bytes(column_factors_bytes, args)
+    limit = DataLayouts.total_buffer_limit(DataLayouts.DataScope(args[1]))
+    return max(loop_bytes(column_rows_bytes, args), factors <= limit ? factors : 0)
 end
-DataLayouts.uses_shared_memory(solves::ColumnSolves, columns) =
-    DataLayouts.required_shared_memory(solves, columns) > 0
 
 @inline function shared_buffers(args)
     scope = DataLayouts.DataScope(args[1])
@@ -124,17 +135,21 @@ DataLayouts.uses_shared_memory(solves::ColumnSolves, columns) =
     return loop_bytes(column_factors_bytes, args) <= limit ? :all : :rows
 end
 
-single_field_solve!(x, A::ScalingFieldMatrixEntry, b) =
-    x .= (inv(scaling_value(A)),) .* b
-single_field_solve!(x, A::ColumnwiseBandMatrixField, b) =
+# The solution of a scaling or diagonal block, lazily.
+pointwise_solution(A::ScalingFieldMatrixEntry, b) =
+    Base.broadcasted(*, (inv(scaling_value(A)),), b)
+pointwise_solution(A, b) = @. lazy(inv(getindex(A, 0)) * b)
+
+# A and b can be lazy, and temporaries come from the pool (see run_field_matrix_solver!).
+single_field_solve!(x, A::ScalingFieldMatrixEntry, b, _ = nothing) =
+    Base.materialize!(x, pointwise_solution(A, b))
+single_field_solve!(x, A, b, pool = nothing) =
     if eltype(A) <: DiagonalMatrixRow
-        A₀ = A.entries.:1
-        @. x = inv(A₀) * b
+        Base.materialize!(x, pointwise_solution(A, b))
     else
         slice_op = DataLayouts.column
         mask = Spaces.get_mask(axes(x))
-        # Solves need no spaces, so the loop slices the data of each argument.
-        args = map(Fields.field_values, (x, A, b))
+        args = map(Base.Fix2(materialized_values, pool), (x, A, b))
         (solve_function, serial) = column_solve_function(single_column_solve!, args)
         DataLayouts._foreach_slice(slice_op, solve_function, mask, Val(false), serial, args)
     end
@@ -148,19 +163,56 @@ single_field_solve!(::Nothing, x::Fields.Field, A, b) = single_field_solve!(x, A
 @inline subfields(field) =
     ntuple(@inline(n -> getproperty(field, n)), Val(fieldcount(eltype(field))))
 
+# The arguments of a solve (see single_column_solve!), with Fields in registers (see
+# solve_arg) made readable where the solve reads them: at each thread's own rows for the
+# parallel solver, and at every row for the one thread of the other solvers, through
+# shared buffers after the factors (see shared_values).
+function solve_values(::Val{shared}, (x, A, b)) where {shared}
+    shared != :none && use_parallel_solver(A) &&
+        return (x, register_values(A), register_values(b))
+    A_offset = shared == :all ? factors_bytes(x, A, b) : 0
+    b_offset = A_offset + shared_values_bytes(A)
+    return (x, shared_values(A, Val(A_offset)), shared_values(b, Val(b_offset)))
+end
+
+@inline register_values(arg) = arg
+@inline register_values(field::Fields.Field) = Fields.field_values(field)
+
+@inline function shared_values(arg, offset)
+    Operators.is_cached(arg) || return arg
+    # One thread (as on a CPU) copies the whole column into a buffer of its own.
+    Operators.has_private_buffers(arg) &&
+        return Fields.field_values(Operators.materialize_buffer(arg))
+    buffer = Operators.buffer_similar(arg, eltype(arg), offset)
+    if arg isa Fields.Field
+        # Each thread copies its own points of a Field in registers.
+        data = Fields.field_values(arg)
+        DataLayouts._foreach_slice(
+            view,
+            (index, point) -> (@inbounds point[] = data[index]),
+            DataLayouts.NoMask(),
+            Val(true),
+            Val(false),
+            Fields.field_values(buffer),
+        )
+    else
+        Operators.apply_operators!(buffer, arg, Val(false))
+    end
+    DataLayouts.synchronize(DataLayouts.DataScope(arg))
+    return Fields.field_values(buffer)
+end
+
 # The parallel solver reads whole rows of A, so only the other solvers view its bands. One
 # thread computes the factors of the other solvers. It keeps them in arrays of its own (on
 # the stack of a CPU thread, or in the local memory of a GPU thread), or in shared memory
 # before the buffers of the arguments in registers (see column_solve_function and
-# register_values_buffer). That thread waits for the statements that wrote A and b, and the
-# other threads wait for it.
-function single_column_solve!(::Val{shared}, (x, A, b)) where {shared}
+# register_values_buffer). The rows of a parallel solve can be loaded by the caller (see
+# solve_rows).
+single_column_solve!(shared, args) =
+    single_column_solve!(shared, args, solve_rows(shared, args))
+function single_column_solve!(::Val{shared}, (x, A, b), rows) where {shared}
     shared != :none && use_parallel_solver(A) &&
-        return parallel_band_matrix_solve!(
-            Base.broadcastable(x),
-            A,
-            Base.broadcastable(b),
-        )
+        return parallel_band_matrix_solve!(Base.broadcastable(x), rows)
     scope = DataLayouts.DataScope(x)
     A_offset = Val(shared == :all ? factors_bytes(x, A, b) : 0)
     (A′, b_offset) = register_values_buffer(scope, A, A_offset)
@@ -170,15 +222,15 @@ function single_column_solve!(::Val{shared}, (x, A, b)) where {shared}
     Uⱼs =
         shared == :all ? subfields(DataLayouts.buffer_similar(x, T_U)) :
         thread_arrays(T_U, Val(DataLayouts.nlevels(x)))
-    DataLayouts.synchronize(scope)
     DataLayouts.owns_point(scope, 1) && band_matrix_solve!(
         Uⱼs,
         Base.broadcastable(x′),
         solve_operands(Val(shared), x, subfields(A′.entries), Base.broadcastable(b′))...,
     )
-    DataLayouts.synchronize(scope)
     DataLayouts.stored_in_registers(x) || return nothing
-    # Every thread copies its own rows of the solution into its registers.
+    # Every thread copies its own rows of the solution into its registers, once the one
+    # thread has written them.
+    DataLayouts.synchronize(scope)
     for index in @inbounds DataLayouts.subscope_indices(
         DataLayouts.ThisThread(),
         scope,
@@ -222,6 +274,33 @@ end
         Val(start + register_values_bytes(arg)),
     ) :
     (arg, offset)
+
+# The rows of a parallel solve, loaded from its values (see solve_values), or nothing for a
+# serial solve, which copies its values into buffers that an earlier solve may still read.
+solve_rows(::Val{:none}, _) = nothing
+function solve_rows(shared, args)
+    use_parallel_solver(args[2]) || return nothing
+    (x, A, b) = solve_values(shared, args)
+    # The indices of the calling thread's rows and the rows, which can be loaded before an
+    # earlier solve of the same thread (see solve_columns!).
+    x′ = Base.broadcastable(x)
+    b′ = Base.broadcastable(b)
+    scope = DataLayouts.DataScope(x′)
+    n = length(x′) % Int32
+    num_threads = DataLayouts.num_threads(scope) % Int32
+    rank = DataLayouts.thread_rank(scope) % Int32
+    num_rows = cld(length(x′), DataLayouts.static_num_threads(scope))
+    indices = ntuple(Val(num_rows)) do row_number
+        (row_number - 1) % Int32 * num_threads + rank
+    end
+    zero_A = zero(eltype(eltype(A)))
+    rows = unrolled_map(indices) do i
+        i = min(i, n)
+        (A₋₁_value, A₀_value, A₊₁_value) = (@inbounds A[i]).entries
+        (i > 1 ? A₋₁_value : zero_A, A₀_value, i < n ? A₊₁_value : zero_A, @inbounds b′[i])
+    end
+    return (indices, rows)
+end
 
 #=
 The Thomas algorithm, as presented in
@@ -402,21 +481,9 @@ are read as the nearest row in it, so that every load and exchange is uniform; t
 couplings are then dropped by zeroing k₋ or k₊ instead of loading zeros. The order
 of multiplications has been modified to handle block vectors/matrices.
 =#
-@inline function parallel_band_matrix_solve!(x, A, b)
+@inline function parallel_band_matrix_solve!(x, (indices, rows))
     scope = DataLayouts.DataScope(x)
     n = length(x) % Int32
-    num_threads = DataLayouts.num_threads(scope) % Int32
-    rank = DataLayouts.thread_rank(scope) % Int32
-    num_rows = cld(length(x), DataLayouts.static_num_threads(scope))
-    indices = ntuple(Val(num_rows)) do row_number
-        (row_number - 1) % Int32 * num_threads + rank
-    end
-    zero_A = zero(eltype(eltype(A)))
-    rows = unrolled_map(indices) do i
-        i = min(i, n)
-        (A₋₁_value, A₀_value, A₊₁_value) = (@inbounds A[i]).entries
-        (i > 1 ? A₋₁_value : zero_A, A₀_value, i < n ? A₊₁_value : zero_A, @inbounds b[i])
-    end
     stride = one(n)
     while stride < n
         s = stride

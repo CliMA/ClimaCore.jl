@@ -28,6 +28,30 @@ main
 - ![][badge-🔥behavioralΔ] `MatrixFields.single_field_solve!` needs no cache, so
   `MatrixFields.single_field_solver_cache` returns `nothing`, which
   `single_field_solve!(cache, x, A, b)` ignores.
+- ![][badge-✨feature/enhancement] On GPUs, `MatrixFields.field_matrix_solve!`
+  runs in one kernel, unless its algorithm stores Fields or logs debug
+  information, it only solves band matrices that are not tridiagonal (whose
+  solves take one thread per column in loops of their own), or its arguments do
+  not fit in kernel parameter memory.
+- ![][badge-🔥behavioralΔ] `StationaryIterativeSolve` without a preconditioner or
+  with a diagonal one stores each increment of `x` before updating `x`, which
+  removes a data race on GPUs. The update used to read values of `x` that it had
+  already updated (always on CPUs, and depending on the order of threads on
+  GPUs), which converged faster than the documented iteration, so these solves
+  can need more iterations on both CPUs and GPUs.
+- ![][badge-🔥behavioralΔ] The `MatrixFields` solver algorithms have no caches,
+  so `run_field_matrix_solver!(alg, x, A, b)` and
+  `check_field_matrix_solver(alg, A, b)` take none. A `FieldMatrixSolver` only
+  keeps the previous solution of correlated solves and a pool of temporaries
+  that is allocated once. Every algorithm defines `band_solve_steps`, from which
+  a fused GPU kernel finds its shared memory.
+- ![][badge-🚀performance] `StationaryIterativeSolve` starts from
+  `x[1] = inv(P) * b` when `x[0]` is zero, instead of computing the residual of
+  `x[0]`. The `MatrixFields` solvers skip solves whose right-hand sides are zero
+  by structure, and products with their solutions.
+  `SchurComplementReductionSolve` only solves for the entries of `inv(A₁₁) * b₁`
+  that its Schur complement reads. The results change only by the signs of
+  zeros.
 - ![][badge-🐛bugfix] Inside a GPU loop over columns, the output of
   `column_reduce!` into a temporary with a single point is stored by every
   thread of the column, so that every thread reads its value; only the thread
