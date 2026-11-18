@@ -250,6 +250,23 @@ allocations share memory (as with the dynamic shared memory of GPU blocks), whic
 @inline scoped_buffer_bytes(scope, bytes) = bytes
 
 """
+    max_bytes_per_thread(scope)
+
+Number of bytes that a thread of `scope` can keep in its own memory (e.g., the factors
+of a `MatrixFields` solve).
+"""
+max_bytes_per_thread(scope) = typemax(Int)
+
+"""
+    copies_column_values(scope)
+
+Whether the one thread of a column, in a loop over the columns of `scope`, first copies
+the values that it reads at every step (e.g., the rows of a `MatrixFields` solve) into its
+own memory.
+"""
+copies_column_values(scope) = false
+
+"""
     strided_access(scope)
 
 Return whether [`subscope_indices`](@ref) should return a strided range of

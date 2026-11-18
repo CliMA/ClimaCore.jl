@@ -271,9 +271,10 @@ end
 # and the bytes that an array of the given bytes occupies at it. The single definition that
 # the host-side byte accounting of Operators (through DataLayouts.scoped_buffer_bytes) and
 # the device-side allocations use, so that the offsets computed on the host match the
-# device's layout.
-const BUFFER_ALIGNMENT = 32
-@inline aligned_buffer_bytes(bytes) = cld(bytes, BUFFER_ALIGNMENT) * BUFFER_ALIGNMENT
+# device's layout. The alignment is a function because Julia 1.11 does not fold the bytes
+# of a loop's buffers through a global constant (see slices_required_shared_memory).
+@inline buffer_alignment() = 32
+@inline aligned_buffer_bytes(bytes) = cld(bytes, buffer_alignment()) * buffer_alignment()
 @inline DataLayouts.scoped_buffer_bytes(::Union{ThisBlock, ThisSubBlock}, bytes) =
     aligned_buffer_bytes(bytes)
 
@@ -285,14 +286,14 @@ const BUFFER_ALIGNMENT = 32
 @inline region_first_byte(::ThisBlock) = UInt32(0)
 @inline function region_first_byte(scope::ThisSubBlock{N, B}) where {N, B}
     region = DataLayouts.subscope_rank(scope, ThisBlock())
-    alignment = UInt32(BUFFER_ALIGNMENT)
+    alignment = UInt32(buffer_alignment())
     return fld((region - one(region)) * UInt32(N * B), alignment) * alignment
 end
 
 # Bytes of the region of every sub-block of N threads at B bytes per thread, which its
 # allocations have to fit in (see check_shmem_level and total_buffer_limit): a region's
 # first byte is rounded down to the alignment, so a region holds this many bytes at least.
-@inline region_bytes(N, B) = fld(N * B, BUFFER_ALIGNMENT) * BUFFER_ALIGNMENT
+@inline region_bytes(N, B) = fld(N * B, buffer_alignment()) * buffer_alignment()
 
 # An allocation that does not fit in the region of its sub-block fails to compile, with an
 # error that names the bytes it needs (see launch_slice_loop, which reports it). Values that
@@ -315,6 +316,15 @@ DataLayouts.total_buffer_limit(::Union{ThisHost, ThisKernel}) = typemax(Int)
 DataLayouts.total_buffer_limit(::ThisBlock) = MAX_SHMEM_PER_BLOCK
 @inline DataLayouts.total_buffer_limit(::ThisSubBlock{N, B}) where {N, B} =
     region_bytes(N, B)
+
+# A GPU thread keeps the factors of its column's solves in local memory when they take at
+# most 4 KB, and the threads of a block solve the columns whose factors take more.
+DataLayouts.max_bytes_per_thread(::Union{ThisHost, ThisKernel, ThisCooperativeGroup}) = 4096
+
+# The threads of a warp read different columns, so a GPU thread that solves a column on its
+# own loads the column's values into local memory in one loop, rather than at every step of
+# the solve.
+DataLayouts.copies_column_values(::ThisHost) = true
 
 # The last sub-block in a block may be only partially filled, so its active
 # thread count is computed from the block's total. This is not the same as using

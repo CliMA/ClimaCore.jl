@@ -12,6 +12,32 @@ has_inferred_slice_size(::typeof(view), ::DataLayouts.LazyDataLayout) = true
 
 DataLayouts.needs_loop_setup(::ThisHost) = true
 
+# A fused loop's kernel needs inferrable slices, and its arguments must fit in the parameter
+# memory that CUDA.jl allows: 4 KiB, or 32 KiB for PTX 8.1+ on Volta and newer devices.
+@inline function DataLayouts.fits_slice_loop(
+    ::ThisHost,
+    op::O,
+    f::F,
+    mask::M,
+    args...,
+) where {O, F, M}
+    unrolled_all(Base.Fix1(has_inferred_slice_size, op), args) || return false
+    # The arguments of the loop's kernel (see the launch in DataLayouts._foreach_slice below),
+    # including the mask that its function captures.
+    T = Core.Compiler.return_type(Tuple{F, M, typeof(args)}) do f, mask, args
+        CUDA.cudaconvert((f, mask, Grids.toggle_compact_args(args...)))
+    end
+    isconcretetype(T) || return false
+    # The margin covers the KernelState argument and alignment padding.
+    return sizeof(T) + 64 <= 4096 || sizeof(T) + 64 <= max_kernel_parameter_bytes()
+end
+
+function max_kernel_parameter_bytes()
+    compiler = isdefined(CUDA, :compiler_config) ? CUDA : CUDA.CUDACore # moved in CUDA 6
+    ptx = compiler.compiler_config(CUDA.device()).params.ptx
+    return CUDA.capability(CUDA.device()) >= v"7.0" && ptx >= v"8.1" ? 32764 : 4096
+end
+
 # Only run a fused foreach_slice kernel when every slice has an inferrable size.
 # Also, avoid launching fused loops on MPI ranks that do not own any elements.
 @inline DataLayouts._foreach_slice(
@@ -20,6 +46,7 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
     f::F,
     mask,
     enumerate,
+    serial,
     args...,
 ) where {L, R, O, F} =
     if !unrolled_all(Base.Fix1(has_inferred_slice_size, op), args)
@@ -28,7 +55,9 @@ DataLayouts.needs_loop_setup(::ThisHost) = true
         check_device_assumptions()
         # partition(::ThisKernel) descends directly to sub-blocks, so
         # slice_subscope never returns ThisBlock itself.
-        kernel_subscope = DataLayouts.slice_subscope(ThisKernel(), op, args...)
+        kernel_subscope =
+            serial isa Val{true} ? DataLayouts.ThisThread() :
+            DataLayouts.slice_subscope(ThisKernel(), op, args...)
         subscope = slice_subscope_at_level(kernel_subscope, Val(L), op, f, args...)
         max_slices =
             length(DataLayouts.each_slice_index(op, DataLayouts.first_indexable(args)))
@@ -260,12 +289,12 @@ shmem_level_name(::DataLayouts.ThisThread) = ":none"
 # the level (a fixed level, or at :auto that of a loop whose buffers are not known, including
 # one given none that allocates some after all) moves the loop to the next level (see
 # launch_slice_loop and can_exceed_level).
-slice_subscope_at_level(subscope, _, op, f, args...) = subscope
-slice_subscope_at_level(::ThisSubBlock, ::Val{:none}, op, f, args...) =
+@inline slice_subscope_at_level(subscope, _, op, f, args...) = subscope
+@inline slice_subscope_at_level(::ThisSubBlock, ::Val{:none}, op, f, args...) =
     DataLayouts.ThisThread()
-slice_subscope_at_level(::ThisSubBlock{N}, level::Val, op, f, args...) where {N} =
+@inline slice_subscope_at_level(::ThisSubBlock{N}, level::Val, op, f, args...) where {N} =
     ThisSubBlock{N, shmem_level_bytes(level, Val(N))}()
-function slice_subscope_at_level(
+@inline function slice_subscope_at_level(
     ::ThisSubBlock{N},
     ::Val{:auto},
     op::O,
@@ -287,8 +316,8 @@ end
 # slice_subscope_at_level), so that it is launched at the next levels when it does (see
 # launch_slice_loop): every loop, except at the :auto level a loop whose buffers are known,
 # since its level holds them.
-can_exceed_level(_, _, op, f, args...) = Val(true)
-function can_exceed_level(
+@inline can_exceed_level(_, _, op, f, args...) = Val(true)
+@inline function can_exceed_level(
     ::ThisSubBlock{N},
     ::Val{:auto},
     op::O,
@@ -317,7 +346,7 @@ next_shmem_level(::ThisSubBlock{N, B}) where {N, B} =
 # so that a body that captures values keeps the call foldable. The slices are reassigned after
 # they are taken: slicing a host array rebuilds its layout with the host's scope (see
 # DataLayouts.rebuild), which would undo the reassignment.
-slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
+@inline slices_required_shared_memory(subscope, op::O, f::F, args...) where {O, F} =
     val_value(
         Utilities.return_type(Tuple{F, typeof(args)}) do f, args
             index =
@@ -424,8 +453,13 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
 
     # The warp results of a block are stored with the type of the fold on each thread, which
     # a wider init widens (see reduce_points(::ThisCooperativeGroup)), so the type sizes the
-    # launch's shared memory.
-    T = DataLayouts.thread_fold_type(op, arg; kernel_kwargs...)
+    # launch's shared memory. The fold is inferred on a thread of the host, whose indices
+    # the host cannot compute.
+    T = DataLayouts.thread_fold_type(
+        op,
+        DataLayouts.reassign(arg, DataLayouts.ThisThread());
+        kernel_kwargs...,
+    )
     results = DataLayouts.scoped_array(scope, T, 0; buffer = true)
     finished_blocks = reduction_sync_counter()
     # The launch needs results sized by the block count, so the kernel is compiled before it.
@@ -447,59 +481,147 @@ function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) w
     return CUDA.@allowscalar @inbounds results[1]
 end
 
-# Number of threads in a scope assigned at least one point of arg (fewer than
-# all active threads when slice_subscope rounded the slice up, or a mask left
-# fewer active points than threads). Threads take strided subsets
-# rank:n:num_points, so the threads with points are a prefix of the scope,
-# which the num_values guard in shuffle_reduce requires.
-@inline function num_reduced_threads(scope, arg, mask)
-    num_points = length(DataLayouts.reduced_point_indices(arg, mask))
-    first_rank =
+# Construct a scope with at least one thread for each warp in the given scope.
+@inline warps_to_threads(::ThisBlock) = ThisWarp()
+@inline warps_to_threads(::ThisSubBlock{N}) where {N} =
+    ThisSubBlock{cld(N, THREADS_PER_WARP)}()
+
+# Reduce each thread's points, then combine the results of the threads that were
+# assigned points (other threads' results are undefined or duplicates). Not all
+# active threads are assigned points when slice_subscope rounds the slice up, or
+# when applying a mask leaves fewer active points than available threads.
+function DataLayouts.reduce_points(
+    scope::ThisCooperativeGroup, op::O, arg; mask, init...,
+) where {O}
+    first_rank_offset =
         Int(DataLayouts.thread_rank(DataLayouts.DataScope(arg))) -
         Int(DataLayouts.thread_rank(scope))
-    return clamp(num_points - first_rank, 0, Int(num_active_threads(scope)))
+    num_points = length(DataLayouts.reduced_point_indices(arg, mask))
+    num_partial_results =
+        clamp(num_points - first_rank_offset, 0, Int(num_active_threads(scope)))
+    partial_result =
+        DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; mask, init...)
+    # The combination of the first num_partial_results threads' values is returned to every
+    # thread (or only to the first thread when warps are partially active; see
+    # shuffle_reduce). Multi-warp scopes reduce each warp, and then the warp results (see
+    # warp_results_in_lanes).
+    scope != ThisBlock() && shuffles_in_warp(scope) &&
+        return shuffle_reduce(scope, op, partial_result, num_partial_results)
+    (warp_index, num_warp_values) = warp_index_and_values(scope, num_partial_results)
+    warp_result = shuffle_reduce(ThisWarp(), op, partial_result, num_warp_values)
+    (subscope, lane_value, num_warps) =
+        warp_results_in_lanes(scope, warp_result, warp_index, num_partial_results, false)
+    return shuffle_reduce(subscope, op, lane_value, num_warps)
 end
 
-# Reduce a warp or sub-warp with warp shuffles, limited to the threads that
-# were assigned points (other threads' results are undefined or duplicates).
-# For multi-warp scopes, reduce each warp, then the results in the first warp.
-DataLayouts.reduce_points(
-    scope::ThisCooperativeGroup, op::O, arg; mask, init...,
-) where {O} =
-    if scope != ThisBlock() && DataLayouts.num_threads(scope) <= THREADS_PER_WARP
-        thread_result =
-            DataLayouts.reduce_points(DataLayouts.ThisThread(), op, arg; mask, init...)
-        shuffle_reduce(scope, op, thread_result, num_reduced_threads(scope, arg, mask))
+# The rank of the calling thread's warp in a multi-warp scope, and the number of the scope's
+# first num_values values that the warp holds.
+@inline function warp_index_and_values(scope, num_values)
+    warp_index = Int(DataLayouts.subscope_rank(ThisWarp(), scope))
+    num_warp_values =
+        clamp(num_values - (warp_index - 1) * THREADS_PER_WARP, 0, THREADS_PER_WARP)
+    return (warp_index, num_warp_values)
+end
+
+# Exchange the warp results of a multi-warp scope through shared memory. The first thread of
+# each warp writes its result, and the threads of a subscope with one thread per warp read
+# the results of the warps that hold any of the first num_values values (in reverse order
+# when reverse is true; lanes past the last such warp read its result). Returns the
+# subscope, the value read by the calling thread, and the number of such warps.
+@inline function warp_results_in_lanes(scope, warp_result, warp_index, num_values, reverse)
+    subscope = warps_to_threads(scope)
+    max_num_warps = DataLayouts.static_num_threads(subscope)
+    warp_results =
+        DataLayouts.scoped_static_array(scope, typeof(warp_result), max_num_warps)
+    is_first_thread_in(ThisWarp()) && (@inbounds warp_results[warp_index] = warp_result)
+    DataLayouts.synchronize(scope)
+
+    num_warps = max(cld(num_values, THREADS_PER_WARP), 1)
+    lane_index = min(Int(DataLayouts.thread_rank(subscope)), num_warps)
+    lane_value =
+        @inbounds warp_results[reverse ? num_warps + 1 - lane_index : lane_index]
+    return (subscope, lane_value, num_warps)
+end
+
+# The warp results that reduce_points and scan_points exchange in shared memory.
+DataLayouts.combined_values_bytes(scope::ThisCooperativeGroup, ::Type{T}) where {T} =
+    scope != ThisBlock() && shuffles_in_warp(scope) ? 0 :
+    DataLayouts.scoped_buffer_bytes(
+        scope,
+        DataLayouts.static_num_threads(warps_to_threads(scope)) * sizeof(T),
+    )
+
+# Scan a cooperative group's points in chunks of one point per thread, using
+# each chunk's result to initialize the next one. Threads without a point in the
+# last chunk read a copy of the last point in arg, which the scans below ignore.
+@inline DataLayouts.scan_points(
+    scope::ThisCooperativeGroup, f::F, op::O, arg, reverse, init,
+) where {F, O} =
+    if !DataLayouts.is_associative(op)
+        Base.@invoke DataLayouts.scan_points(scope::Any, f, op, arg, reverse, init)
     else
-        num_warps = DataLayouts.num_subscopes(ThisWarp(), scope)
-        max_results = scope == ThisBlock() ? MAX_WARPS_PER_BLOCK : Int(num_warps)
-        warp_index = DataLayouts.subscope_rank(ThisWarp(), scope)
-        warp_result = DataLayouts.reduce_points(ThisWarp(), op, arg; mask, init...)
-        results = DataLayouts.scoped_static_array(scope, typeof(warp_result), max_results)
-        if is_first_thread_in(ThisWarp())
-            @inbounds results[warp_index] = warp_result
-        end
-        DataLayouts.synchronize(scope)
-        # Empty warps hold duplicates rather than partial results, so only
-        # warps that reduced points take part in the fold; at least one entry
-        # is always folded so a scope with no points still returns its first
-        # warp's init-seeded value.
-        num_results = max(cld(num_reduced_threads(scope, arg, mask), THREADS_PER_WARP), 1)
-        if !isone(num_results)
-            if isone(warp_index)
-                # Every lane of the first warp must reach the shuffles in
-                # shuffle_reduce, so surplus lanes load a duplicate of the last
-                # result instead of an entry that no warp ever wrote.
-                lane_index = min(Int(DataLayouts.thread_rank(ThisWarp())), num_results)
-                @inbounds warp_result = results[lane_index]
-                final_result = shuffle_reduce(ThisWarp(), op, warp_result, num_results)
-                if is_first_thread_in(ThisWarp())
-                    @inbounds results[1] = final_result
+        n = length(arg)
+        num_threads = Int(DataLayouts.num_threads(scope))
+
+        # The inclusive scan of the first num_values threads' values in order of rank (or in
+        # reverse order), and the combination of all of their values. Multi-warp scopes scan
+        # each warp, and then the warp results (see warp_results_in_lanes).
+        @inline function scan_points_uncoarsened(init, chunk_index)
+            index = (chunk_index - 1) * num_threads + Int(DataLayouts.thread_rank(scope))
+            num_values = min(num_threads, n - (chunk_index - 1) * num_threads)
+            value = @inbounds arg[min(index, n)]
+            (partial_result, final_result) =
+                if scope != ThisBlock() && shuffles_in_warp(scope)
+                    partial_result = shuffle_scan(scope, op, value, num_values, reverse)
+                    final_result_index = reverse ? 1 : max(num_values, 1)
+                    (
+                        partial_result,
+                        shuffle_point_value(scope, partial_result, final_result_index),
+                    )
+                else
+                    (warp_index, num_warp_values) = warp_index_and_values(scope, num_values)
+                    partial_warp_result =
+                        shuffle_scan(ThisWarp(), op, value, num_warp_values, reverse)
+                    warp_result_index = reverse ? 1 : max(num_warp_values, 1)
+                    warp_result =
+                        shuffle_point_value(
+                            ThisWarp(),
+                            partial_warp_result,
+                            warp_result_index,
+                        )
+                    (subscope, lane_value, num_warps) =
+                        warp_results_in_lanes(
+                            scope,
+                            warp_result,
+                            warp_index,
+                            num_values,
+                            reverse,
+                        )
+                    prefix = shuffle_scan(subscope, op, lane_value, num_warps, false)
+                    partial_result_prefix_index =
+                        reverse ? num_warps - warp_index : warp_index - 1
+                    partial_result_prefix = shuffle_point_value(
+                        subscope,
+                        prefix,
+                        max(partial_result_prefix_index, 1),
+                    )
+                    (
+                        partial_result_prefix_index <= 0 ? partial_warp_result :
+                        op(partial_result_prefix, partial_warp_result),
+                        shuffle_point_value(subscope, prefix, num_warps),
+                    )
                 end
-            end
-            DataLayouts.synchronize(scope)
+            index <= n &&
+                f(index, init isa NoInit ? partial_result : op(init, partial_result))
+            return init isa NoInit ? final_result : op(init, final_result)
         end
-        @inbounds results[1]
+
+        num_chunks = cld(n, num_threads)
+        result = scan_points_uncoarsened(init, reverse ? num_chunks : 1)
+        for iter in 2:num_chunks
+            result = scan_points_uncoarsened(result, reverse ? num_chunks + 1 - iter : iter)
+        end
+        result
     end
 
 # Use the scope type to generate the number of pairwise reductions, log2(N), in
@@ -507,20 +629,25 @@ DataLayouts.reduce_points(
 @generated num_reductions(::ThisSubBlock{N}) where {N} =
     8 * sizeof(N) - leading_zeros(N) - 1
 
-# Butterfly reduction over the first num_values threads, in which all active lanes (nonzero
-# lower bits in the mask) exchange data at every power-of-two offset. Before the shuffle at an
+# Butterfly reduction over the first num_values threads, in which all active lanes of the
+# scope exchange data at every power-of-two offset. Before the shuffle at an
 # offset, the threads of every aligned block of offset ranks hold the combination of the
 # block's values among the first num_values (if it has any), and they combine it with that of
 # the neighboring block. Every thread ends up with the combination of all num_values values
 # when every lane of the scope is active (as in slice loops), and the first thread always does.
-function shuffle_reduce(scope, op::O, value, num_values) where {O}
+@inline function shuffle_reduce(
+    scope::ThisSubBlock{N},
+    op::O,
+    value,
+    num_values,
+) where {N, O}
     num_offsets = num_reductions(scope)
-    num_inactive = THREADS_PER_WARP - num_active_threads(ThisWarp())
     block_start = DataLayouts.thread_rank(scope) - one(UInt32)
     num_block_values = num_values % UInt32
     for offset in ntuple(n -> one(UInt32) << (n - 1), Val(num_offsets))
-        shuffled_value =
-            CUDA.shfl_xor_sync(CUDA.FULL_MASK >> num_inactive, value, offset)
+        shuffled_value = shuffle_components(value) do x
+            CUDA.shfl_xor_sync(subwarp_lanes(scope), x, offset, N % UInt32)
+        end
         block_start &= ~(offset - one(UInt32))
         has_value = block_start < num_block_values
         has_shuffled_value = xor(block_start, offset) < num_block_values
@@ -531,12 +658,28 @@ function shuffle_reduce(scope, op::O, value, num_values) where {O}
     return value
 end
 
-# Extend CUDA's warp shuffle intrinsics to support AutoBroadcasters and Tensors, recursively
-# shuffling each value that appears in a multi-component reduction.
-CUDA.shfl_recurse(
+# Kogge-Stone scan of a sub-warp, in which each thread combines its value with the one
+# shuffled from the thread at every power-of-two offset below (above, when reverse) its rank;
+# a thread past num_values never sends a value to a thread at or before num_values.
+@inline function shuffle_scan(
+    scope::ThisSubBlock{N},
     op::O,
-    x::T,
-) where {O, T <: Union{ClimaCore.Geometry.Tensor, Utilities.AutoBroadcaster}} = map(op, x)
+    value,
+    num_values,
+    reverse,
+) where {N, O}
+    rank = DataLayouts.thread_rank(scope)
+    for offset in ntuple(n -> one(UInt32) << (n - 1), Val(num_reductions(scope)))
+        shuffled_value = shuffle_components(value) do x
+            reverse ? CUDA.shfl_down_sync(subwarp_lanes(scope), x, offset, N % UInt32) :
+            CUDA.shfl_up_sync(subwarp_lanes(scope), x, offset, N % UInt32)
+        end
+        if reverse ? rank + offset <= num_values : rank > offset
+            value = op(shuffled_value, value)
+        end
+    end
+    return value
+end
 
 # A slice loop launched at a level that its kernel exceeds recurses through the levels after
 # it (see launch_slice_loop), each a sub-block of another type, which the inference recursion

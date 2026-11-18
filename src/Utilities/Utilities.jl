@@ -203,7 +203,7 @@ const UnitRangeSubArray{A} = SubArray{
     <:Any,
     <:Any,
     A,
-    <:Tuple{Vararg{Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}}},
+    <:Tuple{Vararg{AbstractUnitRange{Int}}},
 }
 
 # The offset along dimension d of the views stacked on an array (0 for the array itself).
@@ -419,5 +419,7 @@ Float64
 """
 recursive_bottom_eltype(a) =
     a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
+
+@drop_constprop stable_view, mapreduce_pairwise
 
 end # module

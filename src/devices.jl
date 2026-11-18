@@ -27,6 +27,8 @@ struct DeviceSideContext <: ClimaComms.AbstractCommsContext end
 
 ClimaComms.context(::DeviceSideDevice) = DeviceSideContext()
 ClimaComms.device(::DeviceSideContext) = DeviceSideDevice()
+ClimaComms.assert(::DeviceSideDevice, cond::C, text::T) where {C, T} =
+    ClimaComms.assert(ClimaComms.CUDADevice(), cond, text)
 
 # Scalar indexing is always allowed in code that runs within an accelerator.
 ClimaComms.allowscalar(f, ::DeviceSideDevice, args...; kwargs...) = f(args...; kwargs...)
