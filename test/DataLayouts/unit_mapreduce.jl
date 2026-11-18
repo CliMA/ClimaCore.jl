@@ -63,6 +63,25 @@ end
     end
 end
 
+@testset "reductions with special float values [$FT]" for FT in (Float32, Float64)
+    A = ClimaComms.array_type(device){FT}
+    (Nv, Nij, Nh) = (3, 4, 5)
+    for data in (
+            DataLayouts.VIJFH{FT, Nv, Nij, Nij, nothing}(A, Nh),
+            DataLayouts.VIJHF{FT, Nv, Nij, Nij, nothing}(A, Nh),
+        ),
+        (reduction, result_sign) in ((maximum, +), (minimum, -))
+
+        data .= -result_sign(FT(0))
+        ClimaComms.allowscalar(setindex!, device, data, result_sign(FT(0)), 1)
+        @test reduction(data) === result_sign(FT(0))
+        ClimaComms.allowscalar(setindex!, device, data, result_sign(FT(Inf)), 2)
+        @test reduction(data) === result_sign(FT(Inf))
+        ClimaComms.allowscalar(setindex!, device, data, FT(NaN), 3)
+        @test isnan(reduction(data)) # GPUs can return a NaN with other bits
+    end
+end
+
 # https://github.com/CliMA/ClimaCore.jl/issues/2097
 @testset "mapreduce with partial blocks [$FT]" for FT in (Float32, Float64)
     space = ClimaCore.CommonSpaces.RectangleXYSpace(

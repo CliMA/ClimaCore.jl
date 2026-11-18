@@ -116,7 +116,9 @@ end
 # As of Julia 1.13, wait() reaches the scheduler task through a OncePerThread
 # whose initializer constructs a Task, and JET's analysis of that Task's body
 # recurses back into wait(), so any wait(::Task) (e.g. in launch_pool_threads)
-# is reported as failing to optimize due to recursion in OncePerThread.
+# is reported as failing to optimize due to recursion in OncePerThread. As of
+# JET 0.13, the runtime dispatch with which that body (Base.wait_forever)
+# displays uncaught errors is reported as well.
 @static if isdefined(JET, :LastFrameMethod) && isdefined(Base, :get_sched_task)
     struct OncePerThreadRecursion <: JET.ReportMatcher end
     function JET.match_report(
@@ -128,7 +130,8 @@ end
         return sig <: Tuple{Base.OncePerThread, Vararg} ||
                sig <: Tuple{typeof(getindex), Base.OncePerThread, Vararg}
     end
-    const scheduler_frames = (OncePerThreadRecursion(),)
+    const scheduler_frames =
+        (OncePerThreadRecursion(), JET.AnyFrameMethod(Base.wait_forever))
 else
     const scheduler_frames = ()
 end
