@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] An operator matrix constructed with
+  `MatrixFields.operator_matrix` from an operator without boundary conditions
+  (e.g. `GradientC2F()`) has boundary rows that are its interior rows without
+  their out-of-range entries, instead of `NaN`s, so that products of operator
+  matrices (e.g. `div_matrix() * grad_matrix()` in an implicit Jacobian) no
+  longer give `NaN`s. Broadcasting such an operator (`@. op(arg)`) still gives
+  `NaN` at the boundary, and `WeightedInterpolateC2F` matrices keep their `NaN`
+  boundary rows.
 - ![][badge-🐛bugfix] `ClimaComms.context` and `ClimaComms.device` no longer
   throw a `TypeError` for every nonempty `FieldVector`. They return the context
   and device of the first `Field` at any nesting depth that is not a

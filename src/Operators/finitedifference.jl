@@ -113,7 +113,9 @@ which flags the missing boundary condition. This holds on every evaluation path:
 an operator that is rewritten into an operator matrix multiply gets a `NaN`
 boundary row (see `MatrixFields`), and any other operator goes through
 [`stencil_left_boundary`](@ref) / [`stencil_right_boundary`](@ref), which
-produce `NaN` directly.
+produce `NaN` directly. An operator matrix constructed explicitly with
+`MatrixFields.operator_matrix` is the exception: its boundary rows for this
+condition are its interior rows, with the entries outside of the matrix dropped.
 
 The advection operators never use this condition: when they are given no
 boundary conditions, [`Extrapolate{0}`](@ref Extrapolate) is added to their
