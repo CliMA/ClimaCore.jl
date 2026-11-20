@@ -250,6 +250,36 @@ allocations share memory (as with the dynamic shared memory of GPU blocks), whic
 @inline scoped_buffer_bytes(scope, bytes) = bytes
 
 """
+    total_buffer_limit(scope)
+
+Number of bytes that the buffers allocated in `scope` can occupy. The scopes of
+unsliced fields, which allocate no buffers, and of single threads have no limit:
+the buffers of a [`ThisThread`](@ref) are private, so compiling operators
+separately to share them would only add calls to every slice, which makes CPU
+loops slower without compiling them faster.
+"""
+total_buffer_limit(scope) = typemax(Int)
+
+"""
+    max_bytes_per_thread(scope)
+
+Number of bytes that a thread from `scope` can keep in its own memory (e.g., the
+factors of a `MatrixFields` solve). Larger problems are shared across multiple
+threads.
+"""
+max_bytes_per_thread(scope) = typemax(Int)
+
+"""
+    copies_column_values(scope)
+
+Return whether the one thread of a column in a loop over the columns of a scope
+copies the values that it reads at every step of a sequential computation (e.g.,
+the rows of a `MatrixFields` solve) into its own memory first, which only
+`DataScope`s whose threads read different columns at the same time need.
+"""
+copies_column_values(scope) = false
+
+"""
     strided_access(scope)
 
 Return whether [`subscope_indices`](@ref) should return a strided range of
@@ -269,15 +299,6 @@ num_threads(::ThisThread) = 1
 static_num_threads(::ThisThread) = 1
 thread_rank(::ThisThread) = 1
 
-"""
-    total_buffer_limit(scope)
-
-Number of bytes that the buffers allocated in `scope` can occupy. The scopes of unsliced
-fields, which allocate no buffers, and of single threads have no limit: the buffers of a
-[`ThisThread`](@ref) are private, so compiling operators separately to share them would only
-add calls to every slice, which makes CPU loops slower without compiling them faster.
-"""
-total_buffer_limit(::ThisThread) = typemax(Int)
 scoped_array(::ThisThread, ::Type{T}, dims; buffer = false) where {T} =
     buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
 scoped_static_array(::ThisThread, ::Type{T}, dims) where {T} =
@@ -296,7 +317,6 @@ multithreaded loop located outside of ClimaCore — runs on the thread that
 launched it.
 """
 struct ThisThreadPool <: DataScope end
-total_buffer_limit(::ThisThreadPool) = typemax(Int)
 
 # Threads._nthreads_in_pool is two pointer loads of jl_n_threads_per_pool; the public
 # Threads.threadpoolsize wraps _sym_to_tpid, whose unreachable ArgumentError branch has

@@ -78,7 +78,7 @@ Compute the maximum of `v` or `f.(v)` over the domain.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Base.maximum(fn, field::Field, ::ClimaComms.AbstractDevice)
+function Base.maximum(fn::F, field::Field, ::ClimaComms.AbstractDevice) where {F}
     context = ClimaComms.context(axes(field))
     data_max = scalar_data(mapreduce(fn, max, field_values(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
@@ -90,7 +90,7 @@ Base.maximum(fn, field::Field) =
     Base.maximum(fn, field, ClimaComms.device(field))
 Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
-function Base.minimum(fn, field::Field, ::ClimaComms.AbstractDevice)
+function Base.minimum(fn::F, field::Field, ::ClimaComms.AbstractDevice) where {F}
     context = ClimaComms.context(axes(field))
     data_min = scalar_data(mapreduce(fn, min, field_values(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)

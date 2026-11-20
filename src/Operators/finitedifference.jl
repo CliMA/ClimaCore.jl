@@ -923,7 +923,7 @@ struct StencilPointUpdate{B, S}
     stencil_bc::B
     space::S
 end
-@inline Base.@constprop :none function (update::StencilPointUpdate)(index, point)
+@inline_types_only function (update::StencilPointUpdate)(index, point)
     (; stencil_bc, space) = update
     @inbounds point[] = column_value(stencil_bc, space, vertical_index(space, index))
     return nothing

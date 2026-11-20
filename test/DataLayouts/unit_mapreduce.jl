@@ -16,6 +16,15 @@ function test_mapreduce_1!(data)
     @test maximum(sqrt, data) == maximum(sqrt, parent(data))
     @test maximum(Base.broadcasted(*, data, DataLayouts.level(data, 1))) ==
           maximum(Base.broadcasted(*, parent(data), parent(DataLayouts.level(data, 1))))
+    # The first value is a zero of the sign that the other zeros lack, and a NaN wins.
+    FT = eltype(parent(data))
+    for (op, zero_value) in ((maximum, zero(FT)), (minimum, -zero(FT)))
+        parent(data) .= -zero_value
+        view(parent(data), 1:1) .= zero_value
+        @test op(data) === zero_value
+        view(parent(data), length(parent(data)):length(parent(data))) .= FT(NaN)
+        @test isnan(op(data))
+    end
 end
 
 function test_mapreduce_2!(data)
