@@ -703,7 +703,6 @@ function auto_launch!(
     if collect_kernel_stats() # only for development use
         key = (F!, typeof(args), CUDA.registers(kernel))
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
-        # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
 #! format: off
             s = ""
@@ -739,6 +738,13 @@ function auto_launch!(
         end
     end
     return nothing
+end
+
+@inline function linear_partition(nitems::Integer, n_max_threads::Integer)
+    @assert nitems > 0
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
 end
 
 """

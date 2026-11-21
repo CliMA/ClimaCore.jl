@@ -80,6 +80,20 @@ macro drop_constprop(fs...)
 end
 
 """
+    @inline_types_only definition
+
+Inline a function or closure definition and infer it from the types of its
+arguments alone, without constant propagation; the same as
+`@inline Base.@constprop :none`. Use this for a definition whose compiled code
+does not depend on constant arguments (e.g., the bounds of an index range),
+which constant propagation would otherwise infer again for every distinct
+constant at every inlined call.
+"""
+macro inline_types_only(definition)
+    return esc(:(Base.@inline Base.@constprop :none $definition))
+end
+
+"""
     ConvertTo{T}()
 
 GPU-compatible callable that converts its argument to type `T`, equivalent to
@@ -199,12 +213,8 @@ conversion.
     return (dense_array, (Int(signed(offset)) + Int(f_offset % I * stride) + 1, stride))
 end
 
-const UnitRangeSubArray{A} = SubArray{
-    <:Any,
-    <:Any,
-    A,
-    <:Tuple{Vararg{Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}}},
-}
+const UnitRangeSubArray{A} =
+    SubArray{<:Any, <:Any, A, <:Tuple{Vararg{AbstractUnitRange{Int}}}}
 
 # The offset along dimension d of the views stacked on an array (0 for the array itself).
 @inline view_offset(array::UnitRangeSubArray, ::Val{d}) where {d} =
@@ -419,5 +429,7 @@ Float64
 """
 recursive_bottom_eltype(a) =
     a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
+
+@drop_constprop stable_view, mapreduce_pairwise
 
 end # module
