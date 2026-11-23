@@ -435,7 +435,10 @@ function Base.similar(
     space_to::AbstractSpace,
     ::Type{Eltype},
 ) where {Eltype}
-    Field(Eltype, space_to)
+    # The result is allocated in the scope of field (e.g., a column of a loop).
+    scope = DataLayouts.DataScope(field)
+    data = DataLayouts.reassign(Spaces.coordinates_data(space_to), scope)
+    Field(similar(data, Eltype), space_to)
 end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))

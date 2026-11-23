@@ -1,4 +1,4 @@
-import ClimaCore: Operators
+import ClimaCore: Operators, MatrixFields
 import StaticArrays
 
 # Warp shuffles work on power-of-two segments of a warp, which other sizes would straddle.
@@ -7,14 +7,18 @@ import StaticArrays
 # Every active thread of the sub-warp has to call this at once; shfl_sync's checked lane
 # conversions fold away for UInt32s and a source lane reduced to its sub-warp offset.
 @inline function shuffle_point_value(scope::ThisSubBlock{N}, value, rank) where {N}
+    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
+    shfl(x) = CUDA.shfl_sync(subwarp_lanes(scope), x, source_lane, N % UInt32)
+    return shuffle_components(shfl, value)
+end
+
+# Mask of the active lanes in the calling thread's sub-warp.
+@inline function subwarp_lanes(::ThisSubBlock{N}) where {N}
     lane_index = DataLayouts.thread_rank(ThisWarp()) - one(UInt32)
     lanes =
         N == THREADS_PER_WARP ? CUDA.FULL_MASK :
         ((one(UInt32) << N) - one(UInt32)) << (lane_index & ~UInt32(N - 1))
-    active = CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp()))
-    source_lane = ((rank - one(rank)) % UInt32) & UInt32(N - 1) + one(UInt32)
-    shfl(x) = CUDA.shfl_sync(lanes & active, x, source_lane, N % UInt32)
-    return shuffle_components(shfl, value)
+    return lanes & (CUDA.FULL_MASK >> (THREADS_PER_WARP - num_active_threads(ThisWarp())))
 end
 
 @inline shuffle_components(shfl::F, x::Union{Tuple, NamedTuple}) where {F} =
@@ -132,3 +136,27 @@ end
     array = ShuffledArray(parent(data), DataLayouts.DataScope(data))
     return Fields.Field(DataLayouts.unchecked_rebuild(data, array), axes(field))
 end
+
+# A sub-warp reads neighboring rows from their threads' registers, without a buffer. This is
+# only valid when each thread owns one row, as multiple rows would require offsets. Rows
+# outside of the matrix are read as the nearest row in it (as from a buffer), since the
+# threads past the last row hold no row of their own when the rows are in registers.
+@inline function MatrixFields.pcr_neighbors(
+    scope::ThisSubBlock,
+    (row,)::Tuple{Any},
+    (i,)::Tuple{Any},
+    n,
+    s,
+)
+    shuffles_in_warp(scope) ||
+        return Base.@invoke MatrixFields.pcr_neighbors(scope::Any, (row,), (i,), n, s)
+    i = min(i, n)
+    return ((
+        shuffle_point_value(scope, row, max(i - s, 1)),
+        shuffle_point_value(scope, row, min(i + s, n)),
+    ),)
+end
+
+@inline MatrixFields.exchanged_rows_bytes(scope::ThisSubBlock, x, row_bytes) =
+    shuffles_in_warp(scope) && owns_one_point_each(x, scope) ? 0 :
+    Base.@invoke MatrixFields.exchanged_rows_bytes(scope::Any, x, row_bytes)

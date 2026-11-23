@@ -250,6 +250,23 @@ allocations share memory (as with the dynamic shared memory of GPU blocks), whic
 @inline scoped_buffer_bytes(scope, bytes) = bytes
 
 """
+    max_bytes_per_thread(scope)
+
+Number of bytes that a thread of `scope` can keep in its own memory (e.g., the factors
+of a `MatrixFields` solve).
+"""
+max_bytes_per_thread(scope) = typemax(Int)
+
+"""
+    copies_column_values(scope)
+
+Whether the one thread of a column, in a loop over the columns of `scope`, first copies
+the values that it reads at every step (e.g., the rows of a `MatrixFields` solve) into its
+own memory.
+"""
+copies_column_values(scope) = false
+
+"""
     strided_access(scope)
 
 Return whether [`subscope_indices`](@ref) should return a strided range of
@@ -297,6 +314,12 @@ launched it.
 """
 struct ThisThreadPool <: DataScope end
 total_buffer_limit(::ThisThreadPool) = typemax(Int)
+
+# The scope at the level of buffers that only make a loop faster (e.g., copies of values that
+# the loop reads at other threads' points), or nothing if a scope has no such level. On
+# GPUs, it is the :large level, at which shared memory still allows half occupancy (see
+# foreach_slice).
+optional_buffer_scope(_) = nothing
 
 # Threads._nthreads_in_pool is two pointer loads of jl_n_threads_per_pool; the public
 # Threads.threadpoolsize wraps _sym_to_tpid, whose unreachable ArgumentError branch has

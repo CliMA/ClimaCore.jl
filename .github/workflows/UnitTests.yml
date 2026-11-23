@@ -86,8 +86,10 @@ jobs:
     # pkgimages and takes ~2.5x as long. It is sharded by subsystem so no single
     # job's time or memory reaches the runner limit. `operators` is about half
     # the suite, so it is one shard and every other subsystem is the other; the
-    # two shards together cover the suite. Each uploads its own lcov, which
-    # codecov merges for the commit.
+    # two shards together cover the suite, except `Operators/integrals.jl`. That
+    # file compiles too much to finish under coverage instrumentation, so it
+    # only runs in the `test` job and in Buildkite. Each uploads its own lcov,
+    # which codecov merges for the commit.
     timeout-minutes: 80
     name: coverage - ${{ matrix.shard }}
     runs-on: ubuntu-latest
@@ -96,7 +98,7 @@ jobs:
       matrix:
         include:
           - shard: operators
-            filter: "TEST_SUBSYSTEM=operators"
+            filter: "TEST_SUBSYSTEM=operators\nTEST_EXCLUDE_TAG=operators/integrals.jl"
           - shard: rest
             filter: "TEST_EXCLUDE_SUBSYSTEM=operators"
 

@@ -80,6 +80,20 @@ macro drop_constprop(fs...)
 end
 
 """
+    @disable_licm for ... end
+
+Keep LLVM's loop-invariant code motion from hoisting values out of a `for` loop.
+Use this for loops in GPU kernels whose bodies read many arrays: hoisting all of
+their addresses keeps them live across iterations, which makes the kernel spill
+registers, while recomputing each address where it is used costs a few integer
+instructions.
+"""
+macro disable_licm(loop)
+    push!(loop.args[2].args, Expr(:loopinfo, (Symbol("llvm.licm.disable"),)))
+    return esc(loop)
+end
+
+"""
     ConvertTo{T}()
 
 GPU-compatible callable that converts its argument to type `T`, equivalent to
@@ -203,7 +217,7 @@ const UnitRangeSubArray{A} = SubArray{
     <:Any,
     <:Any,
     A,
-    <:Tuple{Vararg{Union{Base.Slice{Base.OneTo{Int}}, UnitRange{Int}}}},
+    <:Tuple{Vararg{AbstractUnitRange{Int}}},
 }
 
 # The offset along dimension d of the views stacked on an array (0 for the array itself).
@@ -419,5 +433,7 @@ Float64
 """
 recursive_bottom_eltype(a) =
     a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
+
+@drop_constprop stable_view, mapreduce_pairwise
 
 end # module
