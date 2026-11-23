@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.9
+-------
+
+- ![][badge-✨feature/enhancement] ClimaCore supports Julia 1.13, LLVM 10, and CUDA 6.5.
+  The minimum compatible versions of HDF5 (0.17), LLVM (9.4), MultiBroadcastFusion (0.3.5),
+  and UnrolledUtilities (0.1.13) are raised.
 - ![][badge-✨feature/enhancement] `column_reduce!`, `column_accumulate!`, and
   the `MatrixFields` single and block diagonal solvers loop over columns with
   `DataLayouts.foreach_column`, so the threads of each column share its work on
