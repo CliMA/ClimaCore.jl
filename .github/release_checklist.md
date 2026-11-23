@@ -10,6 +10,6 @@ This PR changes the version of ClimaCore. Before merging:
 All downstream tests must be run with the `main` branch of ClimaCore.jl. This includes the tests in each package's `test` directory and everything exercised by Buildkite CI.
 
 [amip]: https://buildkite.com/clima/climacoupler-coarse-nightly-amip
-[atmos]: https://buildkite.com/clima/climaatmos-ci
-[land]: https://buildkite.com/clima/climaland-ci
-[coupler]: https://buildkite.com/clima/climacoupler-ci
+[atmos]: https://buildkite.com/clima/climaatmos-downstream
+[land]: https://buildkite.com/clima/climaland-downstream
+[coupler]: https://buildkite.com/clima/climacoupler-downstream
