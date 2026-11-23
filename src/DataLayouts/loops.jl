@@ -295,7 +295,10 @@ On GPUs, `maxregs` caps the registers per thread of the kernel of a loop, so tha
 its blocks can be resident on a multiprocessor. This keyword is experimental, and may
 change in future:
 
-  - `Val(:auto)` (the default) and `Val(:none)`: no cap, leaving the count to the compiler.
+  - `Val(:auto)` (the default): a cap chosen per kernel, at the edge of the occupancy band
+    the kernel compiles into when capping it there is cheap, and no cap otherwise. Set
+    `CLIMA_AUTO_REGISTER_CAP=false` to leave every count to the compiler.
+  - `Val(:none)`: no cap for this loop, whatever that setting says.
   - `Val(n)`: `n` registers per thread, for every kind of slice.
 
 Values that do not fit under the cap are spilled to local memory, so a cap suits some loop
