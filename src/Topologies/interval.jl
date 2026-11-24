@@ -34,7 +34,7 @@ end
 ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
 ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
 
-function IntervalTopology(
+@noconsts function IntervalTopology(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.IntervalMesh,
 )

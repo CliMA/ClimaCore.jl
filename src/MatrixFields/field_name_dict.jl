@@ -148,7 +148,7 @@ Base.iterate(dict::FieldNameDict, index = 1) = iterate(pairs(dict), index)
 Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
     keys(dict1) == keys(dict2) && values(dict1) == values(dict2)
 
-function Base.getindex(dict::FieldNameDict, key)
+@noconsts function Base.getindex(dict::FieldNameDict, key)
     key in keys(dict) || return combined_entry(dict, key)
     n = child_value_index(key, keys(dict).values)
     internal_key = get_internal_key(key, keys(dict).values[n])
@@ -354,12 +354,12 @@ if hasfield(Method, :recursion_relation)
 end
 
 # Similar behavior to indexing an array with a slice.
-function Base.getindex(dict::FieldNameDict, new_keys::FieldNameSet)
+@noconsts function Base.getindex(dict::FieldNameDict, new_keys::FieldNameSet)
     common_keys = static_call(intersect, keys(dict), new_keys)
     return FieldNameDict(common_keys, map(key -> dict[key], common_keys))
 end
 
-function Base.similar(dict::FieldNameDict)
+@noconsts function Base.similar(dict::FieldNameDict)
     entries = unrolled_map(values(dict)) do entry
         entry isa ScalingFieldMatrixEntry ? entry : similar(entry)
     end
@@ -973,7 +973,7 @@ function Base.Broadcast.broadcasted(
     return FieldNameDict(all_keys, entries)
 end
 
-function Base.Broadcast.broadcasted(
+@noconsts function Base.Broadcast.broadcasted(
     ::FieldNameDictStyle,
     ::typeof(*),
     matrix::FieldMatrix,
@@ -1092,14 +1092,17 @@ Base.Broadcast.materialize!(
 # its arguments first) skip the key checks and NVTX annotations. A destination
 # without Fields can only be compared with its result, which also compiles in a
 # slice loop on a GPU.
-Base.Broadcast.materialize!(dest::FieldNameDict, vector_or_matrix::FieldNameDict) =
+@noconsts Base.Broadcast.materialize!(
+    dest::FieldNameDict,
+    vector_or_matrix::FieldNameDict,
+) =
     in_slice_loop(dest) ?
     (copyto_foreach!(dest, vector_or_matrix, Val(false)); synchronize_in_loop(dest)) :
     !unrolled_any(Base.Fix2(isa, Fields.Field), values(dest)) && !is_lazy(dest) ?
     checked_copyto_foreach!(dest, vector_or_matrix) :
     NVTX.@range "checked_materialize!" checked_copyto_foreach!(dest, vector_or_matrix)
 
-function checked_copyto_foreach!(dest, vector_or_matrix)
+@noconsts function checked_copyto_foreach!(dest, vector_or_matrix)
     !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
     # It is not always the case that keys(vector_or_matrix) == keys(dest).
     is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) ||
@@ -1118,7 +1121,7 @@ end
 ) = "Broadcast result and destination keys are incompatible: \
      $(set_string(keys1.instance)) vs. $(set_string(keys2.instance))"
 
-function copyto_foreach!(dest, vector_or_matrix, check)
+@noconsts function copyto_foreach!(dest, vector_or_matrix, check)
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
         if dest[key] isa ScalingFieldMatrixEntry

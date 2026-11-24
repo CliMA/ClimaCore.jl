@@ -13,7 +13,7 @@ function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
     return nothing
 end
 
-function Adapt.adapt_structure(
+@noconsts function Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractFieldStyle}
@@ -24,7 +24,7 @@ function Adapt.adapt_structure(
     )
 end
 
-function Adapt.adapt_structure(
+@noconsts function Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     bc::Base.Broadcast.Broadcasted{Style, <:Any, Type{T}},
 ) where {Style <: AbstractFieldStyle, T}

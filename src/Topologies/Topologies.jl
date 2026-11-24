@@ -3,7 +3,7 @@ module Topologies
 import ClimaComms, Adapt
 
 import ..ClimaCore
-import ..Utilities: Cache, AutoBroadcaster, nested_broadcast, return_type
+import ..Utilities: Cache, AutoBroadcaster, nested_broadcast, return_type, @noconsts
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates

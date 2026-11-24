@@ -467,7 +467,7 @@ function release_pool_threads()
     return nothing
 end
 
-scoped_array(::ThisThreadPool, ::Type{T}, dims; buffer = false) where {T} =
+@noconsts scoped_array(::ThisThreadPool, ::Type{T}, dims; buffer = false) where {T} =
     buffer ? task_reduction_buffer(Array{T, 1}, dims) : Array{T}(undef, dims)
 strided_access(::ThisThreadPool) = false # Always use contiguous ranges on CPUs.
 

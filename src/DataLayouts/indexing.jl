@@ -243,7 +243,11 @@ end
     in_view(Base.tail(index), Base.tail(ranges), Val(F - 1))
 
 # Always convert to the element type of a DataLayout when modifying its values.
-@propagate_inbounds function Base.setindex!(data::DataLayout, value, index::PointIndex)
+@propagate_inbounds @noconsts function Base.setindex!(
+    data::DataLayout,
+    value,
+    index::PointIndex,
+)
     (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     return set_struct!(array, convert(eltype(data), value), index_args...)
 end
@@ -256,7 +260,7 @@ end
 # Represent every single-point DataLayout view using a zero-dimensional DataF.
 # The view of the parent has the canonical size and base type, so the checked
 # constructor is skipped.
-@propagate_inbounds function Base.view(data::DataLayout, index::PointIndex)
+@propagate_inbounds @noconsts function Base.view(data::DataLayout, index::PointIndex)
     (array, index_args) = parent_array_and_index_args(array_and_index_args(data, index)...)
     point = view_struct(array, eltype(data), index_args...)
     return DataF{eltype(data), typeof(DataScope(data)), typeof(point)}(point)
@@ -273,7 +277,7 @@ end
 # through modify_args, whose two extra closure layers add 10% compilation
 # memory on the vector hyperdiffusion benchmark (point views are taken once per
 # node of a broadcast expression per slice loop over it).
-@generated Base.view(bc::LazyDataLayout, index::PointIndex) = quote
+@noconsts @generated Base.view(bc::LazyDataLayout, index::PointIndex) = quote
     Base.@_propagate_inbounds_meta
     args = getfield(bc, :args)
     return Broadcast.Broadcasted(
@@ -312,7 +316,11 @@ end
 @inline Base.view(bc::FusedMultiBroadcast, ::CartesianIndex{0}) =
     isone(length(bc)) ? bc : Base.throw_boundserror(bc, (CartesianIndex(),))
 
-@propagate_inbounds Base.setindex!(data::DataLayout, value, indices::PointIndex...) =
+@propagate_inbounds @noconsts Base.setindex!(
+    data::DataLayout,
+    value,
+    indices::PointIndex...,
+) =
     setindex!(data, value, CartesianIndex(indices...))
 @propagate_inbounds Base.getindex(data::DataLayout, indices::PointIndex...) =
     getindex(data, CartesianIndex(indices...))
@@ -325,7 +333,7 @@ end
 # on single-point views above); a single-point broadcast slice would otherwise
 # keep multidimensional style and axes, incompatible with zero-dimensional
 # slices of materialized data.
-@propagate_inbounds function level(arg::IndexableData, v)
+@propagate_inbounds @noconsts function level(arg::IndexableData, v)
     (; Nv, Ni, Nj, Nh) = vijh_params(arg)
     if Ni == Nj == Nh == 1
         stored_in_scope_registers(arg) || return view(arg, CartesianIndex(v, 1, 1, 1))

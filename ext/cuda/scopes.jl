@@ -62,7 +62,7 @@ DataLayouts.with_register_cap(::ThisHost{L}, ::Val{R}) where {L, R} = ThisHost{L
 
 DataLayouts.num_threads(::ThisHost) = throw(ArgumentError("Cannot get num_threads on host"))
 DataLayouts.thread_rank(::ThisHost) = throw(ArgumentError("Cannot get thread_rank on host"))
-DataLayouts.scoped_array(::ThisHost, ::Type{T}, dims; buffer = false) where {T} =
+@noconsts DataLayouts.scoped_array(::ThisHost, ::Type{T}, dims; buffer = false) where {T} =
     buffer ? DataLayouts.task_reduction_buffer(CUDA.CuArray{T, 1}, dims) :
     CUDA.CuArray{T}(undef, dims)
 

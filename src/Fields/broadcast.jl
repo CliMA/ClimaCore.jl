@@ -108,15 +108,15 @@ end
 # false), which keeps operator broadcasts over columns fast, and into broadcasts in
 # a thread's own scope (as in a loop over slices on CPUs), whose temporaries would be
 # put on the heap by a function that is not inlined (see register_similar).
-@inline check_broadcast_space(_, _, _) = nothing
-@inline check_broadcast_space(space, field::Field, ::Val{true}) =
+@inline @noconsts check_broadcast_space(_, _, _) = nothing
+@inline @noconsts check_broadcast_space(space, field::Field, ::Val{true}) =
     Base.Broadcast.check_broadcast_axes(
         axes(Fields.field_values(Fields.local_geometry_field(space))),
         Fields.field_values(field),
     )
-@inline check_broadcast_space(space, field::Field, ::Val{false}) =
+@inline @noconsts check_broadcast_space(space, field::Field, ::Val{false}) =
     check_subspace(space, axes(field))
-@inline check_broadcast_space(space, bc::LazyField, only_check_size) =
+@inline @noconsts check_broadcast_space(space, bc::LazyField, only_check_size) =
     only_check_size == Val(false) && !isnothing(bc.axes) ?
     check_subspace(space, bc.axes) :
     unrolled_foreach(
@@ -134,32 +134,37 @@ end
 
 # Modify axes and check_broadcast_axes to support AbstractSpaces, and make
 # instantiate call axes instead of Base's combine_axes.
-@inline Base.Broadcast._axes(::Base.Broadcast.Broadcasted, space::AbstractSpace) = space
-@inline function Base.Broadcast._axes(bc::LazyField, ::Nothing)
+@inline @noconsts Base.Broadcast._axes(::Base.Broadcast.Broadcasted, space::AbstractSpace) =
+    space
+@inline @noconsts function Base.Broadcast._axes(bc::LazyField, ::Nothing)
     check_broadcast_space(shared_space(bc), bc, Val(false))
     return shared_space(bc)
 end
 
-@inline Base.Broadcast.check_broadcast_axes(space::AbstractSpace, arg, args...) =
+@inline @noconsts Base.Broadcast.check_broadcast_axes(space::AbstractSpace, arg, args...) =
     unrolled_foreach(
         @inline(arg -> check_broadcast_space(space, arg, Val(true))),
         (arg, args...),
     )
 
-@inline function Base.Broadcast.instantiate(bc::LazyField)
+@inline @noconsts function Base.Broadcast.instantiate(bc::LazyField)
     isnothing(bc.axes) || Base.Broadcast.check_broadcast_axes(bc.axes, bc.args...)
     return Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes(bc))
 end
 
 # Define broadcastable/broadcasted/newindex/eltype/similar/copy to match
 # DataStyle broadcasting (see broadcast.jl in the DataLayouts module).
-Base.Broadcast.broadcastable(field::Field) =
+@noconsts Base.Broadcast.broadcastable(field::Field) =
     Field(Base.Broadcast.broadcastable(field_values(field)), axes(field))
-Base.Broadcast.broadcastable(bc::LazyField) =
+@noconsts Base.Broadcast.broadcastable(bc::LazyField) =
     is_auto_broadcastable(eltype(bc)) ?
     Base.Broadcast.Broadcasted(bc.style, add_auto_broadcasters, (bc,)) : bc
 
-Base.Broadcast.broadcasted(style::AbstractFieldStyle, f::F, args...) where {F} =
+@noconsts Base.Broadcast.broadcasted(
+    style::AbstractFieldStyle,
+    f::F,
+    args...,
+) where {F} =
     auto_broadcasted(style, f, args)
 
 # Base's .&& and .|| capture a Broadcasted right operand in a closure, but kernels cannot
@@ -183,11 +188,12 @@ Base.Broadcast.newindex(arg::MaybeLazyField, index::Integer) =
 
 Base.eltype(bc::LazyField) = unsafe_eltype(bc)
 
-@inline Base.similar(bc::LazyField) = similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
+@inline @noconsts Base.similar(bc::LazyField) =
+    similar(bc, drop_auto_broadcasters(safe_eltype(bc)))
 
 # A slice loop body inlines this, since a function that is not inlined would return the
 # registers or private buffer of its result (see register_similar) in an MArray on the heap.
-@inline Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
+@inline @noconsts Base.copy(bc::LazyField) = copyto!(similar(bc), bc)
 
 field_values(bc::Broadcast.Broadcasted) = bc
 field_values(bc::LazyField{S}) where {S} =
@@ -219,7 +225,7 @@ end
 @inline combine_field_arg_scopes(scope1, scope2) =
     isnothing(scope1) ? scope2 :
     isnothing(scope2) ? scope1 : DataLayouts.DataScope(scope1, scope2)
-@inline function DataLayouts.reassign(bc::LazyField, scope)
+@inline @noconsts function DataLayouts.reassign(bc::LazyField, scope)
     args = unrolled_map(bc.args) do arg
         @inline
         arg isa MaybeLazyField ? @inline(DataLayouts.reassign(arg, scope)) : arg
@@ -312,18 +318,18 @@ Base.eachindex(arg::LazyFieldOrData, args::LazyFieldOrData...) =
 
 # Reassign materialized results to the broadcast's scope, since the space is
 # shared by all available threads, but the arguments can have narrower scopes.
-Base.similar(bc::LazyField, ::Type{T}) where {T} =
+@noconsts Base.similar(bc::LazyField, ::Type{T}) where {T} =
     DataLayouts.reassign(Field(T, axes(bc)), DataLayouts.DataScope(bc))
 
 # Allocate pointwise broadcast results from the broadcast's own data instead of
 # going through the space, whose coordinate data can be a dynamically-sized view
 # even when the broadcast's layout shape is static.
-@inline Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
+@inline @noconsts Base.similar(bc::PointwiseBroadcasted, ::Type{T}) where {T} =
     Field(similar(field_values(bc), T), axes(bc))
 
 # The mask is an optional positional argument, as for DataLayouts (see the
 # copyto! methods in DataLayouts/loops.jl).
-@inline function Base.copyto!(
+@inline @noconsts function Base.copyto!(
     dest::Field,
     bc::LazyField,
     mask::DataLayouts.DataMask = get_mask(axes(dest)),
@@ -336,7 +342,7 @@ end
 # constrained to DataMask because an unconstrained second argument makes this
 # ambiguous with copyto! methods that only constrain their second arguments,
 # like the ones for Lmul and Rmul in ArrayLayouts.
-function Base.copyto!(
+@noconsts function Base.copyto!(
     fmbc::FusedMultiBroadcast{T};
     mask::DataLayouts.DataMask = get_mask(axes(first(fmbc.pairs).first)),
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
@@ -441,7 +447,7 @@ end
     )
 end
 
-@inline function Base.Broadcast.broadcasted(
+@inline @noconsts function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::Type{V},
     arg,
@@ -452,14 +458,14 @@ end
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
 
-function Base.copyto!(
+@noconsts function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
     copyto!(field_values(field), bc, get_mask(axes(field)))
     return field
 end
-function Base.copyto!(
+@noconsts function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
@@ -467,7 +473,7 @@ function Base.copyto!(
     return field
 end
 
-function Base.copyto!(field::Field, nt::NamedTuple)
+@noconsts function Base.copyto!(field::Field, nt::NamedTuple)
     mask = get_mask(axes(field))
     fill!(field_values(field), nt; mask)
     return field

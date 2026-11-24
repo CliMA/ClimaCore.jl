@@ -6,10 +6,34 @@ import Adapt
 import ForwardDiff
 import InteractiveUtils
 
-# Shared walker for the two macros below: apply set! to every listed function's
-# methods that belong to this package (mutations of foreign methods would not
-# survive precompilation), including matching Core.kwcall methods and their
-# hidden body-function methods, where keyword arguments put the loop bodies.
+"""
+    @noconsts f(args...) = ...
+    @noconsts function f(args...) ... end
+
+Analogue of `@noinline` that disables constant propagation of function arguments,
+so functions are only inferred for argument types, rather than argument values.
+Use this on functions that pass arguments along without computing on them, since
+any function the compiler expects to inline gets re-inferred when a new constant
+is passed to it (the `@noinline` annotation also prevents this, except in calls
+whose arguments are all constants). For example, this is used on functions that
+construct, check, and evaluate broadcast expressions, since they only store and
+forward the numbers passed to them. Functions that compute with indices, extents,
+or values that determine types need constant propagation, as those values are
+folded into their compiled code. As with `@noinline`, this can also be the first
+statement of a function body (e.g., in a `do` block).
+"""
+macro noconsts(expr)
+    # Expand the definition first, so that a @generated function keeps its file and line.
+    return esc(:(Base.@constprop :none $(macroexpand(__module__, expr))))
+end
+macro noconsts()
+    return esc(:(Base.@constprop :none))
+end
+
+# Walker for the macro below: apply set! to every listed function's methods that
+# belong to this package (mutations of foreign methods would not survive
+# precompilation), including matching Core.kwcall methods and their hidden
+# body-function methods, where keyword arguments put the loop bodies.
 function set_inference_flag!(set!::S, root::Module, fs) where {S}
     for f in fs
         if f isa Module
@@ -60,23 +84,6 @@ macro drop_recursion_limits(fs...)
             ($(map(esc, f_exprs)...),),
         )
     end)
-end
-
-"""
-    @drop_constprop f₁, f₂, ...
-
-Disable constant propagation on the same set of methods that
-[`@drop_recursion_limits`](@ref) selects. Use this for functions whose bodies
-constant propagation re-infers once per distinct constant argument (thread counts,
-index-collection lengths) without ever reaching a different compiled result.
-"""
-macro drop_constprop(fs...)
-    f_exprs = length(fs) == 1 && Meta.isexpr(fs[1], :tuple) ? fs[1].args : fs
-    return :(set_inference_flag!(
-        m -> m.constprop = 0x02,
-        Base.moduleroot(@__MODULE__),
-        ($(map(esc, f_exprs)...),),
-    ))
 end
 
 """
@@ -150,7 +157,10 @@ julia> parent(stable_view(array, 4:6))
 12-element reshape(::Array{Float64, 3}, 12) with eltype Float64
 ```
 """
-Base.@propagate_inbounds function stable_view(array::AbstractArray, indices...)
+Base.@propagate_inbounds @noconsts function stable_view(
+    array::AbstractArray,
+    indices...,
+)
     if indices isa Tuple{Union{Integer, AbstractRange{<:Integer}, Colon}} &&
        ndims(array) != 1
         array isa Base.ReshapedArray &&
@@ -396,7 +406,7 @@ adapted from `Base.Broadcast.combine_eltypes`. This performs no safety checks, a
 it may return non-concrete types (like an empty `Union{}`).
 """
 @inline unsafe_eltype(itr) = eltype(itr)
-@inline unsafe_eltype((; f, args)::Base.Broadcast.Broadcasted) =
+@inline @noconsts unsafe_eltype((; f, args)::Base.Broadcast.Broadcasted) =
     unrolled_any(has_inferred_error, args) ? Union{} :
     Core.Compiler.return_type(f, Tuple{unrolled_map(unsafe_eltype, args)...})
 
@@ -433,7 +443,5 @@ Float64
 """
 recursive_bottom_eltype(a) =
     a == eltype(a) ? a : recursive_bottom_eltype(eltype(a))
-
-@drop_constprop stable_view, mapreduce_pairwise
 
 end # module

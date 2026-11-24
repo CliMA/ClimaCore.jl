@@ -314,13 +314,13 @@ const CUDA_RNGS =
 # corresponding StaticArrays and BlockArrays disambiguators live in
 # `src/DataLayouts/loops.jl` and `src/Fields/fieldvector.jl`; these two cannot,
 # because GPUArrays is not a dependency of ClimaCore.
-@inline Base.copyto!(
+@inline @noconsts Base.copyto!(
     dest::DataLayouts.DataLayout,
     bc::Base.Broadcast.Broadcasted{<:AbstractGPUArrayStyle{0}},
     mask::DataLayouts.DataMask = DataLayouts.NoMask(),
 ) = DataLayouts._copyto_scalar_broadcast!(dest, bc, mask)
 
-@inline Base.copyto!(
+@inline @noconsts Base.copyto!(
     dest::Fields.FieldVector,
     bc::Base.Broadcast.Broadcasted{<:AbstractGPUArrayStyle{0}},
 ) = Fields._copyto_scalar_broadcast!(dest, bc)

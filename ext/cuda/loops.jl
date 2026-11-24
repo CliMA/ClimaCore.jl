@@ -40,7 +40,7 @@ end
 
 # Only run a fused foreach_slice kernel when every slice has an inferrable size.
 # Also, avoid launching fused loops on MPI ranks that do not own any elements.
-@inline DataLayouts._foreach_slice(
+@inline @noconsts DataLayouts._foreach_slice(
     scope::ThisHost{L, R},
     op::O,
     f::F,
@@ -137,7 +137,7 @@ function launch_slice_loop(
         next, Val(true), R, op, f, mask, enumerate, compact_args, max_slices,
     )
 end
-function launch_slice_loop(
+@noconsts function launch_slice_loop(
     subscope::ThisSubBlock,
     ::Val{false},
     R::Val,
@@ -404,7 +404,13 @@ end
 # so a reduction is one kernel launch. The last block's first warp folds the
 # block results in registers with warp shuffles, which needs no shared memory
 # and supports arbitrarily wide element types.
-function DataLayouts.reduce_points(scope::ThisHost, op::O, arg; mask, init...) where {O}
+@noconsts function DataLayouts.reduce_points(
+    scope::ThisHost,
+    op::O,
+    arg;
+    mask,
+    init...,
+) where {O}
     check_device_assumptions()
     # A mask can leave whole blocks without active points, and such a block's
     # placeholder result cannot be excluded from the grid-level fold below, so

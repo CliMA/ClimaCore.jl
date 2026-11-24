@@ -605,9 +605,9 @@ fused_stencil(bc, reads = Val(false)) = Broadcast.Broadcasted(
 # neighboring points stays lazy even when it caches arguments, so that the pass reading it
 # decides whether to cache its result after the buffers before it or to recompute it (see
 # neighbor_arg and applied_arg).
-operator_arg(bc::StencilBroadcasted, reads = Val(false)) =
+@noconsts operator_arg(bc::StencilBroadcasted, reads = Val(false)) =
     rebroadcasted(bc, unrolled_map(operator_arg, bc.args, nested_reads(reads, bc)))
-operator_arg(bc::StencilOperatorBroadcasted, reads = Val(false)) =
+@noconsts operator_arg(bc::StencilOperatorBroadcasted, reads = Val(false)) =
     is_fused(bc) || reads_neighbor(reads) ? fused_stencil(bc, reads) : apply_operators(bc)
 
 # A pointwise expression over stencil operators is evaluated in one pass, which
@@ -630,9 +630,10 @@ pass_reads(bc) =
     unrolled_map(in_pass(bc), arg_reads(bc)) do same_pass, reads
         same_pass isa Val{true} ? Val(:same_pass) : reads
     end
-pointwise_arg(arg, _) = operator_arg(arg)
-pointwise_arg(bc::StencilBroadcasted, fuse_caching) = pointwise_stencil(bc, fuse_caching)
-pointwise_arg(bc::StencilOperatorBroadcasted, fuse_caching) =
+@noconsts pointwise_arg(arg, _) = operator_arg(arg)
+@noconsts pointwise_arg(bc::StencilBroadcasted, fuse_caching) =
+    pointwise_stencil(bc, fuse_caching)
+@noconsts pointwise_arg(bc::StencilOperatorBroadcasted, fuse_caching) =
     fuse_caching isa Val{true} || !caches_args(bc) ? pointwise_stencil(bc, fuse_caching) :
     apply_operators(bc)
 in_pass(bc) = unrolled_map(Returns(Val(true)), bc.args)
@@ -721,9 +722,9 @@ neighbor_allocates_shared_buffer
 # horizontal and point spaces. Implemented as a generated function for
 # StencilBroadcasted, since an unrolled_map over a closure would add two method
 # instances per pointwise node (see DataLayouts.slice_every_arg).
-Base.@propagate_inbounds column_value(arg::MaybeLazyField, space, idx) =
+Base.@propagate_inbounds @noconsts column_value(arg::MaybeLazyField, space, idx) =
     arg[Broadcast.newindex(arg, level_index(space, idx))]
-@generated function column_value(bc::StencilBroadcasted, space, idx)
+@noconsts @generated function column_value(bc::StencilBroadcasted, space, idx)
     N = length(bc.parameters[4].parameters)
     return quote
         Base.@_propagate_inbounds_meta
@@ -733,14 +734,18 @@ Base.@propagate_inbounds column_value(arg::MaybeLazyField, space, idx) =
         )
     end
 end
-Base.@propagate_inbounds function column_value(bc::StencilOperatorBroadcasted, space, idx)
+Base.@propagate_inbounds @noconsts function column_value(
+    bc::StencilOperatorBroadcasted,
+    space,
+    idx,
+)
     space = idx isa PlusHalf ? Spaces.face_space(space) : Spaces.center_space(space)
     return stencil_value(bc.f, space, idx, bc.args...)
 end
-@inline column_value(arg::Union{Ref, Broadcast.Broadcasted}, _, _) =
+@inline @noconsts column_value(arg::Union{Ref, Broadcast.Broadcasted}, _, _) =
     add_auto_broadcasters(arg[])
-@inline column_value(arg::Tuple{Any}, _, _) = add_auto_broadcasters(arg[1])
-@inline column_value(arg, _, _) = add_auto_broadcasters(arg)
+@inline @noconsts column_value(arg::Tuple{Any}, _, _) = add_auto_broadcasters(arg[1])
+@inline @noconsts column_value(arg, _, _) = add_auto_broadcasters(arg)
 
 # Value of a boundary condition at idx; a column-wide value is read at its end nearest idx.
 Base.@propagate_inbounds boundary_value(val, space, idx) = column_value(val, space, idx)
@@ -756,7 +761,7 @@ num_values(val) = iszero(ndims(val)) ? 1 : size(val)[1]
 
 # Value of an operator application at idx; at an index in both boundary windows of a short
 # column, the left (bottom) condition takes precedence.
-Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
+Base.@propagate_inbounds @noconsts stencil_value(op, space, idx, args...) =
     if should_call_left_boundary(idx, space, op, args...)
         bc = get_boundary(op, left_boundary_window(space))
         stencil_left_boundary(op, bc, space, idx, args...)
@@ -767,16 +772,16 @@ Base.@propagate_inbounds stencil_value(op, space, idx, args...) =
         stencil_interior(op, space, idx, args...)
     end
 
-@inline apply_operator(op::FiniteDifferenceOperator, args...) = apply_stencil(
+@inline @noconsts apply_operator(op::FiniteDifferenceOperator, args...) = apply_stencil(
     Broadcast.Broadcasted(StencilStyle(), op, args, return_space(op, args...)),
 )
 
 apply_pointwise_operators(::StencilStyle, bc) =
     apply_stencil(pointwise_stencil(bc, caching_fusion(bc)))
 # Unlike apply_operator, an application keeps its stored axes (see Fields.shared_space).
-@inline apply_operators(bc::StencilOperatorBroadcasted) =
+@inline @noconsts apply_operators(bc::StencilOperatorBroadcasted) =
     apply_stencil(fused_stencil(bc))
-apply_operators!(dest, bc::StencilBroadcasted, finish = Val(true)) =
+@noconsts apply_operators!(dest, bc::StencilBroadcasted, finish = Val(true)) =
     apply_stencil!(dest, pointwise_stencil(bc, caching_fusion(bc)), finish)
 
 @inline function vertical_index(space, index)
@@ -864,7 +869,7 @@ end
 
 # A cached expression is evaluated by a pass that starts after its own buffer, so that the
 # buffer cannot be overwritten even if the pass caches arguments.
-@inline function materialize_buffer(
+@inline @noconsts function materialize_buffer(
     bc::StencilBroadcasted,
     ::Val{offset} = Val(0),
 ) where {offset}
@@ -888,7 +893,7 @@ end
 # later pass may read at other threads' points. Neither retires a buffer: the allocation
 # that next overlaps one synchronizes (see the buffer reuse invariant in apply_operator),
 # so a pass that caches no arguments into a result in registers has no barriers.
-@inline function apply_stencil!(dest, bc, finish, offset = Val(0))
+@inline @noconsts function apply_stencil!(dest, bc, finish, offset = Val(0))
     scope = DataLayouts.DataScope(bc)
     space = Fields.shared_space(bc)
     stencil_bc = stencil_arg(bc, Val(false), offset)
@@ -908,7 +913,7 @@ end
         )
     else
         DataLayouts.update_points!(nothing, dest_data, view) do index
-            Base.@constprop :none
+            @noconsts
             @inbounds column_value(stencil_bc, space, vertical_index(space, index))
         end
     end
@@ -936,7 +941,7 @@ end
         )
     end
     DataLayouts.update_points!(nothing, datas[1], view) do index
-        Base.@constprop :none
+        @noconsts
         unrolled_foreach(Base.tail(updates), Base.tail(datas)) do update, data
             @inline
             (point,) = @inbounds DataLayouts.slice_every_arg(view, index, data)
@@ -953,12 +958,12 @@ struct StencilPointUpdate{B, S}
     stencil_bc::B
     space::S
 end
-@inline Base.@constprop :none function (update::StencilPointUpdate)(index, point)
+@inline @noconsts function (update::StencilPointUpdate)(index, point)
     (; stencil_bc, space) = update
     @inbounds point[] = column_value(stencil_bc, space, vertical_index(space, index))
     return nothing
 end
-@inline apply_stencil(bc, offset = Val(0)) = constant_field(
+@inline @noconsts apply_stencil(bc, offset = Val(0)) = constant_field(
     apply_stencil!(
         register_similar(destination_template(bc), eltype(bc)),
         bc,
@@ -1474,8 +1479,12 @@ velocity_stencil_width(::Val{:current}) = (0, 0)
 velocity_stencil_width(::Val{:neighboring}) = (-1, 1)
 
 # Every face uses the interior stencil, which applies the ghost-point extrapolations itself.
-Base.@propagate_inbounds stencil_value(op::AdvectionOperator, space, idx, args...) =
-    stencil_interior(op, space, idx, args...)
+Base.@propagate_inbounds @noconsts stencil_value(
+    op::AdvectionOperator,
+    space,
+    idx,
+    args...,
+) = stencil_interior(op, space, idx, args...)
 reads_without_branching(::AdvectionOperator) = true
 
 stencil_interior_width(
@@ -2240,7 +2249,7 @@ Base.@propagate_inbounds stencil_interior(
 # read a value that they discard. A stencil argument keeps the branch, which
 # skips its evaluation at the boundaries and lets the compiler fold the
 # stencil's own checks.
-Base.@propagate_inbounds function stencil_value(
+Base.@propagate_inbounds @noconsts function stencil_value(
     op::SetBoundaryOperator,
     space,
     idx,
@@ -2709,8 +2718,12 @@ Base.@propagate_inbounds setvalue_row(
 # Unlike other advection operators, UpwindBiasedProductC2F is only a stencil with a SetValue,
 # so its boundary faces branch to the stencils above (and it reads its argument with
 # branching), where any Extrapolate order only changes the boundary face.
-Base.@propagate_inbounds stencil_value(op::UpwindBiasedProductC2F, space, idx, args...) =
-    invoke(stencil_value, Tuple{Any, Any, Any, Vararg{Any}}, op, space, idx, args...)
+Base.@propagate_inbounds @noconsts stencil_value(
+    op::UpwindBiasedProductC2F,
+    space,
+    idx,
+    args...,
+) = invoke(stencil_value, Tuple{Any, Any, Any, Vararg{Any}}, op, space, idx, args...)
 reads_without_branching(::UpwindBiasedProductC2F) = false
 boundary_width(::UpwindBiasedProductC2F, ::Extrapolate, args...) = 1
 
@@ -2888,8 +2901,3 @@ Base.Broadcast.broadcasted(op::DirichletOperator{Op}, args...) where {Op} =
 stencil_right_boundary, stencil_arg, stencil_args, stencil_arg_after, neighbor_arg,
 applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil!,
 shared_buffer_bytes
-
-# Constant propagation on these never improves inference; it re-infers the whole expression.
-@drop_constprop apply_operators,
-apply_operators!, inline_apply_operators!, operator_arg, pointwise_arg, apply_operator,
-apply_stencil, apply_stencil!, materialize_buffer, column_value, stencil_value
