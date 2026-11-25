@@ -210,7 +210,7 @@ end
 # solve_rows).
 single_column_solve!(shared, args) =
     single_column_solve!(shared, args, solve_rows(shared, args))
-function single_column_solve!(::Val{shared}, (x, A, b), rows) where {shared}
+@inline function single_column_solve!(::Val{shared}, (x, A, b), rows) where {shared}
     shared != :none && use_parallel_solver(A) &&
         return parallel_band_matrix_solve!(Base.broadcastable(x), rows)
     scope = DataLayouts.DataScope(x)
