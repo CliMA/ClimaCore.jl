@@ -58,7 +58,7 @@ end
 
 # Recursively split a non-empty collection in half until each block is small
 # enough to reduce with a single sequential loop.
-function mapreduce_pairwise(
+@noconsts function mapreduce_pairwise(
     f::F,
     op::O,
     itr,
@@ -101,10 +101,11 @@ function mapreduce_pairwise(
     chunk_length = (last_index - first_index + 1) ÷ NUM_ACCUMULATORS
     (spacing, step) =
         use_contiguous_accumulators ? (chunk_length, 1) : (1, NUM_ACCUMULATORS)
-    @inline Base.@constprop :none values(index) = ntuple(
-        @inline(Base.@constprop :none n -> value(index + (n - 1) * spacing)),
-        Val(NUM_ACCUMULATORS),
-    )
+    @inline @noconsts values(index) =
+        ntuple(
+            (@inline @noconsts n -> value(index + (n - 1) * spacing)),
+            Val(NUM_ACCUMULATORS),
+        )
     if chunk_length > 0
         # The first row initializes the accumulators.
         local results

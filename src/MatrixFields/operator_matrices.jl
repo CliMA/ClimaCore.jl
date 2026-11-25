@@ -130,7 +130,7 @@ replace_lazy_operator(space, lazy_op::LazyOneArgFDOperatorMatrix) =
 
 # Since the operator matrix of a two-argument operator already has one argument,
 # we can modify Base.broadcasted to add a second argument.
-Base.Broadcast.broadcasted(
+@noconsts Base.Broadcast.broadcasted(
     op_matrix::FDOperatorMatrix{
         <:Union{TwoArgFDOperator, Operators.AdvectionOperator},
     },
@@ -245,7 +245,7 @@ Operators.operator_broadcasted(style, op::Operators.SetBoundaryOperator, args) =
 # Divergence operators require an additional adjoint on the input and output,
 # respectively. An operator with a SetValue stencil stays a stencil (see
 # `Operators.SetValueC2FOperator`).
-@inline function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
+@inline @noconsts function Operators.operator_broadcasted(style, op::OneArgFDOperator, args)
     Operators.has_setvalue_stencil(op) && return Base.Broadcast.Broadcasted(style, op, args)
     input_space = operator_input_space(op, Operators.return_space(op, args...))
     op_matrix = Base.Broadcast.broadcasted(
@@ -274,12 +274,12 @@ Operators.operator_broadcasted(style, op::TwoArgFDOperator, args) =
 # an ordinary stencil and evaluated pointwise, as is an operator with a SetValue
 # stencil. `has_linear_stencil` only depends on the types of the operator and its
 # boundary conditions, so this branch folds at compile time.
-Operators.operator_broadcasted(style, op::Operators.AdvectionOperator, args) =
+@noconsts Operators.operator_broadcasted(style, op::Operators.AdvectionOperator, args) =
     Operators.has_linear_stencil(op) && !Operators.has_setvalue_stencil(op) ?
     two_arg_matrix_broadcasted(style, op, args) :
     Base.Broadcast.Broadcasted(style, op, args)
 
-function two_arg_matrix_broadcasted(style, op, args)
+@noconsts function two_arg_matrix_broadcasted(style, op, args)
     op_matrix =
         Base.Broadcast.broadcasted(FDOperatorMatrix(op_with_matrix_bcs(op)), args[1])
     result = multiply_matrix_broadcasted(style, op_matrix, args[2])
@@ -447,7 +447,7 @@ Operators.recomputable_operator(op_matrix::FDOperatorMatrix) =
 # `lower_index`), whose static band the conditions transform with `ifelse` (see
 # `fold_ghosts`, `boundary_row`, `op_matrix_row`), the left window first. The last of
 # `args`, the input space's local geometry field, is not passed to the row functions.
-Base.@propagate_inbounds function Operators.stencil_value(
+Base.@propagate_inbounds @noconsts function Operators.stencil_value(
     op_matrix::FDOperatorMatrix,
     space,
     idx,
@@ -812,7 +812,13 @@ Base.@propagate_inbounds Operators.stencil_interior(
     velocity,
     arg,
 ) = matrix_row_value(op, space, idx, arg, velocity)
-Base.@propagate_inbounds function matrix_row_value(op, space, idx, arg, row_args...)
+Base.@propagate_inbounds @noconsts function matrix_row_value(
+    op,
+    space,
+    idx,
+    arg,
+    row_args...,
+)
     Row = op_matrix_row_type(op, Spaces.undertype(space), row_args...)
     row = convert(Row, op_matrix_interior_row(op, space, idx, row_args...))
     axes = Geometry._dual_axes_for_projection(eltype(Row))

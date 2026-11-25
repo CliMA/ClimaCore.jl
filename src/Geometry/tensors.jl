@@ -551,7 +551,7 @@ Base.isapprox(x::AbstractTensor, y::AbstractTensor; kwargs...) =
 
 Base.:*(::AbstractTensor{1}, ::AbstractTensor) =
     throw(ArgumentError("Adjoint is needed to multiply a vector by a tensor"))
-function Base.:*(x::AbstractTensor{2}, y::AbstractTensor)
+@noconsts function Base.:*(x::AbstractTensor{2}, y::AbstractTensor)
     (x_axes, y_axes) = x_and_y_axes_for_product(x, y)
     components = parent(reshape(x, x_axes)) * parent(reshape(y, y_axes))
     return Tensor(components, Base.setindex(axes(y), axes(x, 1), 1))
@@ -563,7 +563,7 @@ function dot(x::AbstractTensor{1}, y::AbstractTensor{1})
     return dot(parent(reshape(x, x_axes)), parent(reshape(y, y_axes)))
 end
 
-Base.:*(x::Tensor{1}, y::Covector) =
+@noconsts Base.:*(x::Tensor{1}, y::Covector) =
     Tensor(parent(x) * parent(y), (axes(x, 1), axes(y, 2)))
 
 Base.:/(x::AbstractTensor, y::AbstractTensor{2}) = x * inv(y)
@@ -769,7 +769,7 @@ Compute the outer product `x * y'` of `x` and `y`.
 function outer end
 const ⊗ = outer
 
-@inline outer(x, y) = x * y'
+@inline @noconsts outer(x, y) = x * y'
 
 # Cross product of two orthonormal vectors. Reshapes both inputs to the full
 # UVW basis (zero-filling missing dims), then applies the standard 3D formula.

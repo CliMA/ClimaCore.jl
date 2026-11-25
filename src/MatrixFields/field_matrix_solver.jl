@@ -40,8 +40,7 @@ columns, they are in registers or shared buffers; otherwise, they are taken from
 the `pool` when there is one (see `pooled`). Return the entries of `x` that are
 not zero by structure (see `is_zero_entry`).
 """
-function run_field_matrix_solver! end
-@inline run_field_matrix_solver!(alg, x, A, b) =
+@inline @noconsts run_field_matrix_solver!(alg, x, A, b) =
     run_field_matrix_solver!(alg, x, A, b, empty_dict(b), nothing)
 
 """
@@ -94,7 +93,7 @@ end
 # The next value of the pool, or f(args...) without a pool. The types of f and
 # args give the type of the value.
 @inline pooled(f::F, ::Nothing, args...) where {F} = f(args...)
-@inline function pooled(f::F, pool::FieldPool, args...) where {F}
+@inline @noconsts function pooled(f::F, pool::FieldPool, args...) where {F}
     n = pool.n += 1
     n > length(pool.fields) && push!(pool.fields, f(args...))
     return pool.fields[n]::return_type(f, typeof(args))
@@ -114,7 +113,7 @@ struct FieldMatrixSolver{A <: FieldMatrixSolverAlgorithm, X}
     previous_x::X
     pool::FieldPool
 end
-function FieldMatrixSolver(
+@noconsts function FieldMatrixSolver(
     alg::FieldMatrixSolverAlgorithm,
     A::FieldMatrix,
     b::Fields.FieldVector,
@@ -219,7 +218,7 @@ struct ColumnwiseSolve{A, C, O}
 end
 ColumnwiseSolve(alg, constants, offset = nothing) =
     ColumnwiseSolve{typeof(alg), typeof(constants), offset}(alg, constants)
-@inline Base.@constprop :none function (solve::ColumnwiseSolve{<:Any, <:Any, O})(
+@inline @noconsts function (solve::ColumnwiseSolve{<:Any, <:Any, O})(
     slices,
 ) where {O}
     (x, A, b, previous_x) = with_slices(solve.constants, Base.tail(slices))
@@ -361,7 +360,7 @@ function check_block_diagonal_matrix_has_no_missing_blocks(A, b)
                entries at the following keys: $(set_string(missing_keys))")
 end
 
-function partition_blocks(names₁, A, b = nothing, x = nothing)
+@noconsts function partition_blocks(names₁, A, b = nothing, x = nothing)
     keys₁ = FieldVectorKeys(names₁, keys(A).name_tree)
     keys₂ = static_call(set_complement, keys₁)
     A₁₁ = A[static_call(cartesian_product, keys₁, keys₁)]
@@ -427,7 +426,7 @@ nonzero_keys(dict) = FieldVectorKeys(
 # loop, the new Fields come from the pool. In a slice loop, they are in
 # registers (or in an immutable array of a thread that owns its whole slice),
 # and their points are updated without a nested slice loop.
-@inline function evaluated(bc::Fields.LazyField, pool)
+@inline @noconsts function evaluated(bc::Fields.LazyField, pool)
     DataLayouts.needs_loop_setup(DataLayouts.DataScope(bc)) &&
         return evaluate!(pooled(similar, pool, bc), bc)
     Operators.has_private_buffers(bc) &&
@@ -436,7 +435,7 @@ nonzero_keys(dict) = FieldVectorKeys(
     Operators.apply_operators!(dest, bc, Val(false))
     return Operators.constant_field(dest)
 end
-@inline function evaluated(dict::FieldNameDict, pool = nothing)
+@inline @noconsts function evaluated(dict::FieldNameDict, pool = nothing)
     # In a slice loop, the stencil entries (e.g., products of band matrices) are
     # evaluated in one loop over points, so that all of their loads are issued
     # together (see Operators.apply_stencils!).
@@ -461,7 +460,7 @@ end
 # child of a combined entry (see combined_entry) is evaluated in its own
 # statement, which is faster than one statement for all of them.
 @inline evaluate!(dest, entry) = Base.materialize!(dest, entry)
-@inline function evaluate!(dest, bc::Fields.LazyField)
+@inline @noconsts function evaluate!(dest, bc::Fields.LazyField)
     is_combined = bc.f === tuple || bc.f isa NamedTupleOf{fieldnames(eltype(dest))}
     is_combined && DataLayouts.DataScope(dest) isa DataLayouts.ThisThreadPool ||
         return Base.materialize!(dest, bc)
@@ -472,7 +471,7 @@ end
 # A Field for the right-hand side of solves outside of a slice loop, which
 # evaluate_rhs! evaluates once for all of them. In a slice loop, each solve
 # evaluates the lazy right-hand side into registers.
-new_rhs(x, b, pool) = in_slice_loop(x) ? nothing : pooled(similar, pool, b)
+@noconsts new_rhs(x, b, pool) = in_slice_loop(x) ? nothing : pooled(similar, pool, b)
 
 evaluate_rhs!(::Nothing, lazy_b) = lazy_b
 function evaluate_rhs!(b, lazy_b)
@@ -484,7 +483,7 @@ end
 # The lazy difference b - Ax with the keys of b. Entries that the product Ax
 # splits into children (e.g., components with their own matrix rows) are
 # recombined (see combined_entry), so that solves read whole entries once.
-function lazy_residual(b, Ax)
+@noconsts function lazy_residual(b, Ax)
     lazy_b = lazy_sub(b, Ax)
     keys(lazy_b) == keys(b) && return lazy_b
     return FieldNameDict(keys(b), map(key -> lazy_b[key], keys(b)))
@@ -497,7 +496,7 @@ Construct a lazy `FieldMatrix` that represents the product `@. *(A, args...)`.
 This involves regular broadcasting when `A` is a `FieldMatrix`, but it has more
 complex behavior for other objects like the [`LazySchurComplement`](@ref).
 """
-lazy_mul(A, args...) = Base.Broadcast.broadcasted(*, A, args...)
+@noconsts lazy_mul(A, args...) = Base.Broadcast.broadcasted(*, A, args...)
 
 """
     LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, [alg₁, x₁, b₁′, pool])
@@ -531,7 +530,7 @@ LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂) =
 Base.zero(lsc::LazySchurComplement) =
     LazySchurComplement(map(fn -> zero(getfield(lsc, fn)), fieldnames(lsc))...)
 
-@inline function lazy_mul(A₂₂′::LazySchurComplement, x₂)
+@inline @noconsts function lazy_mul(A₂₂′::LazySchurComplement, x₂)
     (; A₁₁, A₁₂, alg₁, x₁, b₁′, pool) = A₂₂′
     rhs = evaluate_rhs!(b₁′, schur_complement_rhs(A₁₂, x₂, x₁))
     nonzero_x₁ = run_field_matrix_solver!(alg₁, x₁, A₁₁, rhs, empty_dict(rhs), pool)
@@ -546,7 +545,7 @@ lazy_mul_template(A₂₂′::LazySchurComplement, x₂, x₁ = A₂₂′.x₁)
 
 # The right-hand side of the solve in lazy_mul, A₁₂ * x₂, with zeros at the rows
 # of x₁ that A₁₂ does not have.
-function schur_complement_rhs(A₁₂, x₂, x₁)
+@noconsts function schur_complement_rhs(A₁₂, x₂, x₁)
     zero_rows = static_call(setdiff, keys(x₁), matrix_row_keys(keys(A₁₂)))
     lazy_b = @. lazy(A₁₂ * x₂ + zero(x₁[zero_rows]))
     keys(lazy_b) == keys(x₁) && return lazy_b
@@ -652,10 +651,10 @@ materialized_values(arg, pool) =
 # over partitions of them leaves dynamic calls. The rows of each parallel solve
 # are loaded before the previous solve, so that the loads do not wait for its
 # barriers (see solve_rows).
-solve_columns!(_, ::Tuple{}, _) = nothing
-solve_columns!(shared, args) =
+@noconsts solve_columns!(_, ::Tuple{}, _) = nothing
+@noconsts solve_columns!(shared, args) =
     solve_columns!(shared, args, solve_rows(shared, unrolled_take(args, Val(3))))
-function solve_columns!(shared, args, rows)
+@noconsts function solve_columns!(shared, args, rows)
     next_args = unrolled_drop(args, Val(3))
     next_rows =
         isempty(next_args) ? nothing :
@@ -663,8 +662,6 @@ function solve_columns!(shared, args, rows)
     single_column_solve!(shared, solve_values(shared, unrolled_take(args, Val(3))), rows)
     return solve_columns!(shared, next_args, next_rows)
 end
-
-@drop_recursion_limits solve_columns!
 
 band_matrices(::Tuple{}) = ()
 band_matrices(args) = (args[2], band_matrices(unrolled_drop(args, Val(3)))...)
@@ -688,7 +685,7 @@ fused_solves(x, A, b) =
         is_fused_solve(A, b, name) ? (x[name], A[name, name], b[name]) : ()
     end
 
-@inline function run_field_matrix_solver!(::BlockDiagonalSolve, x, A, b, _, pool)
+@inline @noconsts function run_field_matrix_solver!(::BlockDiagonalSolve, x, A, b, _, pool)
     # In a slice loop, lazy entries of A and b are evaluated into registers, so
     # that solves are compiled once for all right-hand sides of a type.
     (A, b) = in_slice_loop(x) ? (evaluated(A), evaluated(b)) : (A, b)
@@ -799,7 +796,7 @@ end
 end
 @drop_recursion_limits prefix_sums
 
-band_solve_steps(::BlockDiagonalSolve, x, A, b) =
+@noconsts band_solve_steps(::BlockDiagonalSolve, x, A, b) =
     ((unrolled_map(solve_arg, fused_solves(x, A, b)), 0),)
 
 # Every solve is in one loop, unless the loop does not fit its arguments (e.g.,
@@ -869,7 +866,7 @@ function previous_solution(alg::BlockLowerTriangularSolve, A, b)
     )
 end
 
-function check_field_matrix_solver(alg::BlockLowerTriangularSolve, A, b)
+@noconsts function check_field_matrix_solver(alg::BlockLowerTriangularSolve, A, b)
     A₁₁, A₁₂, _, A₂₂, b₁, b₂ = partition_blocks(alg.names₁, A, b)
     isempty(keys(A₁₂)) || error(
         "BlockLowerTriangularSolve cannot be used because A has entries at the \
@@ -879,7 +876,7 @@ function check_field_matrix_solver(alg::BlockLowerTriangularSolve, A, b)
     check_field_matrix_solver(alg.alg₂, A₂₂, b₂)
 end
 
-@inline function run_field_matrix_solver!(
+@inline @noconsts function run_field_matrix_solver!(
     alg::BlockLowerTriangularSolve,
     x,
     A,
@@ -899,7 +896,7 @@ end
     return union_dicts(nonzero_x₁, nonzero_x₂)
 end
 
-function band_solve_steps(alg::BlockLowerTriangularSolve, x, A, b)
+@noconsts function band_solve_steps(alg::BlockLowerTriangularSolve, x, A, b)
     A₁₁, _, A₂₁, A₂₂, b₁, b₂, x₁, x₂ = partition_blocks(alg.names₁, A, b, x)
     return unrolled_flatten((
         band_solve_steps(alg.alg₁, x₁, A₁₁, b₁),
@@ -947,7 +944,7 @@ function previous_solution(alg::BlockArrowheadSolve, A, b)
     return previous_solution(alg.alg₂, A₂₂, b₂)
 end
 
-function check_field_matrix_solver(alg::BlockArrowheadSolve, A, b)
+@noconsts function check_field_matrix_solver(alg::BlockArrowheadSolve, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂ = partition_blocks(alg.names₁, A, b)
     check_diagonal_matrix(A₁₁, "BlockArrowheadSolve cannot be used because A")
     check_block_diagonal_matrix_has_no_missing_blocks(A₁₁, b₁)
@@ -961,7 +958,7 @@ end
 # the solver applies Operators.own_point_values, which lets a scope with
 # registers evaluate them once. Callers that only need the types of the values
 # (e.g., band_solve_steps) apply identity.
-@inline function arrowhead_system(f::F, A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂) where {F}
+@inline @noconsts function arrowhead_system(f::F, A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂) where {F}
     lazy_A₂₁_invA₁₁ = lazy_mul(A₂₁, lazy_inv(A₁₁))
     A₂₁_invA₁₁ =
         FieldNameDict(keys(lazy_A₂₁_invA₁₁), unrolled_map(f, values(lazy_A₂₁_invA₁₁)))
@@ -971,7 +968,7 @@ end
     )
 end
 
-@inline function run_field_matrix_solver!(
+@inline @noconsts function run_field_matrix_solver!(
     alg::BlockArrowheadSolve,
     x,
     A,
@@ -987,7 +984,7 @@ end
     return x
 end
 
-function band_solve_steps(alg::BlockArrowheadSolve, x, A, b)
+@noconsts function band_solve_steps(alg::BlockArrowheadSolve, x, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂, _, x₂ = partition_blocks(alg.names₁, A, b, x)
     A₂₂′, b₂′ = arrowhead_system(identity, A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂)
     return band_solve_steps(alg.alg₂, x₂, A₂₂′, b₂′)
@@ -1056,7 +1053,7 @@ function check_field_matrix_solver(alg::SchurComplementReductionSolve, A, b)
     check_field_matrix_solver(alg.alg₂, LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂), b₂)
 end
 
-@inline function run_field_matrix_solver!(
+@inline @noconsts function run_field_matrix_solver!(
     alg::SchurComplementReductionSolve,
     x,
     A,
@@ -1097,7 +1094,7 @@ end
 
 # The solves of the Schur complement (see lazy_mul) have the types of the solves
 # of A₁₁.
-function band_solve_steps(alg::SchurComplementReductionSolve, x, A, b)
+@noconsts function band_solve_steps(alg::SchurComplementReductionSolve, x, A, b)
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂, x₁, x₂ = partition_blocks(alg.names₁, A, b, x)
     A₂₂′ = LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, alg.alg₁, x₁, nothing, nothing)
     return unrolled_flatten((

@@ -627,7 +627,7 @@ function ξ_at_nodal_point(FT, quadrature_style, i, j)
     return SVector(quad_points[i], quad_points[j])
 end
 
-function ∂f∂ξ_at_nodal_point(f, FT, quadrature_style, autodiff_metric, i, j)
+@noconsts function ∂f∂ξ_at_nodal_point(f, FT, quadrature_style, autodiff_metric, i, j)
     if autodiff_metric
         ξ = ξ_at_nodal_point(FT, quadrature_style, i, j)
         return ForwardDiff.jacobian(f, ξ)
@@ -667,7 +667,7 @@ function local_geometry_at_nodal_point(
     ∂u∂ξ = Geometry.project(Geometry.Components{Geometry.Orthonormal, AIdx}(), G' * ∂x∂ξ)
     return u, ∂u∂ξ
 end
-function local_geometry_at_nodal_point(
+@noconsts function local_geometry_at_nodal_point(
     ::Geometry.AbstractGlobalGeometry,
     topology,
     quadrature_style,

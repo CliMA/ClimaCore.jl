@@ -5,7 +5,7 @@ import ClimaCore.Utilities
 
 function uncached_device_attributes()
     device = CUDA.device()
-    get_attr(code) = Int(CUDA.attribute(device, code))
+    @noconsts get_attr(code) = Int(CUDA.attribute(device, code))
     sm_version = (
         get_attr(CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR),
         get_attr(CUDA.DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR),
@@ -374,7 +374,7 @@ if done more than once per kernel, so the result is cached in a `Dict`. A
 lock is used to prevent multiple threads from updating the cache simultaneously,
 since a `Dict` should never be read as it is being rehashed.
 """
-function launch_configuration(
+@noconsts function launch_configuration(
     cu_func::CUDA.CuFunction,
     config_args...;
     strict = true,
@@ -540,8 +540,8 @@ end
 # shmem_level_error_bytes). The try block wraps the compilation, not the launch: a value
 # that is live in a try block is boxed on the heap, which would copy the launch's arguments.
 @static if isdefined(CUDA, :KernelCall)
-    converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
-    function compile_kernel(call, name; maxregs = nothing)
+    @noconsts converted_kernel_call(f!, args) = CUDA.KernelCall(f!, args...)
+    @noconsts function compile_kernel(call, name; maxregs = nothing)
         try
             return compile_kernel_call(call, name, maxregs)
         catch err
@@ -555,7 +555,7 @@ end
         CUDA.kernel_compile(call; always_inline = true, maxregs_kwarg(maxregs)...)
     compile_kernel_call(call, name, maxregs) =
         CUDA.kernel_compile(call; name, always_inline = true, maxregs_kwarg(maxregs)...)
-    launch_kernel(kernel, call, threads, blocks, shmem) =
+    @noconsts launch_kernel(kernel, call, threads, blocks, shmem) =
         CUDA.kernel_launch(kernel, call; threads, blocks, shmem)
 else
     converted_kernel_call(f!::F!, args) where {F!} = (;
@@ -608,7 +608,7 @@ Return `nothing` once the kernel is launched. A kernel that does not compile bec
 buffer exceeds the shared memory level of its slice loop (see `check_shmem_level`) is not
 launched, and the bytes it needs are returned instead (see `launch_slice_loop`).
 """
-function auto_launch!(
+@noconsts function auto_launch!(
     f!::F!,
     args;
     nitems = nothing,

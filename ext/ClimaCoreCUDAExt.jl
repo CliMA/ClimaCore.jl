@@ -13,7 +13,7 @@ import ClimaCore.DebugOnly: call_post_op_callback, post_op_callback
 import ClimaCore.DataLayouts: NoMask, IJHMask
 import ClimaCore.DataLayouts: slab, column
 import ClimaCore.Utilities: half, new, return_type, NoInit
-import ClimaCore.Utilities: @drop_recursion_limits
+import ClimaCore.Utilities: @noconsts, @drop_recursion_limits
 
 include(joinpath("cuda", "adapt.jl"))
 include(joinpath("cuda", "cuda_utils.jl"))

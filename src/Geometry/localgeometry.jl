@@ -49,7 +49,7 @@ end
 
 # Primary constructor: accepts a Tensor{2} with Orthonormal/Covariant bases
 # of any size; pads to full 3×3 internally.
-@inline function LocalGeometry(
+@inline @noconsts function LocalGeometry(
     coordinates::C,
     J::FT,
     WJ::FT,

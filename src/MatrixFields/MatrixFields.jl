@@ -54,7 +54,7 @@ import Adapt
 using UnrolledUtilities
 
 import ..Utilities: PlusHalf, half, new, recursive_bottom_eltype, return_type
-import ..Utilities: @drop_recursion_limits, @drop_constprop, @disable_licm
+import ..Utilities: @noconsts, @drop_recursion_limits, @disable_licm
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable, auto_broadcasted
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters
 import ..DataLayouts
@@ -94,21 +94,18 @@ include("field_matrix_with_solver.jl")
 
 # Extend the recursion limit removal in Operators to the methods defined above.
 @drop_recursion_limits Operators.stencil_value, Operators.stencil_interior,
-matrix_row_value, projected_value, run_field_matrix_solver!, band_solve_steps
-@drop_constprop Operators.stencil_value, matrix_row_value
-
-@drop_constprop run_field_matrix_solver!, solve_columns!, single_column_solve!,
-evaluated, apply_preconditioner, parallel_band_matrix_solve!, lazy_residual, lazy_mul
+matrix_row_value, projected_value, run_field_matrix_solver!, solve_columns!,
+band_solve_steps
 
 # Evaluate multiplications in left-associative order. This should technically be
 # right-associative, but flipping the order worsens performance in GPU kernels,
 # where the second argument of each matrix product is cached. Left-associativity
 # makes the first argument grow in bandwidth when multiplying a chain of
 # matrices, whereas right-associativity makes the second argument grow instead.
-@inline Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
+@inline @noconsts Base.broadcasted(::Fields.AbstractFieldStyle, ::typeof(*), arg, args...) =
     unrolled_reduce(@inline((x, y) -> Base.broadcasted(*, x, y)), args; init = arg)
 
-@inline Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
+@inline @noconsts Base.broadcasted(style::Fields.AbstractFieldStyle, ::typeof(*), x, y) =
     check_entry(FieldNamePair, x) && check_entry(FieldName, y) ?
     Base.broadcasted(MultiplyColumnwiseBandMatrixField(), x, projected_operand(x, y)) :
     auto_broadcasted(style, *, (x, y))

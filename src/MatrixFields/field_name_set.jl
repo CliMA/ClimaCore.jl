@@ -124,9 +124,9 @@ Base.length(set::FieldNameSet) = length(set.values)
 
 Base.iterate(set::FieldNameSet, index = 1) = iterate(set.values, index)
 
-Base.map(f::F, set::FieldNameSet) where {F} = unrolled_map(f, set.values)
+@noconsts Base.map(f::F, set::FieldNameSet) where {F} = unrolled_map(f, set.values)
 
-Base.foreach(f::F, set::FieldNameSet) where {F} =
+@noconsts Base.foreach(f::F, set::FieldNameSet) where {F} =
     unrolled_foreach(f, set.values)
 
 Base.in(value, set::FieldNameSet) =

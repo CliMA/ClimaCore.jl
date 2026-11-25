@@ -14,7 +14,7 @@ struct FieldMatrixWithSolver{M, S} <: AbstractDict{FieldNamePair, Any}
     matrix::M
     solver::S
 end
-FieldMatrixWithSolver(
+@noconsts FieldMatrixWithSolver(
     A::FieldMatrix,
     b::Fields.FieldVector,
     alg::FieldMatrixSolverAlgorithm = BlockDiagonalSolve(),

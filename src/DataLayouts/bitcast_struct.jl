@@ -147,7 +147,7 @@ For more information about `reinterpret` and padding, see the following:
 @generated bitcast_struct(::Type{T}, value::S) where {T, S} =
     Expr(:block, :@inline, bitcast_struct_expr(T, S, :value))
 
-@generated function bitcast_struct(
+@noconsts @generated function bitcast_struct(
     ::Type{T},
     array,
     ::Val{num_indices},

@@ -100,7 +100,7 @@ struct ColumnScan{O, F}
     op::O
     f::F
 end
-@inline Base.@constprop :none (scan::ColumnScan)(output_column, input_column) =
+@inline @noconsts (scan::ColumnScan)(output_column, input_column) =
     @inline scan.f(scan.op, output_column, input_column)
 Adapt.@adapt_structure ColumnScan
 DataLayouts.required_shared_memory(scan::ColumnScan, output_column, input_column) = max(
@@ -170,7 +170,7 @@ of `input`, the default reduction in each column can be summarized as follows:
     output[] = transform(reduced_value)
     ```
 """
-@inline Base.@constprop :none function column_reduce!(
+@inline @noconsts function column_reduce!(
     f::F,
     output::Fields.Field,
     input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};
@@ -265,7 +265,7 @@ of `input`, the default accumulation in each column can be summarized as follows
     end
     ```
 """
-@inline Base.@constprop :none function column_accumulate!(
+@inline @noconsts function column_accumulate!(
     f::F,
     output::Fields.Field,
     input::Union{Fields.Field, Fields.PointwiseBroadcasted, StencilBroadcasted};

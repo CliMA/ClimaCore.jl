@@ -10,7 +10,7 @@ import ClimaComms
 import MultiBroadcastFusion: @make_type, @make_fused, fused_direct
 using UnrolledUtilities
 
-import ..Utilities: @drop_recursion_limits, @drop_constprop
+import ..Utilities: @noconsts, @drop_recursion_limits
 import ..Utilities: add_auto_broadcasters, drop_auto_broadcasters, auto_broadcasted
 import ..Utilities: AutoBroadcaster, is_auto_broadcastable
 import ..Utilities:
@@ -157,7 +157,7 @@ Return a `NamedTuple` with `Nv`, `Ni`, `Nj`, and `Nh`, the lengths of the `V`, `
 reported with length 1. Like [`inferred_size`](@ref), this returns `nothing` for
 dimensions that cannot be inferred from the type.
 """
-@inline vijh_params(data) = (;
+@inline @noconsts vijh_params(data) = (;
     Nv = get(shape_params(data), :Nv, 1),
     Ni = get(shape_params(data), :Ni, 1),
     Nj = get(shape_params(data), :Nj, 1),
@@ -218,7 +218,7 @@ in a `Tuple` or `NamedTuple` (e.g., a container of arguments of
 end
 @inline reassign(::Type{D}, scope) where {D} =
     layout_type(D){eltype(D), shape_params(D)..., typeof(scope), parent_type(D)}
-@inline reassign(arg::Union{Tuple, NamedTuple}, scope) =
+@inline @noconsts reassign(arg::Union{Tuple, NamedTuple}, scope) =
     unrolled_map(Base.Fix2(reassign, scope), arg)
 
 """
@@ -244,7 +244,7 @@ converting its parent array to some type `A`, or replacing it with another
 The new array can be stored on a different device (e.g., `Array` vs `CuArray`),
 so the [`DataScope`](@ref) is modified if it is inconsistent with the new array.
 """
-Base.@propagate_inbounds rebuild(
+Base.@propagate_inbounds @noconsts rebuild(
     data, ::Type{A}, ::Type{T} = eltype(data); params...,
 ) where {A, T} = rebuild(data, A(parent(data)), T; params...)
 Base.@propagate_inbounds function rebuild(
@@ -327,11 +327,11 @@ end
     Val(f_dim(data)),
 )
 
-function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
+@noconsts function similar_layout(data, ::Type{T}, maybe_dims...) where {T}
     B = checked_valid_basetype(eltype(parent_type(data)), T)
     return similar_layout(data, T, B, maybe_dims...)
 end
-similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B} =
+@noconsts similar_layout(data, ::Type{T}, ::Type{B}, maybe_dims...) where {T, B} =
     similar_layout_at(data, T, B, Val(0), maybe_dims...)
 
 """
@@ -371,7 +371,7 @@ Base.similar(::Type{D}, maybe_dims::Dims...) where {D <: DataLayout} =
     similar_layout(D, eltype(D), maybe_dims...)
 Base.similar(data::DataLayout, maybe_dims::Dims...) =
     similar_layout(data, eltype(data), maybe_dims...)
-Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
+@noconsts Base.similar(data::DataLayout, ::Type{T}, maybe_dims::Dims...) where {T} =
     similar_layout(data, T, maybe_dims...)
 
 """
@@ -403,7 +403,7 @@ end
 # exhaust the compiler's budget when an expression has several getproperty
 # calls, causing runtime allocations from dynamic types. Return a lazy view if
 # the parent array's element type is not aligned with the field's element type.
-@inline function property_view(data, ::Val{i}) where {i}
+@inline @noconsts function property_view(data, ::Val{i}) where {i}
     T = eltype(data)
     1 <= i <= fieldcount(T) || throw(BoundsError(data, i))
     is_valid_basetype(eltype(parent(data)), fieldtype(T, i)) ||
@@ -499,7 +499,7 @@ const VIJHF{T, Nv, Ni, Nj, Nh, S, A} = VIJHWithF{T, Nv, Ni, Nj, Nh, 5, S, A}
 
 VIJHWithF{T, Nv, Ni, Nj, Nh, F}(array, Nh_dynamic...) where {T, Nv, Ni, Nj, Nh, F} =
     VIJHWithF{T, Nv, Ni, Nj, Nh, F, typeof(DataScope(array))}(array, Nh_dynamic...)
-function VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(
+@noconsts function VIJHWithF{T, Nv, Ni, Nj, Nh, F, S}(
     ::Type{A},
     Nh_dynamic = Nh,
 ) where {T, Nv, Ni, Nj, Nh, F, S, A}
@@ -689,12 +689,5 @@ include("registers.jl")
 # dynamic dispatch and runtime allocations. Every function is exempted, since a
 # missing exemption only shows up several call layers away.
 @drop_recursion_limits @__MODULE__
-
-# The loop entry points only: the loop bodies keep
-# constant propagation, since turning it off there shifts kernel codegen
-# enough to flip cases near the sm_60 register brink.
-@drop_constprop _foreach_slice, foreach_slice_with_options, unfused_slice_loop,
-foreach_point, foreach_level, foreach_slab, foreach_column,
-Base.fill!, Base.copyto!
 
 end # module
