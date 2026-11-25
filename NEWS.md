@@ -4,6 +4,10 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-🐛bugfix] On CPUs, the `MatrixFields` solvers no longer allocate the
+  factors of a band matrix on the heap when bounds checking is on (e.g., in
+  `Pkg.test`).
+
 v1.0.9
 -------
 
