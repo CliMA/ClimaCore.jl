@@ -138,6 +138,12 @@ Shared setup lives in:
  - `TestUtilities/TestUtilities.jl` — space constructors (`all_spaces`,
    `SphereSpectralElementSpace`, ...), the `@test_precisions` dual-precision
    sweep macro, and allocation helpers.
+ - `TestUtilities/JETConfig.jl` — the JET reports that every test ignores.
+   Every `@test_opt` check is written as `JETConfig.@test_with_jet f(x)`, and
+   the ones that skip calls by function pass `function_filter = true`; add to
+   the lists in `JETConfig` rather than to a call site. Only the MatrixFields
+   and integral tests pass `cuda_ext = true`, which also ignores every report
+   beneath ClimaCoreCUDAExt on the GPU.
  - `CommonSpaces/`, `CommonGrids/` — convenience constructors for common
    spaces and grids.
 

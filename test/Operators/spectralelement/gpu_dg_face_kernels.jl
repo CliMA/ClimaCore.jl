@@ -33,15 +33,9 @@ import .TestUtilities as TU
 
 include("utils_dg.jl")  # dg_sphere_space, dg_central_flux, dg_jump_penalty
 
-# Inf-norm relative comparison, matching `test/Operators/gpu_edge_cases.jl`. The
-# DG gather sums a node's face contributions in a device-dependent order, so
-# results agree to round-off rather than bitwise.
-device_matches_cpu(dev, cpu; rtol) = isapprox(
-    Array(parent(dev)),
-    Array(parent(cpu));
-    rtol = rtol,
-    norm = x -> norm(x, Inf),
-)
+# The DG gather sums a node's face contributions in a device-dependent order, so
+# results agree to round-off rather than bitwise; see `TU.device_matches_cpu`.
+using .TestUtilities: device_matches_cpu
 
 # --- context-parametrized DG space builders ------------------------------------
 # Each takes a `context`; passing a CPU context and a device context that wrap
@@ -323,7 +317,12 @@ end
             )
             d_cpu = Operators.cartesian_tensor_divergence(T_cpu, completion)
             d_dev = Operators.cartesian_tensor_divergence(T_dev, completion)
-            @test device_matches_cpu(d_dev, d_cpu; rtol)
+            # The chain amplifies round-off: changing its input by 1 ulp changes
+            # its Float64 output by about 15 eps on the CPU, and the device
+            # result differs from the CPU's by 14.9 eps (A100 and P100), so the
+            # single kernels' bound cannot hold here.
+            chain_rtol = FT == Float32 ? rtol : 20 * eps(FT)
+            @test device_matches_cpu(d_dev, d_cpu; rtol = chain_rtol)
         end
     end
 end

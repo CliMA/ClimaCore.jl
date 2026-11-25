@@ -173,8 +173,7 @@ largest_application_bytes(bc::OperatorBroadcasted) = max(
 # Recursively replace all operator broadcasts with the result of apply_operator.
 apply_operators(arg) = arg
 apply_operators(bc::NonPointwiseBroadcasted) = apply_pointwise_operators(bc.style, bc)
-apply_operators(bc::OperatorBroadcasted) = inline_apply_operators(bc)
-@inline inline_apply_operators(bc) =
+apply_operators(bc::OperatorBroadcasted) =
     apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
 
 # The evaluation of pointwise functions of operators can depend on the style.
@@ -291,7 +290,9 @@ function copyto_by_slices!(dest, bc)
         throw(DimensionMismatch("Inputs to foreach_slice must have compatible dimensions"))
     scope = DataLayouts.DataScope(dest, bc)
     if DataLayouts.needs_loop_setup(scope)
-        DataLayouts._foreach_slice(scope, op, apply_operators!, mask, Val(false), dest, bc)
+        DataLayouts._foreach_slice(
+            scope, op, apply_operators!, mask, Val(false), Val(false), dest, bc,
+        )
     else
         # Every statement of a slice loop body is compiled into the same function, and the
         # buffers of different statements are never live at once, so they share memory. A
@@ -331,8 +332,7 @@ which holds exactly when `arg`'s [`DataLayouts.DataScope`](@ref) is
 memory and must obey the buffer reuse invariant in [`apply_operator`](@ref).
 
 Private buffers are used on CPUs, and on GPUs when one thread evaluates a whole
-slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point) or a
-whole column (e.g., in [`column_reduce!`](@ref)).
+slice of [`DataLayouts.foreach_slice`](@ref) (e.g., a slice with one point).
 """
 @inline has_private_buffers(arg) = DataLayouts.DataScope(arg) == DataLayouts.ThisThread()
 
@@ -350,6 +350,10 @@ be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
         Fields.shared_space(arg),
     )
 
+# An operator broadcast has no data of its own, so its destination's template is allocated.
+@inline register_similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
+    register_similar(destination_template(bc), T)
+
 """
     buffer_similar(arg, [T], [Val(offset)])
 
@@ -364,6 +368,12 @@ the other's [`shared_buffer_bytes`](@ref) (see the buffer reuse invariant in
     DataLayouts.buffer_similar(Fields.field_values(arg), T, offset),
     Fields.shared_space(arg),
 )
+@inline buffer_similar(
+    bc::NonPointwiseBroadcasted,
+    ::Type{T},
+    offset::Val = Val(0),
+) where {T} =
+    buffer_similar(destination_template(bc), T, offset)
 @inline buffer_similar(arg) = buffer_similar(arg, eltype(arg))
 
 """

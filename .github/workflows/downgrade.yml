@@ -23,7 +23,7 @@ jobs:
       # and hides whether it would have failed too (UnitTests.yml does the same).
       fail-fast: false
       matrix:
-        version: ['1.10', '1.11']
+        version: ['1.10', '1.13']
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@latest
@@ -32,12 +32,16 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-downgrade-compat@v2
         with:
-          skip: 'Dates, InteractiveUtils, JET, LinearAlgebra, Logging, Random, Test, SparseArrays, Statistics'
+          # RecipesBase is a weak dependency outside of the test target, so it
+          # is only resolved as an indirect dependency of Plots, to its newest
+          # version instead of its floor (1.4 as of Julia 1.12, which Julia 1.10
+          # cannot install).
+          skip: 'Dates, InteractiveUtils, JET, LinearAlgebra, Logging, Random, RecipesBase, Test, SparseArrays, Statistics'
           mode: 'forcedeps'
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
         with:
-          # Nothing here uploads coverage. Instrumented runs on 1.11 are also
+          # Nothing here uploads coverage. Instrumented runs on 1.11 were also
           # killed partway through Remapping/unit_distributed_remapping.jl, while
           # uninstrumented ones on the same commit and runner finish.
           coverage: false

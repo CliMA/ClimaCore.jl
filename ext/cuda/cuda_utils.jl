@@ -704,7 +704,6 @@ function auto_launch!(
     if collect_kernel_stats() # only for development use
         key = (F!, typeof(args), CUDA.registers(kernel))
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
-        # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
 #! format: off
             s = ""

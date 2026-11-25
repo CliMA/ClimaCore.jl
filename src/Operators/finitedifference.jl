@@ -918,6 +918,36 @@ end
     return dest
 end
 
+# Evaluate stencil expressions that cache no arguments into Fields in registers, given pairs
+# of them. Expressions over columns of one size share a loop over points (see
+# apply_stencil!), so that all of their loads are issued together; otherwise, each statement
+# would wait for its own loads. The loop of the first Field stores the others at every point
+# it visits (a thread without a point only writes its own registers).
+@inline function apply_stencils!(pairs)
+    isempty(pairs) && return nothing
+    size_of(pair) = DataLayouts.inferred_size(Fields.field_values(pair[1]))
+    (loop_pairs, other_pairs) =
+        unrolled_split(pair -> size_of(pair) == size_of(pairs[1]), pairs)
+    datas = unrolled_map(pair -> Fields.field_values(pair[1]), loop_pairs)
+    updates = unrolled_map(loop_pairs) do (_, bc)
+        StencilPointUpdate(
+            stencil_arg(pointwise_stencil(bc, caching_fusion(bc)), Val(false)),
+            Fields.shared_space(bc),
+        )
+    end
+    DataLayouts.update_points!(nothing, datas[1], view) do index
+        Base.@constprop :none
+        unrolled_foreach(Base.tail(updates), Base.tail(datas)) do update, data
+            @inline
+            (point,) = @inbounds DataLayouts.slice_every_arg(view, index, data)
+            @inline update(index, point)
+        end
+        (; stencil_bc, space) = updates[1]
+        @inbounds column_value(stencil_bc, space, vertical_index(space, index))
+    end
+    return apply_stencils!(other_pairs)
+end
+
 # Point update of apply_stencil! (see above); constant propagation would re-infer its body.
 struct StencilPointUpdate{B, S}
     stencil_bc::B
@@ -2860,6 +2890,6 @@ applied_arg, cached_arg, materialize_buffer, register_values, apply_stencil!,
 shared_buffer_bytes
 
 # Constant propagation on these never improves inference; it re-infers the whole expression.
-@drop_constprop apply_operators, inline_apply_operators,
+@drop_constprop apply_operators,
 apply_operators!, inline_apply_operators!, operator_arg, pointwise_arg, apply_operator,
 apply_stencil, apply_stencil!, materialize_buffer, column_value, stencil_value

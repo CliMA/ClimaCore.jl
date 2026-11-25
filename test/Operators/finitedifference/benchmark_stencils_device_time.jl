@@ -1,12 +1,37 @@
 # including this file requires CUDA to be imported and available
 
+"""
+    profile_without_frees(f)
+
+Run `CUDA.@profile trace = true f()` while preventing GPU memory from being
+freed by CUDA.jl's background task.
+
+GPU arrays that the GC finalizes are only retired, and a `Timer` task frees
+them about once a second with `cuMemFreeAsync`. If that happens while CUPTI is
+tracing, the driver can segfault inside CUPTI (seen on the P100 runners). To
+avoid this, free all retired memory synchronously before profiling, and
+disable the GC while profiling so nothing new gets retired.
+"""
+function profile_without_frees(f::F) where {F}
+    CUDA.reclaim() # full GC, then free everything that was retired
+    gc_was_enabled = GC.enable(false)
+    try
+        return CUDA.@profile trace = true f()
+    finally
+        GC.enable(gc_was_enabled)
+    end
+end
+
 # The first `CUDA.@profile` session in a process defines a method, which
 # advances the world age. Kernels compiled afterwards from a function that
 # started running in the older world then fail with
 # `AssertionError: haskey(compiled, job.source)` in GPUCompiler, so run one
 # profile at top level before benchmarking.
 let x = CUDA.zeros(1)
-    CUDA.@profile trace = true (x .+= 1; CUDA.synchronize())
+    profile_without_frees() do
+        x .+= 1
+        CUDA.synchronize()
+    end
 end
 
 """
@@ -34,7 +59,7 @@ function device_time_ns(f, ncalls = 200; warmup_s = 0.1)
         f()
     end
     CUDA.synchronize()
-    prof = CUDA.@profile trace = true begin
+    prof = profile_without_frees() do
         for _ in 1:ncalls
             f()
         end

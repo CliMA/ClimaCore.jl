@@ -76,9 +76,11 @@ for FT in (Float32, Float64)
                 @test norm(split_div.(u, psi) .- full_form_div_1) < 40 * eps(FT)
                 @test norm(split_div.(u, psi) .- full_form_div_2) < 40 * eps(FT)
 
-                # Test conservation in comparison to weak divergence operator
+                # Test conservation in comparison to weak divergence operator.
+                # The weak divergence sum depends on the CPU's summation order
+                # (vector width) and reaches 24.3 eps on some machines.
                 @test abs(sum(split_div.(u, psi))) < 200 * eps(FT)
-                @test abs(sum(wdiv.(u .* psi))) < 10 * eps(FT)
+                @test abs(sum(wdiv.(u .* psi))) < 30 * eps(FT)
             end
         end
 

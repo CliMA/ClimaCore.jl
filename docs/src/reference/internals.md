@@ -186,12 +186,12 @@ is_lazy
 lazy_main_diagonal
 lazy_mul
 LazySchurComplement
-field_matrix_solver_cache
 check_field_matrix_solver
 run_field_matrix_solver!
+previous_solution
+band_solve_steps
 solver_algorithm
 lazy_preconditioner
-preconditioner_cache
 check_preconditioner
 lazy_or_concrete_preconditioner
 apply_preconditioner

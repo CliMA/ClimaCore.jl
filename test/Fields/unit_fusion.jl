@@ -8,6 +8,9 @@ using JET
 using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts:
     foreach_point, foreach_level, foreach_slab, foreach_column
@@ -41,8 +44,7 @@ function test_fused_loop(foreach_slice, space, subspace)
     foreach_slice(fused_loop!, dest, src1, src2)
     @test dest ≈ @. sum((sin(src1) + cos(src2))^2) / 2
 
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_slice(fused_loop!, dest, src1, src2)
+    JETConfig.@test_with_jet foreach_slice(fused_loop!, dest, src1, src2)
 end
 
 # As in test_fused_loop, but with spectral element operators in place of the
@@ -132,8 +134,7 @@ function test_fused_column_loop(space, subspace)
         )^2
     ) / 2
 
-    CUDA_FRAMES = @isdefined(CUDA) ? (AnyFrameModule(CUDA),) : ()
-    @test_opt ignored_modules = CUDA_FRAMES foreach_column(fused_loop!, dest, src1, src2)
+    JETConfig.@test_with_jet foreach_column(fused_loop!, dest, src1, src2)
 end
 
 has_center_columns(space) =
@@ -303,9 +304,10 @@ end
 # threads: Fields of the loop and buffers that statements write pointwise and that operators
 # read at other threads' points or as boundary values, or that a statement overwrites after
 # an operator reads them, single points of Fields of the loop that every thread reads or one
-# thread writes, and point temporaries written pointwise or by an operator, and read by every
-# thread, like a level of a temporary. With 64 centers, the statements on centers have half as
-# many points as the threads of the loop's columns of faces.
+# thread writes, and point temporaries written pointwise, by an operator, or by a column
+# reduction, and read by every thread, like a level of a temporary. With 64 centers, the
+# statements on centers have half as many points as the threads of the loop's columns of
+# faces.
 @testset "fused loops with values that cross threads" begin
     FT = Float64
     context = ClimaComms.context(ClimaComms.device())
@@ -332,7 +334,9 @@ end
         @. ᶜf = 1000 * ᶜz
         ᶜtemp = @. 10 * ᶜz
         ᶜtemp_bottom = Fields.level(ᶜtemp, 1)
-        @. ᶜr2 = ᶜt * ᶜs + ᶜtemp_bottom
+        ᶜsum = similar(ᶜtemp_bottom)
+        Operators.column_reduce!(+, ᶜsum, ᶜz)
+        @. ᶜr2 = ᶜt * ᶜs + ᶜtemp_bottom + ᶜsum
         @. ᶜv = ᶜz + 100
         setbc = Operators.SetBoundaryOperator(;
             bottom = Operators.SetValue(ᶜv),
@@ -351,7 +355,7 @@ end
     face_products = 2 .* z_faces .* cat(z_bottom, z_interior_faces, z_top; dims = 1)
     @test Array(parent(ᶜr1)) ≈
           (levels(face_products, 1:64) .+ levels(face_products, 2:65)) ./ 2
-    @test Array(parent(ᶜr2)) ≈ 12 .* z .* z_bottom .+ 10 .* z_bottom
+    @test Array(parent(ᶜr2)) ≈ 12 .* z .* z_bottom .+ 10 .* z_bottom .+ sum(z; dims = 1)
     @test Array(parent(ᶜf)) ≈ 1000 .* z
     @test Array(parent(ᶠf)) ≈ cat(3 .* levels(z_faces, 1:64), 7 .+ 0 .* z_top; dims = 1)
     @test Array(parent(ᶠr1)) ≈

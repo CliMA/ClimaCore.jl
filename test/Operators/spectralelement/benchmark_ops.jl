@@ -1,4 +1,7 @@
 import ClimaCore as CC
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(CC), "test", "TestUtilities", "JETConfig.jl"),
+)
 import DataStructures
 include(
     joinpath(
@@ -114,12 +117,12 @@ using JET
         p = @allocated kernel_complicated_field2_dss!(kernel_args)
         @test p == 0
         # Inference tests
-        JET.@test_opt kernel_scalar_dss!(kernel_args)
-        JET.@test_opt kernel_vector_dss!(kernel_args)
-        JET.@test_opt kernel_field_dss!(kernel_args)
-        JET.@test_opt kernel_ntuple_field_dss!(kernel_args)
-        JET.@test_opt kernel_ntuple_floats_dss!(kernel_args)
-        JET.@test_opt kernel_complicated_field_dss!(kernel_args)
-        JET.@test_opt kernel_complicated_field2_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_scalar_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_vector_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_field_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_ntuple_field_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_ntuple_floats_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_complicated_field_dss!(kernel_args)
+        JETConfig.@test_with_jet kernel_complicated_field2_dss!(kernel_args)
     end
 end

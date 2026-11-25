@@ -5,6 +5,9 @@ using ClimaComms
 ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets
 import ClimaCore
+@isdefined(JETConfig) || include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "JETConfig.jl"),
+)
 import ClimaCore.InputOutput
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
@@ -652,10 +655,10 @@ end
     # JET tests
     # prerequisite
     call_getproperty(fv) # compile first
-    @test_opt call_getproperty(fv)
+    JETConfig.@test_with_jet call_getproperty(fv)
 
     call_getcolumn(fv, colidx, device) # compile first
-    @test_opt call_getcolumn(fv, colidx, device)
+    JETConfig.@test_with_jet call_getcolumn(fv, colidx, device)
     p = @allocated call_getcolumn(fv, colidx, device)
     if ClimaComms.SingletonCommsContext(device) isa ClimaComms.AbstractCPUDevice
         TU.@test_allocations p ≤ 32
@@ -1386,15 +1389,17 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     foo = InferenceFoo(2.0)
     device = ClimaComms.CPUSingleThreaded() # cuda fill is broken
     context = ClimaComms.SingletonCommsContext(device)
+    # The type of the error and the quoting of the field name in its message
+    # depend on the version of Julia, so only the message is matched.
     for space in TU.all_spaces(FT; context)
         Y = fill((; a = FT(0), b = FT(1)), space)
-        @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
+        @test_throws r"InferenceFoo has no field `?bingo" FieldFromNamedTupleBroken(
             space,
             ics_foo,
             FT,
             foo,
         )
-        @test_throws ErrorException("type InferenceFoo has no field baz") FieldFromNamedTupleBroken(
+        @test_throws r"InferenceFoo has no field `?baz" FieldFromNamedTupleBroken(
             space,
             ics_foo_with_field,
             FT,
