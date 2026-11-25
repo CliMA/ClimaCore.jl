@@ -4,9 +4,16 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v1.0.10
+-------
+
 - ![][badge-🐛bugfix] On CPUs, the `MatrixFields` solvers no longer allocate the
   factors of a band matrix on the heap when bounds checking is on (e.g., in
   `Pkg.test`).
+- ![][badge-🚀performance] Constant propagation is disabled on some functions that
+  only pass their arguments along (e.g., the construction, copying, and
+  evaluation of Field and operator broadcasts, data layout plumbing, and
+  `MatrixFields` solver setup), which reduces compilation time.
 
 v1.0.9
 -------
