@@ -203,7 +203,7 @@ non-constant thread count, or a single-thread scope, which is already an `MArray
 lazy layouts are first converted into the layout type that [`buffer_similar`](@ref)
 would allocate.
 """
-@inline register_similar(bc::LazyDataLayout, ::Type{T}) where {T} =
+@inline @noconsts register_similar(bc::LazyDataLayout, ::Type{T}) where {T} =
     has_inferred_size(bc) ?
     register_similar(
         layout_type(bc){T, shape_params(bc)..., typeof(DataScope(bc)), parent_type(bc)},

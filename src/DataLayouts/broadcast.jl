@@ -33,7 +33,7 @@ Broadcast.BroadcastStyle(style::DataStyle, ::DataStyle{0}) = style
 # would be widened by the inference recursion limit.
 @inline Broadcast.broadcastable(data::DataLayout) =
     unchecked_rebuild(data, getfield(data, :array), add_auto_broadcasters(eltype(data)))
-@inline Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
+@inline @noconsts Broadcast.broadcasted(style::DataStyle, f::F, args...) where {F} =
     auto_broadcasted(style, f, args)
 
 """
@@ -45,7 +45,8 @@ const LazyDataLayout{D} = Broadcast.Broadcasted{<:DataStyle{<:Any, D}}
 
 # Avoid Base's Broadcast.combine_axes, whose DimensionMismatch error cannot be
 # compiled in GPU kernels because it generates a string during runtime.
-@inline Broadcast._axes(bc::LazyDataLayout, ::Nothing) = unrolled_map(Base.OneTo, size(bc))
+@inline @noconsts Broadcast._axes(bc::LazyDataLayout, ::Nothing) =
+    unrolled_map(Base.OneTo, size(bc))
 
 combine_sizes(size1, size2) =
     isempty(size2) ? size1 :
@@ -56,7 +57,7 @@ combine_sizes(size1, size2) =
     )
 
 # Ensure that size(::LazyDataLayout) is statically inferrable when possible.
-Base.size(bc::LazyDataLayout) =
+@noconsts Base.size(bc::LazyDataLayout) =
     has_inferred_size(bc) ? inferred_size(bc) :
     unrolled_mapreduce(combine_sizes, bc.args) do arg
         arg isa Tuple ? (length(arg),) : size(arg) # size(::Tuple) is undefined
@@ -78,7 +79,7 @@ Base.size(bc::LazyDataLayout, i::Integer) =
 # a fused slice loop they live in per-thread registers instead of shared memory,
 # where equal byte sizes alias (see RegisterArray). Other scopes and dynamic
 # sizes take the buffer_similar fallback, matching this method's old behavior.
-@inline Base.similar(bc::LazyDataLayout, ::Type{T}) where {T} =
+@inline @noconsts Base.similar(bc::LazyDataLayout, ::Type{T}) where {T} =
     register_similar(bc, T)
 
 """
@@ -101,7 +102,7 @@ the same time are given different byte offsets of the scope's memory (see
         checked_valid_basetype(eltype(parent_type(data)), T),
         offset,
     )
-@inline function buffer_similar(
+@inline @noconsts function buffer_similar(
     bc::LazyDataLayout,
     ::Type{T},
     offset::Val = Val(0),
@@ -188,7 +189,7 @@ the arguments of a broadcast expression.
 @inline inferred_size(bc::LazyDataLayout) =
     inferred_size(layout_type(bc){<:Any, shape_params(bc)...})
 
-@inline function nelems(bc::LazyDataLayout)
+@inline @noconsts function nelems(bc::LazyDataLayout)
     (; Nv, Ni, Nj, Nh) = vijh_params(bc)
     return isnothing(Nh) ? length(bc) ÷ (Nv * Ni * Nj) : Nh
 end
@@ -209,7 +210,11 @@ end
 Return a copy of a broadcast expression in which each of the [`layout_args`](@ref)
 is replaced with `f(layout_arg, f_args...)`.
 """
-@propagate_inbounds function modify_args(f::F, bc::LazyDataLayout, f_args...) where {F}
+@propagate_inbounds @noconsts function modify_args(
+    f::F,
+    bc::LazyDataLayout,
+    f_args...,
+) where {F}
     modified_args = unrolled_map(bc.args) do arg
         Base.@_propagate_inbounds_meta
         arg isa MaybeLazyDataLayout ? f(arg, f_args...) : arg
@@ -224,7 +229,7 @@ end
     return FusedMultiBroadcast(modified_pairs)
 end
 
-@inline reassign(bc::MaybeFusedDataLayoutBroadcast, scope) =
+@inline @noconsts reassign(bc::MaybeFusedDataLayoutBroadcast, scope) =
     modify_args(reassign, bc, scope)
 @propagate_inbounds level_view(bc::MaybeFusedDataLayoutBroadcast, v) =
     modify_args(level, bc, v)

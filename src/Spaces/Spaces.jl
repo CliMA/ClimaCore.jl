@@ -16,7 +16,7 @@ using ClimaComms
 using Adapt
 
 import ..slab, ..column, ..level
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, @noconsts
 import ..DebugOnly: call_post_op_callback, post_op_callback
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 import ..DataLayouts: PointIndex
@@ -108,7 +108,7 @@ discretization(space::AbstractSpace) = discretization(grid(space))
 is_continuous(space::AbstractSpace) = is_continuous(grid(space))
 
 
-local_geometry_data(space::AbstractSpace) =
+@noconsts local_geometry_data(space::AbstractSpace) =
     local_geometry_data(grid(space), staggering(space))
 dss_weights(space::AbstractSpace) = dss_weights(grid(space), staggering(space))
 

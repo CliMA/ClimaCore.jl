@@ -341,10 +341,17 @@ expression that needs many registers runs slower under any cap. The cap is ignor
     )
 end
 
-@inline _foreach_slice(op::O, f::F, mask, enumerate, serial, args...) where {O, F} =
+@inline @noconsts _foreach_slice(
+    op::O,
+    f::F,
+    mask,
+    enumerate,
+    serial,
+    args...,
+) where {O, F} =
     foreach_slice_with_options(nothing, nothing, op, f, mask, enumerate, serial, args...)
 
-@inline function foreach_slice_with_options(
+@inline @noconsts function foreach_slice_with_options(
     shmem,
     maxregs,
     op::O,
@@ -404,7 +411,7 @@ for (name, op, ref) in (
         Run [`foreach_slice`](@ref) with $($ref) as the slice operator. The `shmem` and
         `maxregs` keywords are experimental, and may change in future.
         """
-        @inline function $name(f::F, args...; kwargs...) where {F}
+        @inline @noconsts function $name(f::F, args...; kwargs...) where {F}
             (mask, enumerate, serial, shmem, maxregs) = slice_loop_flags(; kwargs...)
             return foreach_slice_with_options(
                 shmem, maxregs, $op, f, mask, enumerate, serial, args...,
@@ -419,7 +426,7 @@ end
 
 # A thread pool has to be resolved before looping over it, and given back afterward.
 @inline needs_loop_setup(::ThisThreadPool) = true
-@inline _foreach_slice(
+@inline @noconsts _foreach_slice(
     scope::ThisThreadPool, op::O, f::F, mask, enumerate, serial, args...,
 ) where {O, F} =
     loop_over_pool(scope) do loop_scope
@@ -429,7 +436,7 @@ end
         )
     end
 
-@noinline function loop_over_pool(loop::L, scope::ThisThreadPool) where {L}
+@noinline @noconsts function loop_over_pool(loop::L, scope::ThisThreadPool) where {L}
     # A single-threaded pool takes a shortcut around the whole claim/release
     # protocol. This is exactly equivalent to running it: claim_pool_threads
     # returns 0 without touching POOL_THREADS_IN_USE when the pool has one
@@ -452,7 +459,7 @@ end
     end
 end
 
-@inline _foreach_slice(
+@inline @noconsts _foreach_slice(
     scope::DataScope, op::O, f::F, mask, enumerate, serial, args...,
 ) where {O, F} =
     scoped_slice_loop(
@@ -489,7 +496,7 @@ end
 # broadcast expression at least once per slab, allocating inside the tendency
 # (68 kB per hyperdiffusion tendency for slab loops alone, 21 MB with point
 # loops too).
-@inline function scoped_slice_loop(
+@inline @noconsts function scoped_slice_loop(
     subscope, scope, op::O, f::F, mask, enumerate, args...,
 ) where {O, F}
     indices = subscope_slice_indices(subscope, scope, mask, op, args...)
@@ -561,8 +568,8 @@ rounds, in which a thread without a point calls `f` at the last point and discar
 result, so that `f` can read values that every thread of the scope must read together (see
 `Operators.allows_branching`).
 """
-@inline function update_points!(f::F, op::O, data, slice_op::S) where {F, O, S}
-    update_point!(index, point) =
+@inline @noconsts function update_points!(f::F, op::O, data, slice_op::S) where {F, O, S}
+    @noconsts update_point!(index, point) =
         (@inbounds point[] = updated_value(op, point, @inline f(index)))
     scope = DataScope(data)
     needs_loop_setup(scope) ?
@@ -584,7 +591,13 @@ end
 
 # Alternative to scoped_slice_loop that generates ordinary, unfused for loops,
 # with every slice processed by the full scope instead of a slice_subscope.
-@inline function unfused_slice_loop(scope, op::O, f::F, args...; kwargs...) where {O, F}
+@inline @noconsts function unfused_slice_loop(
+    scope,
+    op::O,
+    f::F,
+    args...;
+    kwargs...,
+) where {O, F}
     (mask, enumerate, _, _, _) = slice_loop_flags(; kwargs...)
     for index in subscope_slice_indices(scope, scope, mask, op, args...)
         slices = @inbounds slice_every_arg(op, index, args...)
@@ -798,7 +811,7 @@ order: increasing, or decreasing when `reverse` is `true`. On GPUs, the threads 
 share the work when `op` is associative; otherwise, one thread applies `op` in order and
 calls `f`.
 """
-@inline Base.@constprop :none scan_points(f::F, op::O, arg, reverse, init) where {F, O} =
+@inline @noconsts scan_points(f::F, op::O, arg, reverse, init) where {F, O} =
     scan_points(DataScope(arg), f, op, arg, reverse, init)
 
 # Generic operators can have side effects or read memory that the scan writes (as in an
@@ -825,7 +838,7 @@ end
 
 # init is combined with the first value in the loop, unless op changes the type of init: then
 # that is done before the loop, so that the accumulated value has one type.
-@inline Base.@constprop :none function scan_points(
+@inline @noconsts function scan_points(
     ::ThisThread,
     f::F,
     op::O,
@@ -871,7 +884,7 @@ reduction would combine `init` with its own values). Otherwise, it calls
 [`scan_points`](@ref), which combines `init` with the first value, so that `init` can set
 the type of the result.
 """
-@inline fold_points(op::O, arg, reverse, init) where {O} =
+@inline @noconsts fold_points(op::O, arg, reverse, init) where {O} =
     if is_commutative(op, eltype(arg))
         result = reduce_points(op, arg)
         init isa NoInit ? result : op(init, result)
@@ -929,12 +942,13 @@ end
 # Int128 and UInt128 fields in kernel arguments crash LLVM's NVPTX backend prior
 # to LLVM 20 (llvm/llvm-project#49221). 128-bit integers are only safe in
 # registers, like the ones bitcast_struct uses to reconstruct the value.
-@inline function Base.fill!(dest::DataLayout, value; kwargs...)
+@inline @noconsts function Base.fill!(dest::DataLayout, value; kwargs...)
     B = eltype(parent(dest))
     converted_value = convert(eltype(dest), value)
     entries = bitcast_struct(NTuple{num_basetypes(B, eltype(dest)), B}, converted_value)
     synchronize_shared_points(DataScope(dest), dest)
     foreach_point(written_layout(dest); kwargs...) do dest_point
+        @noconsts
         @inbounds dest_point[] = bitcast_struct(eltype(dest_point), entries)
     end
     synchronize_shared_points(DataScope(dest), dest)
@@ -966,7 +980,7 @@ end
     synchronize_shared_points(DataScope(dest), dest)
     _foreach_slice(
         view,
-        dest_point -> (@inbounds dest_point[] = first(bc_without_axes)),
+        @noconsts(dest_point -> (@inbounds dest_point[] = first(bc_without_axes))),
         mask,
         Val(false),
         Val(false),
@@ -986,7 +1000,7 @@ for S in (
     :(<:StaticArrays.StaticArrayStyle{0}),
     :(<:BlockArrays.AbstractBlockStyle{0}),
 )
-    @eval @inline Base.copyto!(
+    @eval @inline @noconsts Base.copyto!(
         dest::DataLayout,
         bc::Broadcast.Broadcasted{$S},
         mask::DataMask = NoMask(),
@@ -1001,7 +1015,7 @@ end
 # Single-element tuples are handled the same way as Refs. A multi-element tuple
 # is indexed along the first dimension of dest, as in Base, and each active
 # point of dest reads the broadcast at its own Cartesian index.
-@inline function Base.copyto!(
+@inline @noconsts function Base.copyto!(
     dest::DataLayout,
     bc::Broadcast.Broadcasted{Broadcast.Style{Tuple}},
     mask::DataMask = NoMask(),
@@ -1029,7 +1043,7 @@ end
 
 # _broadcast_getindex skips getindex's wrappers, which GPU compilation re-optimizes per
 # kernel. Point slices are 0-dimensional; the empty index avoids a constant to propagate.
-@inline function Base.copyto!(
+@inline @noconsts function Base.copyto!(
     dest::DataLayout,
     arg::MaybeLazyDataLayout,
     mask::DataMask = NoMask(),
@@ -1042,6 +1056,7 @@ end
     _foreach_slice(
         view,
         dest_and_arg_point -> begin
+            @noconsts
             @inbounds (dest_point, arg_point) = dest_and_arg_point.args
             @inbounds dest_point[] =
                 Broadcast._broadcast_getindex(arg_point, CartesianIndex())
@@ -1056,7 +1071,7 @@ end
     return dest
 end
 
-@inline function Base.copyto!(bc::FusedMultiBroadcast; kwargs...)
+@inline @noconsts function Base.copyto!(bc::FusedMultiBroadcast; kwargs...)
     synchronize_shared_points(DataScope(bc), bc)
     foreach_point(bc; kwargs...) do bc_point
         unrolled_foreach(bc_point.pairs) do (dest_point, arg_point)

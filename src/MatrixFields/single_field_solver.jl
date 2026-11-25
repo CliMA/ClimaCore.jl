@@ -111,7 +111,7 @@ end
 struct ColumnSolves{C, F}
     f::F
 end
-@inline (solves::ColumnSolves{C})(columns) where {C} =
+@inline @noconsts (solves::ColumnSolves{C})(columns) where {C} =
     @inline solves.f(Val(C ? :copies : shared_buffers(columns)), columns)
 DataLayouts.required_shared_memory(::ColumnSolves, columns) = shared_solve_bytes(columns)
 DataLayouts.uses_shared_memory(solves::ColumnSolves, columns) =
@@ -141,9 +141,9 @@ pointwise_solution(A::ScalingFieldMatrixEntry, b) =
 pointwise_solution(A, b) = @. lazy(inv(getindex(A, 0)) * b)
 
 # A and b can be lazy, and temporaries come from the pool (see run_field_matrix_solver!).
-single_field_solve!(x, A::ScalingFieldMatrixEntry, b, _ = nothing) =
+@noconsts single_field_solve!(x, A::ScalingFieldMatrixEntry, b, _ = nothing) =
     Base.materialize!(x, pointwise_solution(A, b))
-single_field_solve!(x, A, b, pool = nothing) =
+@noconsts single_field_solve!(x, A, b, pool = nothing) =
     if eltype(A) <: DiagonalMatrixRow
         Base.materialize!(x, pointwise_solution(A, b))
     else
@@ -160,7 +160,7 @@ single_field_solver_cache(A, b) = nothing
 
 single_field_solve!(::Nothing, x::Fields.Field, A, b) = single_field_solve!(x, A, b)
 
-@inline subfields(field) =
+@inline @noconsts subfields(field) =
     ntuple(@inline(n -> getproperty(field, n)), Val(fieldcount(eltype(field))))
 
 # The arguments of a solve (see single_column_solve!), with Fields in registers (see
@@ -208,9 +208,13 @@ end
 # before the buffers of the arguments in registers (see column_solve_function and
 # register_values_buffer). The rows of a parallel solve can be loaded by the caller (see
 # solve_rows).
-@inline single_column_solve!(shared, args) =
+@inline @noconsts single_column_solve!(shared, args) =
     single_column_solve!(shared, args, solve_rows(shared, args))
-@inline function single_column_solve!(::Val{shared}, (x, A, b), rows) where {shared}
+@inline @noconsts function single_column_solve!(
+    ::Val{shared},
+    (x, A, b),
+    rows,
+) where {shared}
     shared != :none && use_parallel_solver(A) &&
         return parallel_band_matrix_solve!(Base.broadcastable(x), rows)
     scope = DataLayouts.DataScope(x)
@@ -316,7 +320,7 @@ Transforms the tri-diagonal matrix into a unit upper bi-diagonal matrix, then
 solves the resulting system using back substitution. The order of
 multiplications has been modified in order to handle block vectors/matrices.
 =#
-@inline function band_matrix_solve!(Uⱼs::NTuple{2, Any}, x, Aⱼs::NTuple{3}, b)
+@inline @noconsts function band_matrix_solve!(Uⱼs::NTuple{2, Any}, x, Aⱼs::NTuple{3}, b)
     A₋₁, A₀, A₊₁ = Aⱼs
     Ux, U₊₁ = Uⱼs
     n = length(x)
@@ -349,7 +353,7 @@ and U * x in registers, and the back substitution keeps the last ud rows of x; t
 windows start as copies of the first row, whose terms are dropped near the ends of the
 matrix. The order of multiplications handles block matrices.
 =#
-@inline Base.@constprop :none function band_matrix_solve!(Uⱼs, x, Aⱼs, b)
+@inline @noconsts function band_matrix_solve!(Uⱼs, x, Aⱼs, b)
     (Ux, U₊s...) = Uⱼs
     ud = length(U₊s)
     ld = length(Aⱼs) - ud - 1
@@ -373,7 +377,7 @@ end
 
 # Factors the rows is of A, given the window of the ld rows before them, and returns the
 # window of the last ld rows.
-@inline Base.@constprop :none function factor_rows!(Ux, U₊s, rows, Aⱼs, b, is)
+@inline @noconsts function factor_rows!(Ux, U₊s, rows, Aⱼs, b, is)
     @inbounds for i in is
         row = factored_row(rows, Aⱼs, b, i)
         store_factored_row!(Ux, U₊s, row, i)
@@ -431,7 +435,7 @@ end
 
 # Solves for x in rows n + 1 - i′ for i′ in i′s, given the window of the ud rows after them,
 # and returns the window of the first ud rows.
-@inline Base.@constprop :none function back_substitute!(x, Ux, U₊s, xs, i′s)
+@inline @noconsts function back_substitute!(x, Ux, U₊s, xs, i′s)
     @inbounds for i′ in i′s
         i = length(x) + 1 - i′
         x_value = x[i] = back_substituted_value(Ux, U₊s, xs, i, i′)
@@ -481,7 +485,7 @@ are read as the nearest row in it, so that every load and exchange is uniform; t
 couplings are then dropped by zeroing k₋ or k₊ instead of loading zeros. The order
 of multiplications has been modified to handle block vectors/matrices.
 =#
-@inline function parallel_band_matrix_solve!(x, (indices, rows))
+@inline @noconsts function parallel_band_matrix_solve!(x, (indices, rows))
     scope = DataLayouts.DataScope(x)
     n = length(x) % Int32
     stride = one(n)

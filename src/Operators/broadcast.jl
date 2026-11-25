@@ -20,7 +20,7 @@ function slice_operator end
 Broadcast.BroadcastStyle(style::OperatorStyle, ::Fields.FieldStyle) = style
 
 # Combine the operator style with all argument styles to construct broadcasts.
-@inline function Broadcast.broadcasted(op::AbstractOperator, args...)
+@inline @noconsts function Broadcast.broadcasted(op::AbstractOperator, args...)
     args′ = unrolled_map(Broadcast.broadcastable, args)
     style = Broadcast.result_style(OperatorStyle(op), Broadcast.combine_styles(args′...))
     return Broadcast.broadcasted(style, op, args′...)
@@ -30,7 +30,11 @@ end
     return Broadcast.Broadcasted(style, op, args, axes)
 end
 
-@inline function Broadcast.broadcasted(style::OperatorStyle, op::AbstractOperator, args...)
+@inline @noconsts function Broadcast.broadcasted(
+    style::OperatorStyle,
+    op::AbstractOperator,
+    args...,
+)
     FT = Spaces.undertype(return_space(op, args...))
     args′ = unrolled_map(args) do arg
         is_auto_broadcastable(eltype(arg)) ?
@@ -40,7 +44,8 @@ end
 end
 # Methods for specific operators can rewrite their broadcasts (e.g., MatrixFields replaces
 # linear finite difference operators with band matrix products).
-operator_broadcasted(style, op, args) = Broadcast.Broadcasted(style, op, args)
+@noconsts operator_broadcasted(style, op, args) =
+    Broadcast.Broadcasted(style, op, args)
 
 const NonPointwiseBroadcasted{F} = Broadcast.Broadcasted{<:OperatorStyle, <:Any, F}
 const OperatorBroadcasted{Op <: AbstractOperator} = NonPointwiseBroadcasted{Op}
@@ -54,12 +59,16 @@ end
 Fields.sliced_function(slice, op::AbstractOperator, inds) = slice(op, inds...)
 Utilities.unsafe_eltype(bc::OperatorBroadcasted) = return_eltype(bc.f, bc.args...)
 # Like other instantiated broadcasts, an operator uses its stored axes.
-@inline Fields.shared_space(bc::OperatorBroadcasted) =
+@inline @noconsts Fields.shared_space(bc::OperatorBroadcasted) =
     isnothing(bc.axes) ? return_space(bc.f, bc.args...) : bc.axes
 
 # The destination of an operator, which becomes its stored axes, must have the shape and any
 # staggering of its result.
-@inline function Fields.check_broadcast_space(space, bc::OperatorBroadcasted, ::Val{true})
+@inline @noconsts function Fields.check_broadcast_space(
+    space,
+    bc::OperatorBroadcasted,
+    ::Val{true},
+)
     result_space = return_space(bc.f, bc.args...)
     staggerings = (Spaces.staggering(space), Spaces.staggering(result_space))
     any(isnothing, staggerings) || check_staggering(space, typeof(staggerings[2]))
@@ -69,13 +78,17 @@ Utilities.unsafe_eltype(bc::OperatorBroadcasted) = return_eltype(bc.f, bc.args..
         Val(true),
     )
 end
-@inline Fields.check_broadcast_space(space, bc::OperatorBroadcasted, ::Val{false}) =
+@inline @noconsts Fields.check_broadcast_space(
+    space,
+    bc::OperatorBroadcasted,
+    ::Val{false},
+) =
     Fields.check_subspace(space, axes(bc))
 
 # The arguments of an operator can have spaces that differ from the result space
 # (e.g., an F2C operator reads from a face space and writes to a center space),
 # so each argument must be checked against its own space (see also check_arg_spaces).
-@inline function Broadcast._axes(bc::OperatorBroadcasted, ::Nothing)
+@inline @noconsts function Broadcast._axes(bc::OperatorBroadcasted, ::Nothing)
     unrolled_foreach(bc.args) do arg
         @inline
         Fields.check_broadcast_space(Fields.shared_space(arg), arg, Val(false))
@@ -89,7 +102,7 @@ end
 # The arguments of each operator are compared here, once per top-level broadcast: slices
 # need not have comparable spaces (e.g., a column field keeps its own column in every slice
 # of a loop, including the bodies of slice loops, where broadcasts are also instantiated).
-@inline function Broadcast.instantiate(bc::NonPointwiseBroadcasted)
+@inline @noconsts function Broadcast.instantiate(bc::NonPointwiseBroadcasted)
     isnothing(bc.axes) || (
         bc isa OperatorBroadcasted ?
         Fields.check_broadcast_space(bc.axes, bc, Val(true)) :
@@ -124,9 +137,9 @@ end
 
 # A slice loop body inlines these, since a function that is not inlined would return the
 # registers of its result (see register_similar) in an MArray on the heap.
-@inline Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
+@inline @noconsts Base.similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
     register_similar(destination_template(bc), T)
-@inline Base.copy(bc::NonPointwiseBroadcasted) = copyto!(similar(bc), bc)
+@inline @noconsts Base.copy(bc::NonPointwiseBroadcasted) = copyto!(similar(bc), bc)
 
 single_field_buffer_bytes(arg, ::Type{T} = eltype(arg)) where {T} = sizeof(T) * length(arg)
 # Bytes of a cached_arg buffer of T values at the points of arg (see cached_values).
@@ -171,13 +184,14 @@ largest_application_bytes(bc::OperatorBroadcasted) = max(
 )
 
 # Recursively replace all operator broadcasts with the result of apply_operator.
-apply_operators(arg) = arg
-apply_operators(bc::NonPointwiseBroadcasted) = apply_pointwise_operators(bc.style, bc)
-apply_operators(bc::OperatorBroadcasted) =
+@noconsts apply_operators(arg) = arg
+@noconsts apply_operators(bc::NonPointwiseBroadcasted) =
+    apply_pointwise_operators(bc.style, bc)
+@noconsts apply_operators(bc::OperatorBroadcasted) =
     apply_operator(bc.f, unrolled_map(operator_arg, bc.args)...)
 
 # The evaluation of pointwise functions of operators can depend on the style.
-apply_pointwise_operators(_, bc) =
+@noconsts apply_pointwise_operators(_, bc) =
     Broadcast.broadcasted(bc.f, unrolled_map(apply_operators, bc.args)...)
 
 # Whether the arguments can be passed to a function that is not inlined, which allocates
@@ -201,7 +215,7 @@ has_mutable_registers(array::SubArray) = has_mutable_registers(parent(array))
 @inline freeze_registers(arg) = arg
 @inline freeze_registers(field::Field) =
     has_mutable_registers(field) ? constant_field(field) : field
-@inline freeze_registers(bc::Broadcast.Broadcasted) =
+@inline @noconsts freeze_registers(bc::Broadcast.Broadcasted) =
     has_mutable_registers(bc) ?
     Broadcast.Broadcasted(
         bc.style,
@@ -213,14 +227,14 @@ has_mutable_registers(array::SubArray) = has_mutable_registers(parent(array))
 
 # A broadcast rebuilt over new arguments keeps the space it was instantiated with, since the
 # spaces of the arguments of a slice need not be comparable (see Fields.shared_space).
-@inline function rebroadcasted(bc, args)
+@inline @noconsts function rebroadcasted(bc, args)
     bc′ = Broadcast.broadcasted(bc.f, args...)
     return Broadcast.Broadcasted(bc′.style, bc′.f, bc′.args, bc.axes)
 end
 
 # Like apply_operators, for an operator argument, which may keep operator broadcasts lazy;
 # reads is how the operator reads it (see arg_reads).
-operator_arg(arg, reads = Val(false)) = apply_operators(arg)
+@noconsts operator_arg(arg, reads = Val(false)) = apply_operators(arg)
 
 # Copy a slice into dest (spaces can differ); broadcasts skip .=, which infers loops twice.
 @inline copyto_slice!(dest, bc::LazyField) =
@@ -231,12 +245,14 @@ operator_arg(arg, reads = Val(false)) = apply_operators(arg)
 # style whose passes end with a barrier that publishes dest (see apply_stencil!) skips it with
 # finish = Val(false), for a loop that synchronizes once per statement (as a fused solver
 # does); the result is then not safe to read at other threads' points until the next barrier.
-apply_operators!(dest, bc, finish = Val(true)) = copyto_slice!(dest, apply_operators(bc))
+@noconsts apply_operators!(dest, bc, finish = Val(true)) =
+    copyto_slice!(dest, apply_operators(bc))
+
 # The buffers of a broadcast are those of its operators, which decides the level of shared
 # memory of a broadcast's slice loop (see DataLayouts.foreach_slice).
 DataLayouts.required_shared_memory(::typeof(apply_operators!), dest, bc) =
     largest_application_bytes(bc)
-DataLayouts.uses_shared_memory(::typeof(apply_operators!), dest, bc) =
+@noconsts DataLayouts.uses_shared_memory(::typeof(apply_operators!), dest, bc) =
     uses_shared_buffers(bc)
 
 # Whether evaluating an expression allocates any shared buffer (see
@@ -264,7 +280,7 @@ in_registers_when_applied(bc::Broadcast.Broadcasted) =
 # buffers, as on CPUs), and it is inlined if it writes to one, since a function that is not
 # inlined would put them on the heap. Statements outside of slice loops have no temporaries,
 # so they skip the check.
-@inline function Base.copyto!(dest::Fields.Field, bc::NonPointwiseBroadcasted)
+@inline @noconsts function Base.copyto!(dest::Fields.Field, bc::NonPointwiseBroadcasted)
     has_registers =
         !DataLayouts.needs_loop_setup(DataLayouts.DataScope(dest, bc)) &&
         !can_compile_separately(dest, bc)
@@ -275,12 +291,13 @@ in_registers_when_applied(bc::Broadcast.Broadcasted) =
 end
 
 # Writing to register temporaries in a function that is not inlined would put them on the heap.
-@inline inline_apply_operators!(dest, bc) = @inline apply_operators!(dest, bc, Val(true))
+@inline @noconsts inline_apply_operators!(dest, bc) =
+    @inline apply_operators!(dest, bc, Val(true))
 
 # Ignore masks that cannot skip this type of slice; for example, a column mask
 # is ignored when looping over slabs, since every column in a slab is needed to
 # compute the operator's result.
-function copyto_by_slices!(dest, bc)
+@noconsts function copyto_by_slices!(dest, bc)
     op = slice_operator(bc.style)
     space_mask = Spaces.get_mask(axes(dest))
     mask =
@@ -344,14 +361,14 @@ thread's registers; used for every [`apply_operator`](@ref) destination, which o
 own thread reads and writes. This lets two applications in one fused expression
 be live at once (see the buffer reuse invariant in [`apply_operator`](@ref)).
 """
-@inline register_similar(arg, ::Type{T}) where {T} =
+@inline @noconsts register_similar(arg, ::Type{T}) where {T} =
     Field(
         DataLayouts.register_similar(Fields.field_values(arg), T),
         Fields.shared_space(arg),
     )
 
 # An operator broadcast has no data of its own, so its destination's template is allocated.
-@inline register_similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
+@inline @noconsts register_similar(bc::NonPointwiseBroadcasted, ::Type{T}) where {T} =
     register_similar(destination_template(bc), T)
 
 """
@@ -364,17 +381,17 @@ live at the same time as another one is placed after it, at a byte `offset` of a
 the other's [`shared_buffer_bytes`](@ref) (see the buffer reuse invariant in
 [`apply_operator`](@ref)).
 """
-@inline buffer_similar(arg, ::Type{T}, offset::Val = Val(0)) where {T} = Field(
+@inline @noconsts buffer_similar(arg, ::Type{T}, offset::Val = Val(0)) where {T} = Field(
     DataLayouts.buffer_similar(Fields.field_values(arg), T, offset),
     Fields.shared_space(arg),
 )
-@inline buffer_similar(
+@inline @noconsts buffer_similar(
     bc::NonPointwiseBroadcasted,
     ::Type{T},
     offset::Val = Val(0),
 ) where {T} =
     buffer_similar(destination_template(bc), T, offset)
-@inline buffer_similar(arg) = buffer_similar(arg, eltype(arg))
+@inline @noconsts buffer_similar(arg) = buffer_similar(arg, eltype(arg))
 
 """
     constant_field(arg)
@@ -413,8 +430,8 @@ arguments are returned unchanged. On GPUs buffers share memory unless they are g
 different offsets (see [`buffer_similar`](@ref)), so callers must keep their lifetimes
 disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 """
-@inline materialize_buffer(arg, offset = Val(0)) = arg
-@inline materialize_buffer(arg::MaybeLazyField, offset = Val(0)) =
+@inline @noconsts materialize_buffer(arg, offset = Val(0)) = arg
+@inline @noconsts materialize_buffer(arg::MaybeLazyField, offset = Val(0)) =
     arg isa LazyField || DataLayouts.stored_in_registers(Fields.field_values(arg)) ?
     constant_field(copyto!(buffer_similar(arg, eltype(arg), offset), arg)) : arg
 
@@ -424,7 +441,8 @@ disjoint; see the buffer reuse invariant in [`apply_operator`](@ref).
 Like [`materialize_buffer`](@ref), but only applied to arguments that are never
 read across a thread boundary (avoiding the latency of a shared memory buffer).
 """
-@inline maybe_private_buffer(arg) = has_private_buffers(arg) ? materialize_buffer(arg) : arg
+@inline @noconsts maybe_private_buffer(arg) =
+    has_private_buffers(arg) ? materialize_buffer(arg) : arg
 
 """
     own_point_values(arg)
@@ -433,7 +451,7 @@ Like [`maybe_private_buffer`](@ref), for an argument that each thread reads only
 points but once per horizontal dimension, so that a scope with registers evaluates it there
 once. Arguments read at other threads' points (like `Restrict`'s) must not use this.
 """
-@inline own_point_values(arg) =
+@inline @noconsts own_point_values(arg) =
     has_private_buffers(arg) ? materialize_buffer(arg) :
     arg isa MaybeLazyField &&
     DataLayouts.has_scope_registers(Fields.field_values(destination_template(arg))) ?
@@ -445,8 +463,8 @@ once. Arguments read at other threads' points (like `Restrict`'s) must not use t
 Like [`cached_arg`](@ref) for an argument read without branching, but leaving `arg` lazy when it
 is a shallow `Broadcasted` over materialized values and a single thread owns the data.
 """
-@inline fused_buffer(arg) = arg
-@inline fused_buffer(bc::LazyField) =
+@inline @noconsts fused_buffer(arg) = arg
+@inline @noconsts fused_buffer(bc::LazyField) =
     has_private_buffers(bc) && unrolled_all(arg -> !(arg isa LazyField), bc.args) ?
     bc : cached_arg(bc, Val(true))
 
@@ -513,7 +531,3 @@ values that every thread in the scope must read together, like other threads' re
 @inline allows_branching(_) = true
 @inline allows_branching(bc::Broadcast.Broadcasted) =
     unrolled_all(allows_branching, bc.args)
-
-# Disable constant propagation to reduce heap allocations during type inference.
-@drop_constprop register_similar, buffer_similar
-@drop_constprop materialize_buffer, maybe_private_buffer, own_point_values, fused_buffer

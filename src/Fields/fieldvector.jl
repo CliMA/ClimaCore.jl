@@ -474,7 +474,7 @@ is_gpu_array_type(::Type{<:SubArray{<:Any, <:Any, P}}) where {P} =
 @inline eval_linear_bc(arg::Number, i::Int) = arg
 @inline eval_linear_bc(arg::Base.RefValue, i::Int) = arg[]
 @inline eval_linear_bc(arg::Tuple{Any}, i::Int) = arg[1]
-@inline eval_linear_bc(bc::Base.Broadcast.Broadcasted, i::Int) =
+@inline @noconsts eval_linear_bc(bc::Base.Broadcast.Broadcasted, i::Int) =
     bc.f(unrolled_map(arg -> eval_linear_bc(arg, i), bc.args)...)
 
 # The slow path out of copyto_linear_bc!, taken only when the sizes in a
@@ -505,7 +505,7 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+@inline @noconsts function Base.copyto!(
     dest::FieldVector,
     bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
@@ -578,7 +578,7 @@ for S in (
     :(StaticArrays.StaticArrayStyle{0}),
     :(BlockArrays.AbstractBlockStyle{0}),
 )
-    @eval @inline Base.copyto!(
+    @eval @inline @noconsts Base.copyto!(
         dest::FieldVector,
         bc::Base.Broadcast.Broadcasted{<:$S},
     ) = _copyto_scalar_broadcast!(dest, bc)
@@ -587,9 +587,9 @@ end
 # Copying a scalar fills every entry with it, as in fill!. Without this method,
 # Base's fallback would iterate over the scalar and call setindex!, which is a
 # disallowed scalar indexing operation for a FieldVector backed by a GPU array.
-@inline Base.copyto!(dest::FieldVector, value::Number) = fill!(dest, value)
+@inline @noconsts Base.copyto!(dest::FieldVector, value::Number) = fill!(dest, value)
 
-@inline function Base.fill!(dest::FieldVector, value)
+@inline @noconsts function Base.fill!(dest::FieldVector, value)
     unrolled_foreach(property_name_vals(dest)) do symb_val
         fill!(parent(getfield(field_vector_values(dest), unval(symb_val))), value)
     end

@@ -79,4 +79,12 @@ end
     # supported too.
     pool_array = scoped_array(ThisThreadPool(), Float64, 3)
     @test pool_array isa Vector{Float64} && length(pool_array) == 3
+    # The value of buffer determines the type of the array, which is inferred when the
+    # value is a constant.
+    new_array(scope) = scoped_array(scope, Float64, 3)
+    buffered_array(scope) = scoped_array(scope, Float64, 3; buffer = true)
+    @test @inferred(new_array(ThisThread())) isa Vector{Float64}
+    @test @inferred(buffered_array(ThisThread())) isa SubArray{Float64, 1}
+    @test @inferred(new_array(ThisThreadPool())) isa Vector{Float64}
+    @test @inferred(buffered_array(ThisThreadPool())) isa SubArray{Float64, 1}
 end

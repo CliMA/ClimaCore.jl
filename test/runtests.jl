@@ -18,6 +18,7 @@ unit_tests = [
     UnitTest("Stable views"                             ,"Utilities/unit_stable_view.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("AutoBroadcaster"                          ,"Utilities/unit_auto_broadcaster.jl"; tier = :unit, subsystem = :utilities),
     UnitTest("DebugOnly"                                ,"Utilities/unit_debug_only.jl"; tier = :unit, subsystem = :utilities),
+    UnitTest("noconsts"                                 ,"Utilities/unit_noconsts.jl"; tier = :unit, subsystem = :utilities),
 
     # Domains
     UnitTest("Domains"                                  ,"Domains/unit_domains.jl"; tier = :unit, subsystem = :domains),

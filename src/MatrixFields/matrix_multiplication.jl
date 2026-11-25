@@ -273,7 +273,7 @@ end
 # A product is on the staggering of matrix1, over the larger of the spaces of its arguments
 # (e.g., a matrix on one column multiplies every column of an extruded field). A matrix band
 # with half-integer offsets maps values from the other staggering.
-function Operators.return_space(::MultiplyColumnwiseBandMatrixField, matrix1, arg)
+@noconsts function Operators.return_space(::MultiplyColumnwiseBandMatrixField, matrix1, arg)
     space1 = Fields.shared_space(matrix1)
     staggering = Spaces.staggering(space1)
     isnothing(staggering) && return space1
@@ -348,7 +348,7 @@ Operators.reads_without_branching(::MultiplyColumnwiseBandMatrixField) = true
 # matrices, so rows need no boundary stencils; the second argument is read at every offset,
 # at an index clamped into the column (a branch would serialize GPU reads), and zeroed
 # afterwards, keeping reads branch-free.
-Base.@propagate_inbounds function Operators.stencil_value(
+Base.@propagate_inbounds @noconsts function Operators.stencil_value(
     ::MultiplyColumnwiseBandMatrixField,
     space,
     idx,

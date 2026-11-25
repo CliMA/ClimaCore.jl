@@ -20,13 +20,13 @@ for (basis, V, metric, converted) in (
 )
     M = metric == :nothing ? :(Union{Nothing, AbstractTensor{2}}) : :(AbstractTensor{2})
     @eval @inline metric_for_components_type(::$basis, ::Type{<:$V}, lg) = $metric
-    @eval @inline _to_components_type(::$basis, v::$V, metric::$M) = $converted
+    @eval @inline @noconsts _to_components_type(::$basis, v::$V, metric::$M) = $converted
 end
 
 # Element types that no conversion handles keep the unnarrowed `lg` and have no
 # `_to_components_type` method for it, so they still raise the same `MethodError`.
 @inline metric_for_components_type(::ComponentsType, ::Type, lg) = lg
-@inline _to_components_type(
+@inline @noconsts _to_components_type(
     basis::ComponentsType,
     v::Union{ContravariantTensor, CovariantTensor, OrthonormalTensor},
     lg::LocalGeometry,

@@ -86,7 +86,7 @@ each component of the name chain; e.g., `get_field(x, @name(a.b))` is `x.a.b`.
 The empty name `@name()` returns `x` itself.
 """
 get_field(x, ::FieldName{()}) = x
-get_field(x, name::FieldName) =
+@noconsts get_field(x, name::FieldName) =
     get_field(getproperty(x, extract_first(name)), drop_first(name))
 
 broadcasted_has_field(::Type{X}, ::FieldName{()}) where {X} = true

@@ -42,7 +42,7 @@ struct WeakForm <: FormType end
 
 # Lazy expression applying the component extractor f to each value of arg, with
 # lg narrowed to just the metric f reads (at most one 3x3 tensor per point).
-@inline function components_broadcasted(f::F, basis, arg, lg) where {F}
+@inline @noconsts function components_broadcasted(f::F, basis, arg, lg) where {F}
     eltype′ = drop_auto_broadcasters(Utilities.safe_eltype(arg))
     metric = Geometry.metric_for_components_type(basis, eltype′, lg)
     return isnothing(metric) ? Base.broadcasted(Base.Fix2(f, nothing), arg) :
@@ -53,17 +53,17 @@ end
 # J for StrongForm, WJ for WeakForm; the weighted values are evaluated by own_point_values.
 jacobian_weight(::StrongForm, arg) = Fields.local_geometry_field(arg).J
 jacobian_weight(::WeakForm, arg) = Fields.local_geometry_field(arg).WJ
-@inline materialize_jacobian_weighted(form::FormType, arg) =
+@inline @noconsts materialize_jacobian_weighted(form::FormType, arg) =
     own_point_values(Base.broadcasted(*, arg, jacobian_weight(form, arg)))
-@inline jacobian_unweighted(form, dest) =
+@inline @noconsts jacobian_unweighted(form, dest) =
     Base.broadcasted(/, dest, jacobian_weight(form, dest))
 
 # Lazily multiply arg by, or divide dest by, the quadrature weights W = WJ / J
 # for WeakForm operators; a no-op for StrongForm. In both forms arg is
 # evaluated once via own_point_values, never in a shared buffer, which would stay live for
 # the whole application and could share memory with the first dimension's intermediate.
-@inline materialize_quadrature_weighted(::StrongForm, arg) = own_point_values(arg)
-@inline function materialize_quadrature_weighted(::WeakForm, arg)
+@inline @noconsts materialize_quadrature_weighted(::StrongForm, arg) = own_point_values(arg)
+@inline @noconsts function materialize_quadrature_weighted(::WeakForm, arg)
     (; WJ, J) = Fields.local_geometry_field(arg)
     has_private_buffers(arg) ||
         return own_point_values(Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J)))
@@ -78,8 +78,8 @@ function quadrature_weighted(::WeakForm, arg)
     return Base.broadcasted(*, arg, Base.broadcasted(/, WJ, J))
 end
 
-@inline quadrature_unweighted(::StrongForm, dest) = dest
-@inline function quadrature_unweighted(::WeakForm, dest)
+@inline @noconsts quadrature_unweighted(::StrongForm, dest) = dest
+@inline @noconsts function quadrature_unweighted(::WeakForm, dest)
     (; WJ, J) = Fields.local_geometry_field(dest)
     return Base.broadcasted(*, dest, Base.broadcasted(/, J, WJ))
 end
@@ -142,8 +142,8 @@ slab_data(arg) = Broadcast.instantiate(Fields.field_values(Base.broadcastable(ar
 # Read one point of a muladd_slab! argument. A fused lazy expression (see
 # fused_buffer) is evaluated at the point rather than sliced: slicing would
 # rebuild its axes-free Broadcasted tree at every point.
-@inline arg_point_value(arg_data, i, j) = @inbounds column(arg_data, i, j, 1)[]
-@inline arg_point_value(bc::DataLayouts.LazyDataLayout, i, j) =
+@inline @noconsts arg_point_value(arg_data, i, j) = @inbounds column(arg_data, i, j, 1)[]
+@inline @noconsts arg_point_value(bc::DataLayouts.LazyDataLayout, i, j) =
     @inbounds Base.Broadcast._broadcast_getindex(bc, CartesianIndex(1, i, j, 1))
 
 # arg_data, or a view of it that only reads the calling thread's own points, which device
@@ -168,7 +168,7 @@ sum_value(matrix, arg_value::F, dim::Union{Val{:i}, Val{:j}}, i, j) where {F} =
 # A single thread owning the whole slab (as on CPUs) visits a slice as a unit;
 # otherwise each thread may only write the destination points in its own
 # registers (see register_similar), so it visits them one at a time, in rounds.
-@inline muladd_slab!(dest, matrix, arg, dim) =
+@inline @noconsts muladd_slab!(dest, matrix, arg, dim) =
     has_private_buffers(dest) ? sliced_muladd_slab!(dest, matrix, arg, dim) :
     pointwise_muladd_slab!(dest, matrix, arg, dim)
 
@@ -188,13 +188,13 @@ end
 # still elided under --check-bounds: an index of unproven provenance lets
 # dest's MArray escape into the check's error path, moving it to the heap.
 # The point-read closure is @inline, since it exceeds the threshold and calls block folding.
-@inline function sliced_muladd_slab!(dest, matrix, arg, dim)
+@inline @noconsts function sliced_muladd_slab!(dest, matrix, arg, dim)
     (arg_data, dest_data) = (slab_data(arg), slab_data(dest))
     n′s = summed_indices(matrix)
     indices = DataLayouts.each_slice_index(column, dest_data)
     ordered(k, n) = dim isa Val{:i} ? (k, n) : (n, k)
     @inbounds for n in axes(indices, dim isa Val{:i} ? 2 : 1)
-        @inline point_value(n′) = arg_point_value(arg_data, ordered(n′, n)...)
+        @inline @noconsts point_value(n′) = arg_point_value(arg_data, ordered(n′, n)...)
         values = unrolled_map(point_value, n′s)
         for k in axes(indices, dim isa Val{:i} ? 1 : 2)
             column(dest_data, Tuple(indices[ordered(k, n)..., 1])...)[] +=
@@ -227,17 +227,17 @@ end
 # Set dest_slice[n] .+= (matrix * Fₙ)[n] for each 1D i or j slice of the inputs,
 # where Fₙ = (arg1[n] + arg1) * (arg2[n] + arg2) / 2 is a slice of the symmetric
 # two-point flux tensor F[n, m] = (arg1[n] + arg1[m]) * (arg2[n] + arg2[m]) / 2.
-@inline function split_muladd_slab!(dest, matrix, arg1, arg2, dim)
+@inline @noconsts function split_muladd_slab!(dest, matrix, arg1, arg2, dim)
     arg1_data = slab_data(arg1)
     arg2_data = slab_data(arg2)
     DataLayouts.update_points!(+, slab_data(dest), column) do dest_index
         (i, j, _) = Tuple(dest_index)
-        arg1_value(i′, j′) = arg_point_value(arg1_data, i′, j′)
+        @noconsts arg1_value(i′, j′) = arg_point_value(arg1_data, i′, j′)
         arg2_value(i′, j′) = arg_point_value(arg2_data, i′, j′)
         # The destination point is the calling thread's own (see update_points!).
         arg1_ij = arg_point_value(own_values(arg1_data), i, j)
         arg2_ij = arg_point_value(own_values(arg2_data), i, j)
-        flux_value(i′, j′) =
+        @noconsts flux_value(i′, j′) =
             @inbounds (arg1_ij + arg1_value(i′, j′)) * (arg2_ij + arg2_value(i′, j′)) / 2
         @inbounds unrolled_sum(
             sum_value(matrix, flux_value, dim, i, j),
@@ -278,7 +278,7 @@ end
 # alias, so each is materialized, used, and retired before the next; when they
 # are in buffers, the synchronizations enforce this (the last one also protects
 # later applications). See the buffer reuse invariant in apply_operator.
-@inline function muladd_slab_dims!(
+@inline @noconsts function muladd_slab_dims!(
     muladd!::M, intermediate::I, scope, dims, dest, matrix, trailing_args...,
 ) where {M, I}
     muladd_slab_init!(dest)
@@ -306,7 +306,7 @@ end
 
 # Contravariant component along horizontal dimension h of a Jacobian-weighted
 # argument, and the covariant basis vector eʰ that Gradient multiplies by.
-@inline materialize_contravariant(::Val{h}, arg, lg, offset = Val(0)) where {h} =
+@inline @noconsts materialize_contravariant(::Val{h}, arg, lg, offset = Val(0)) where {h} =
     cached_arg(
         components_broadcasted(
             h == 1 ? Geometry.contravariant1 : Geometry.contravariant2,
@@ -325,9 +325,9 @@ end
 # contravariant vectors V₁ and V₂. A term is dropped when arg's values are covariant
 # vectors without its component (e.g., the third of a Covariant12Vector), since it
 # is zero everywhere but would be exchanged between threads like any other value.
-@inline materialize_levi_civita(dim, arg, lg) =
+@inline @noconsts materialize_levi_civita(dim, arg, lg) =
     cached_arg(levi_civita(dim, arg, lg), Val(true))
-@inline function levi_civita(::Val{h}, arg, lg) where {h}
+@inline @noconsts function levi_civita(::Val{h}, arg, lg) where {h}
     (V₁, f₁, n₁, V₂, f₂, n₂) =
         h == 1 ?
         (
@@ -338,7 +338,7 @@ end
             Geometry.Contravariant1Vector, Geometry.covariant3, 3,
             Geometry.Contravariant3Vector, Geometry.covariant1, 1,
         )
-    term(V, f) =
+    @noconsts term(V, f) =
         Base.broadcasted(V, components_broadcasted(f, Geometry.Covariant(), arg, lg))
     T = drop_auto_broadcasters(Utilities.safe_eltype(arg))
     (has₁, has₂) = (has_covariant_component(T, n₁), has_covariant_component(T, n₂))
@@ -435,7 +435,7 @@ return_eltype(::Divergence, arg) = Geometry.divergence_result_type(eltype(arg))
 
 # Strong form is J⁻¹ ∑ₕ Dₕ J argʰ;
 # weak form is -(WJ)⁻¹ ∑ₕ Dₕᵀ WJ argʰ.
-function apply_operator(op::Divergence{F}, arg) where {F}
+@noconsts function apply_operator(op::Divergence{F}, arg) where {F}
     dims = horizontal_dims(arg)
     lg = Fields.local_geometry_field(arg)
     arg′ = materialize_jacobian_weighted(F(), arg)
@@ -451,7 +451,7 @@ end
 # The contravariant component cached per dimension has the type of the divergence of the
 # Jacobian-weighted argument, and the dimensions share one buffer (see the buffer reuse
 # invariant in apply_operator).
-buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence{F}}) where {F} =
+@noconsts buffer_bytes(bc::SpectralOperatorBroadcasted{<:Divergence{F}}) where {F} =
     isempty(horizontal_dims(bc.args[1])) ? 0 :
     cached_bytes(bc.args[1], weighted_divergence_type(F(), bc.args[1]))
 
@@ -575,7 +575,7 @@ return_eltype(::SplitDivergence, arg1, arg2) = Utilities.return_type(
 
 # Split form at index n is J⁻¹ ∑ₕ [Dₕ - Diag(Dₕ)] Fʰ[n, :], where F[n, :] is a
 # slice of the tensor F[n, m] = (arg1[n] + arg1[m]) * (arg2[n] + arg2[m]) / 2.
-function apply_operator(op::SplitDivergence, arg1, arg2)
+@noconsts function apply_operator(op::SplitDivergence, arg1, arg2)
     dims = horizontal_dims(arg1)
     lg = Fields.local_geometry_field(arg1)
     arg1′ = materialize_jacobian_weighted(StrongForm(), arg1)
@@ -684,7 +684,7 @@ return_eltype(::Gradient, arg) =
     Geometry.gradient_result_type(Val(horizontal_dims(arg)), eltype(arg))
 
 # Strong form is ∑ₕ Dₕ eʰ ⊗ f, weak form is -W⁻¹ ∑ₕ Dₕᵀ eʰ ⊗ W f.
-function apply_operator(op::Gradient{F}, arg) where {F}
+@noconsts function apply_operator(op::Gradient{F}, arg) where {F}
     dims = horizontal_dims(arg)
     arg′ = materialize_quadrature_weighted(F(), arg)
     dest = register_similar(arg, return_eltype(op, arg))
@@ -698,7 +698,7 @@ function apply_operator(op::Gradient{F}, arg) where {F}
 end
 
 # The term eʰ ⊗ arg′ cached per dimension holds one dimension's part of the gradient.
-function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Gradient{F}}) where {F}
+@noconsts function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Gradient{F}}) where {F}
     arg = bc.args[1]
     value_type = eltype(quadrature_weighted(F(), arg))
     gradient_type = Geometry.gradient_result_type(Val(horizontal_dims(arg)), value_type)
@@ -801,20 +801,20 @@ return_eltype(::Curl, arg) =
 
 # Strong form is J⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕ argₙ eₘ;
 # weak form is -(WJ)⁻¹ ∑ₕₙₘ εʰⁿᵐ Dₕᵀ W argₙ eₘ.
-function apply_operator(op::Curl{F}, arg) where {F}
+@noconsts function apply_operator(op::Curl{F}, arg) where {F}
     dims = horizontal_dims(arg)
     lg = Fields.local_geometry_field(arg)
     arg′ = materialize_quadrature_weighted(F(), arg)
     dest = register_similar(arg, return_eltype(op, arg))
     matrix = isempty(dims) ? nothing : deriv_matrix(F(), dest)
-    @inline εʰⁿᵐ_arg′ₙ_eₘ(dim) = materialize_levi_civita(dim, arg′, lg)
+    @inline @noconsts εʰⁿᵐ_arg′ₙ_eₘ(dim) = materialize_levi_civita(dim, arg′, lg)
     muladd_slab_dims!(
         muladd_slab!, εʰⁿᵐ_arg′ₙ_eₘ, DataLayouts.DataScope(arg), dims, dest, matrix,
     )
     return jacobian_unweighted(F(), constant_field(dest))
 end
 
-function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl{F}}) where {F}
+@noconsts function buffer_bytes(bc::SpectralOperatorBroadcasted{<:Curl{F}}) where {F}
     (arg,) = bc.args
     (dims, lg) = (horizontal_dims(arg), Fields.local_geometry_field(arg))
     term_bytes(dim) =
@@ -909,7 +909,7 @@ tensor_weighted(::Restrict, arg) =
 tensor_unweighted(::Interpolate, dest) = dest
 tensor_unweighted(::Restrict, dest) = jacobian_unweighted(WeakForm(), dest)
 
-function apply_operator(op::TensorOperator, arg)
+@noconsts function apply_operator(op::TensorOperator, arg)
     arg′ = tensor_weighted(op, arg)
     # The destination's shape comes from the output space's local geometry type
     # (not a value, which would make the buffer's size dynamic and its
@@ -1104,14 +1104,14 @@ end
 # coarse point (a, b), where arg′ = WJ f has already been materialized. Every
 # coarse point reads the whole slab, so all threads that materialized arg′ must
 # be synchronized before this is called.
-@inline function lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
+@inline @noconsts function lumped_restrict_slab!(θ, Bᵢ, Bⱼ, arg′, WJ)
     arg_data = slab_data(arg′)
     WJ_data = slab_data(WJ)
     i′s = ntuple(identity, Val(size(Bᵢ, 1)))
     j′s = ntuple(identity, Val(size(Bⱼ, 1)))
     DataLayouts.foreach_column(θ; enumerate = Val(true)) do index, θ_point
         (a, b, _) = Tuple(index)
-        weighted_sum(data) = unrolled_sum(j′s) do j
+        @noconsts weighted_sum(data) = unrolled_sum(j′s) do j
             @inbounds Bⱼ[j, b] * unrolled_sum(
                 i -> (@inbounds Bᵢ[i, a] * arg_point_value(data, i, j)),
                 i′s,
@@ -1124,7 +1124,7 @@ end
 
 # Set dest_ij = Σ_ab Bᵢ[i, a] Bⱼ[j, b] θ_ab for every point (i, j) of the slab.
 # All threads that wrote θ must be synchronized before this is called.
-@inline function prolong_slab!(dest, Bᵢ, Bⱼ, θ)
+@inline @noconsts function prolong_slab!(dest, Bᵢ, Bⱼ, θ)
     a′s = ntuple(identity, Val(size(Bᵢ, 2)))
     b′s = ntuple(identity, Val(size(Bⱼ, 2)))
     DataLayouts.foreach_column(
@@ -1141,7 +1141,7 @@ end
     end
 end
 
-function apply_operator(op::LumpedRestriction, arg)
+@noconsts function apply_operator(op::LumpedRestriction, arg)
     dims = horizontal_dims(arg)
     isempty(dims) && return arg # no horizontal element to filter within
     fine_quadrature_style = Spaces.quadrature_style(Fields.shared_space(arg))
@@ -1381,8 +1381,3 @@ function rmatmul2(W, S, i, j)
     end
     return r
 end
-
-# Disable constant propagation to reduce heap allocations during type inference.
-@drop_constprop apply_operator, muladd_slab!, muladd_slab_dims!,
-lumped_restrict_slab!, prolong_slab!, materialize_jacobian_weighted,
-materialize_quadrature_weighted, jacobian_unweighted, quadrature_unweighted

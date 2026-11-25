@@ -122,7 +122,7 @@ end
     Base.@invoke DataLayouts.shared_level_value(scope::Any, column, v)
 
 # Arguments read without branching stay in registers if no thread owns more than one point.
-@inline Operators.caches_in_registers(scope::ThisSubBlock, arg, ::Val{true}) =
+@inline @noconsts Operators.caches_in_registers(scope::ThisSubBlock, arg, ::Val{true}) =
     shuffles_in_warp(scope) &&
     owns_one_point_each(Fields.field_values(Operators.destination_template(arg)), scope)
 @inline Operators.cached_values(scope::ThisSubBlock, arg, ::Val{true}, offset = Val(0)) =
