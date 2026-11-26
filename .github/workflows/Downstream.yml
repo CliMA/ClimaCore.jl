@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: # atmos is excluded here because buildkite is used to test it
+        package: # ClimaAtmos.jl is tested by the climaatmos job below
           - 'ClimaCoupler.jl'
           - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
@@ -59,3 +59,13 @@ jobs:
           julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.instantiate()'
           julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP -e 'using Pkg; Pkg.develop(; path = ".")'
           julia --color=yes --project=ClimaCoupler.jl/experiments/AMIP ClimaCoupler.jl/experiments/test/runtests.jl
+
+  # ClimaAtmos's GitHub test groups, run against this checkout of ClimaCore.
+  # Buildkite separately triggers the full ClimaAtmos pipeline.
+  # TODO: switch to @main once CliMA/ClimaAtmos.jl's tr/downstream-workflow merges.
+  climaatmos:
+    name: downstream ClimaAtmos.jl
+    permissions:
+      actions: write # prunes old depot caches on pushes to main
+      contents: read
+    uses: CliMA/ClimaAtmos.jl/.github/workflows/test-groups.yml@tr/downstream-workflow
