@@ -103,9 +103,13 @@ MPI.jl, pointing it at a system MPI, and launching are ClimaComms's
     ```
 
  3. Write the model as on one process. DSS buffers are created per field with
-    `Topologies.create_dss_buffer` and hold the send and receive buffers;
+    `Spaces.create_dss_buffer` and hold the send and receive buffers;
     `Spaces.weighted_dss!(field, buffer)` performs the exchange. Passing several
-    fields (or a `FieldVector`) to one call shares the exchange. On DG spaces,
+    field–buffer pairs (or a `FieldVector`) to one call overlaps their
+    exchanges. A buffer created for several fields,
+    `buffer = Spaces.create_dss_buffer(field1, field2)`, combines them into one
+    message per neighboring process: `Spaces.weighted_dss!((field1, field2) => buffer)`.
+    On DG spaces,
     `Operators.start_dg_ghost_exchange` starts one halo exchange that several
     face operators consume.
 

@@ -196,3 +196,8 @@ end
         end
     end
 end
+
+include(joinpath(@__DIR__, "dss_multi_field.jl"))
+@testset "Multi-field DSS with one exchange" begin
+    test_multi_field_dss(ClimaComms.context())
+end

@@ -23,7 +23,9 @@ Spaces.unique_nodes
 
 ```@docs
 Topologies.DSSBuffer
+Topologies.MultiDSSBuffer
 Topologies.create_dss_buffer
+Topologies.create_dss_buffers
 Topologies.Perimeter2D
 ```
 

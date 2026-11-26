@@ -54,3 +54,8 @@ include("ddss_setup.jl")
     p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @test p == 0
 end
+
+include(joinpath(@__DIR__, "..", "dss_multi_field.jl"))
+@testset "Multi-field DSS with one exchange on $nprocs processes" begin
+    test_multi_field_dss(context)
+end
