@@ -267,6 +267,18 @@ function Spaces.weighted_dss!(
     Spaces.weighted_dss!(pairs...)
 end
 
+"""
+    Spaces.weighted_dss!(fv::FieldVector, dss_buffer::Topologies.MultiDSSBuffer)
+
+Apply weighted DSS to all fields in `fv` with one exchange, using a buffer created
+with `Spaces.create_dss_buffer(fv.field1, fv.field2, ...)` for the fields of `fv` in
+the order of `propertynames(fv)`.
+"""
+Spaces.weighted_dss!(fv::FieldVector, dss_buffer::Topologies.MultiDSSBuffer) =
+    Spaces.weighted_dss!(
+        map(key -> getproperty(fv, key), propertynames(fv)) => dss_buffer,
+    )
+
 @inline function first_fieldvector_in_bc(args::Tuple, rargs...)
     idx = unrolled_findfirst(args) do arg
         !isnothing(first_fieldvector_in_bc(arg))

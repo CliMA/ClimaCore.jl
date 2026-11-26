@@ -237,9 +237,11 @@ function Topologies.dss_ghost!(
     end
 end
 
+# Enqueues the copy without synchronizing; the caller synchronizes once after
+# filling all send buffers, before MPI reads them on its own stream.
 function Topologies.fill_send_buffer!(
     ::ClimaComms.CUDADevice,
-    (; perimeter_data, send_buf_idx, send_data)::Topologies.DSSBuffer,
+    (; perimeter_data, send_buf_idx, send_data, buf_offset)::Topologies.DSSBuffer,
 )
     Nv = DataLayouts.nlevels(perimeter_data)
     Nf = DataLayouts.ncomponents(perimeter_data)
@@ -247,48 +249,68 @@ function Topologies.fill_send_buffer!(
     nitems = Nv * nsend
     iszero(nitems) && return nothing
     auto_launch!(
-        (perimeter_data, send_data, send_buf_idx);
+        (perimeter_data, send_data, send_buf_idx, buf_offset);
         dss_config(nitems)...,
-    ) do perimeter_data, send_data, send_buf_idx
+    ) do perimeter_data, send_data, send_buf_idx, buf_offset
         gidx = DataLayouts.thread_rank(ThisKernel())
         @inbounds if gidx <= nitems
             (v, send_index) = CartesianIndices((Nv, nsend))[gidx].I
             # Avoid indexing with a colon, which would allocate in the kernel.
             (h, p) = (send_buf_idx[send_index, 1], send_buf_idx[send_index, 2])
             item = perimeter_data[v, p, 1, h]
-            buffer_index = (v - 1) * Nf + 1 + (send_index - 1) * Nv * Nf
+            buffer_index = buf_offset[send_index] + (v - 1) * Nf + 1
             DataLayouts.set_struct!(send_data, item, buffer_index, Val(1))
         end
         nothing
     end
-    CUDA.synchronize(; blocking = true) # Sync across streams (MPI uses a separate stream)
 end
 
+# One thread per level and receiving perimeter node adds that node's receive rows
+# in ascending order, the order of the CPU loop, so the result is deterministic
+# and matches the CPU bitwise even where several processes send to one node.
 function Topologies.load_from_recv_buffer!(
     ::ClimaComms.CUDADevice,
-    (; perimeter_data, recv_buf_idx, recv_data)::Topologies.DSSBuffer,
+    (;
+        perimeter_data,
+        recv_data,
+        buf_offset,
+        recv_target_idx,
+        recv_target_offset,
+        recv_target_rows,
+    )::Topologies.DSSBuffer,
 )
     Nv = DataLayouts.nlevels(perimeter_data)
     Nf = DataLayouts.ncomponents(perimeter_data)
-    nrecv = size(recv_buf_idx, 1)
-    nitems = Nv * nrecv
+    ntargets = size(recv_target_idx, 1)
+    nitems = Nv * ntargets
     iszero(nitems) && return nothing
     auto_launch!(
-        (perimeter_data, recv_data, recv_buf_idx);
+        (
+            perimeter_data,
+            recv_data,
+            buf_offset,
+            recv_target_idx,
+            recv_target_offset,
+            recv_target_rows,
+        );
         dss_config(nitems)...,
-    ) do perimeter_data, recv_data, recv_buf_idx
+    ) do perimeter_data,
+    recv_data,
+    buf_offset,
+    recv_target_idx,
+    recv_target_offset,
+    recv_target_rows
         gidx = DataLayouts.thread_rank(ThisKernel())
         @inbounds if gidx <= nitems
             T = eltype(perimeter_data)
-            (v, recv_index) = CartesianIndices((Nv, nrecv))[gidx].I
-            # Avoid indexing with a colon, which would allocate in the kernel.
-            (h, p) = (recv_buf_idx[recv_index, 1], recv_buf_idx[recv_index, 2])
-            buffer_index = (v - 1) * Nf + 1 + (recv_index - 1) * Nv * Nf
-            item_view = DataLayouts.view_struct(recv_data, T, buffer_index, Val(1))
-            parent_view = parent(view(perimeter_data, v, p, 1, h))
-            for f in 1:Nf
-                CUDA.@atomic parent_view[f] += item_view[f]
-            end # TODO: Find some way to avoid the nondeterminism of @atomic.
+            (v, target) = CartesianIndices((Nv, ntargets))[gidx].I
+            (h, p) = (recv_target_idx[target, 1], recv_target_idx[target, 2])
+            sum_data = perimeter_data[v, p, 1, h]
+            for n in recv_target_offset[target]:(recv_target_offset[target + 1] - 1)
+                buffer_index = buf_offset[recv_target_rows[n]] + (v - 1) * Nf + 1
+                sum_data += DataLayouts.get_struct(recv_data, T, buffer_index, Val(1))
+            end
+            perimeter_data[v, p, 1, h] = sum_data
         end
         nothing
     end

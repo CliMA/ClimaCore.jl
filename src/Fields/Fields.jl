@@ -616,46 +616,85 @@ Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
 
 """
     Spaces.weighted_dss!(field1 => dss_buffer1, field2 => dss_buffer2, ...)
+    Spaces.weighted_dss!((field1, field2, ...) => multi_dss_buffer, ...)
 
 Call [`Spaces.weighted_dss!`](@ref) on multiple fields at once, overlapping the
 communication of all fields with computation. Returns `nothing`.
+
+Each pair is either a field and its buffer from [`Spaces.create_dss_buffer`](@ref),
+or a tuple of fields and a buffer created for them with
+`Spaces.create_dss_buffer(field1, field2, ...)`. The fields in such a tuple share
+one exchange, which sends one message per neighboring process instead of one per
+field. In all cases, the device is synchronized once, after all send buffers are
+filled.
 """
-function Spaces.weighted_dss!(
-    (field1, dss_buffer1)::Pair,
-    field_buffer_pairs::Pair...,
-)
-    device = ClimaComms.device(axes(field1))
-    Spaces.weighted_dss_prepare!(
-        field_values(field1),
-        axes(field1),
-        dss_buffer1,
+function Spaces.weighted_dss!(pair1::Pair, pairs::Pair...)
+    dss_pairs = (pair1, pairs...)
+    dss_pairs_start!(dss_pairs)
+    dss_pairs_internal!(dss_pairs)
+    dss_pairs_ghost!(dss_pairs)
+    return nothing
+end
+
+"""
+    Spaces.weighted_dss_start!((field1, field2, ...), multi_dss_buffer)
+    Spaces.weighted_dss_internal!((field1, field2, ...), multi_dss_buffer)
+    Spaces.weighted_dss_ghost!((field1, field2, ...), multi_dss_buffer)
+
+The phases of [`Spaces.weighted_dss!`](@ref) for fields that share a
+[`Topologies.MultiDSSBuffer`](@ref), created with
+`Spaces.create_dss_buffer(field1, field2, ...)`.
+"""
+Spaces.weighted_dss_start!(fields::Tuple, dss_buffer::Topologies.MultiDSSBuffer) =
+    dss_pairs_start!((fields => dss_buffer,))
+Spaces.weighted_dss_internal!(fields::Tuple, dss_buffer::Topologies.MultiDSSBuffer) =
+    dss_pairs_internal!((fields => dss_buffer,))
+Spaces.weighted_dss_ghost!(fields::Tuple, dss_buffer::Topologies.MultiDSSBuffer) =
+    dss_pairs_ghost!((fields => dss_buffer,))
+
+# The fields of a DSS pair with their buffers, and the graph context of the pair.
+dss_items((field, dss_buffer)::Pair{<:Field}) = ((field, dss_buffer),)
+function dss_items((fields, dss_buffer)::Pair{<:Tuple, <:Topologies.MultiDSSBuffer})
+    length(fields) == length(dss_buffer.buffers) || throw(
+        ArgumentError("the DSS buffer was created for $(length(dss_buffer.buffers)) \
+                       fields, but $(length(fields)) fields were passed"),
     )
-    for (field, dss_buffer) in field_buffer_pairs
-        Spaces.weighted_dss_prepare!(
-            field_values(field),
-            axes(field),
-            dss_buffer,
-        )
-    end
+    return map(tuple, fields, dss_buffer.buffers)
+end
+dss_graph_context((_, dss_buffer)::Pair{<:Field}) =
+    dss_buffer isa Topologies.DSSBuffer ? dss_buffer.graph_context : nothing
+dss_graph_context((_, dss_buffer)::Pair{<:Tuple, <:Topologies.MultiDSSBuffer}) =
+    dss_buffer.graph_context
 
-    cuda_synchronize(device; blocking = true)
-    dss_buffer1 isa Topologies.DSSBuffer &&
-        ClimaComms.start(dss_buffer1.graph_context)
-    for (field, dss_buffer) in field_buffer_pairs
-        dss_buffer isa Topologies.DSSBuffer &&
-            ClimaComms.start(dss_buffer.graph_context)
+function dss_pairs_start!(dss_pairs::Tuple)
+    items = unrolled_flatmap(dss_items, dss_pairs)
+    unrolled_foreach(items) do (field, dss_buffer)
+        Spaces.weighted_dss_prepare!(field_values(field), axes(field), dss_buffer)
     end
+    # MPI reads the send buffers on its own stream.
+    cuda_synchronize(ClimaComms.device(axes(first(items)[1])); blocking = true)
+    unrolled_foreach(dss_pairs) do pair
+        graph_context = dss_graph_context(pair)
+        isnothing(graph_context) || ClimaComms.start(graph_context)
+    end
+    return nothing
+end
 
-    Spaces.weighted_dss_internal!(field1, dss_buffer1)
-    for (field, dss_buffer) in field_buffer_pairs
+function dss_pairs_internal!(dss_pairs::Tuple)
+    unrolled_foreach(unrolled_flatmap(dss_items, dss_pairs)) do (field, dss_buffer)
         Spaces.weighted_dss_internal!(field, dss_buffer)
     end
+    return nothing
+end
 
-    Spaces.weighted_dss_ghost!(field1, dss_buffer1)
-    for (field, dss_buffer) in field_buffer_pairs
-        Spaces.weighted_dss_ghost!(field, dss_buffer)
+function dss_pairs_ghost!(dss_pairs::Tuple)
+    unrolled_foreach(dss_pairs) do pair
+        graph_context = dss_graph_context(pair)
+        isnothing(graph_context) || ClimaComms.finish(graph_context)
     end
-
+    unrolled_foreach(unrolled_flatmap(dss_items, dss_pairs)) do (field, dss_buffer)
+        Spaces.weighted_dss_unpack!(field_values(field), axes(field), dss_buffer)
+    end
     return nothing
 end
 
@@ -667,6 +706,20 @@ Create a DSS buffer for communicating the neighbor information of `field`, or
 """
 Spaces.create_dss_buffer(field::Field) =
     Spaces.create_dss_buffer(field_values(field), axes(field))
+
+"""
+    Spaces.create_dss_buffer(field1::Field, field2::Field, fields::Field...)
+
+Create a [`Topologies.MultiDSSBuffer`](@ref) for the DSS of several fields with one
+exchange, which sends one message per neighboring process for all fields. Use it
+with `Spaces.weighted_dss!((field1, field2, ...) => buffer)`. The fields must be on
+spaces with the same horizontal topology, or at least the same neighboring
+processes, and share their floating-point type.
+"""
+function Spaces.create_dss_buffer(field1::Field, field2::Field, fields::Field...)
+    all_fields = (field1, field2, fields...)
+    return Spaces.create_dss_buffer(map(field_values, all_fields), map(axes, all_fields))
+end
 
 """
     set!(f::Function, field::Field, args = ())

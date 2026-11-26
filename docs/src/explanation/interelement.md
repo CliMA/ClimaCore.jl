@@ -35,8 +35,9 @@ are averaged locally, boundary copies are exchanged with the owning
 processes through a `DSSBuffer` created once with `Spaces.create_dss_buffer`.
 The three-phase form `weighted_dss_start!` / `weighted_dss_internal!` /
 `weighted_dss_ghost!` overlaps the exchange with local work. Several fields
-share one exchange when passed together, and a `FieldVector` is completed in
-one batched call.
+passed together overlap their exchanges, and fields with a buffer created
+together, `Spaces.create_dss_buffer(field1, field2)`, share one message per
+neighboring process. A `FieldVector` is completed in one batched call.
 
 DSS preserves the discrete inner product: for any two fields,
 `⟨φ, 𝒫ψ⟩ = ⟨𝒫φ, ψ⟩`. That is what carries the summation-by-parts identity of

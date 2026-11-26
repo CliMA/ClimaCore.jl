@@ -602,8 +602,9 @@ perimeter_face_indices(f, nfacedof, reversed = false) =
     reversed ? ((4 + f * nfacedof):-1:(4 + (f - 1) * nfacedof + 1)) :
     ((4 + (f - 1) * nfacedof + 1):1:(4 + f * nfacedof))
 
+# Returns host arrays; `create_dss_buffers` derives the buffer offsets and the
+# receive groups from them before moving them to the device.
 function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
-    DA = ClimaComms.array_type(topology)
     (;
         context,
         neighbor_pids,
@@ -709,7 +710,7 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
             recv_buf_idx[ghost_face_recv_idx[i] + j - 1, :] = [e, prange[j]]
         end
     end
-    return DA(send_buf_idx), DA(recv_buf_idx)
+    return send_buf_idx, recv_buf_idx
 end
 
 function mesh(topology::Topology2D)

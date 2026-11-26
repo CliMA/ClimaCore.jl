@@ -29,6 +29,53 @@ create_dss_buffer(data::DataLayouts.VIJHWithF, space) =
         dss_weights(space),
     )
 
+needs_dss_buffer(data::DataLayouts.VIJHWithF, space) =
+    is_continuous(space) && !isone(size(data, 3))
+needs_dss_buffer(data, space) = false
+
+"""
+    create_dss_buffer(datas::Tuple, spaces::Tuple)
+
+Create a [`Topologies.MultiDSSBuffer`](@ref) for the field data `datas` on `spaces`:
+the fields that need a DSS buffer share one send buffer, one receive buffer, and
+one graph context, so their DSS sends one message per neighboring process. The
+horizontal topologies must share their communications context and neighbors.
+"""
+function create_dss_buffer(datas::Tuple, spaces::Tuple)
+    length(datas) == length(spaces) ||
+        throw(ArgumentError("expected one space per field data"))
+    specs = dss_buffer_specs(datas, spaces)
+    shared = isempty(specs) ? () : Topologies.create_dss_buffers(specs)
+    buffers = dss_buffers_or_nothing(datas, spaces, shared)
+    graph_context = isempty(shared) ? nothing : first(shared).graph_context
+    return Topologies.MultiDSSBuffer(graph_context, buffers)
+end
+
+# The specs of the fields that need a DSS buffer, and the buffers of all fields
+# with `nothing` for the others. Recursion keeps both inferable, since
+# `needs_dss_buffer` only depends on types.
+dss_buffer_specs(::Tuple{}, ::Tuple{}) = ()
+function dss_buffer_specs(datas::Tuple, spaces::Tuple)
+    (data, space) = (first(datas), first(spaces))
+    rest = dss_buffer_specs(Base.tail(datas), Base.tail(spaces))
+    needs_dss_buffer(data, space) || return rest
+    spec = (data, topology(space), local_geometry_data(space), dss_weights(space))
+    return (spec, rest...)
+end
+
+dss_buffers_or_nothing(::Tuple{}, ::Tuple{}, shared) = ()
+function dss_buffers_or_nothing(datas::Tuple, spaces::Tuple, shared)
+    (data, space) = (first(datas), first(spaces))
+    needs_dss_buffer(data, space) || return (
+        nothing,
+        dss_buffers_or_nothing(Base.tail(datas), Base.tail(spaces), shared)...,
+    )
+    return (
+        first(shared),
+        dss_buffers_or_nothing(Base.tail(datas), Base.tail(spaces), Base.tail(shared))...,
+    )
+end
+
 """
     weighted_dss!(data, space, dss_buffer)
 
@@ -187,6 +234,14 @@ function weighted_dss_ghost!(data, space, dss_buffer)
     is_continuous(space) || return data
     sizeof(eltype(data)) > 0 || return data
     ClimaComms.finish(dss_buffer.graph_context)
+    return weighted_dss_unpack!(data, space, dss_buffer)
+end
+
+# The part of `weighted_dss_ghost!` after the communication has finished.
+function weighted_dss_unpack!(data, space, dss_buffer)
+    isnothing(dss_buffer) && return data
+    is_continuous(space) || return data
+    sizeof(eltype(data)) > 0 || return data
     hspace = horizontal_space(space)
     device = ClimaComms.device(topology(hspace))
     load_from_recv_buffer!(device, dss_buffer)

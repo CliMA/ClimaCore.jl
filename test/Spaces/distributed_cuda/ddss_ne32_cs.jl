@@ -74,3 +74,10 @@ struct Replicate{K} end
         @test maximum(abs, Array(parent(field)) .- 1) < 1e-12
     end
 end
+
+# On the GPU, this also checks that the receive reduction is deterministic and
+# matches the CPU loop bitwise at nodes that receive from several processes.
+include(joinpath(@__DIR__, "..", "dss_multi_field.jl"))
+@testset "Multi-field DSS with one exchange" begin
+    test_multi_field_dss(ClimaComms.MPICommsContext(ClimaComms.device()))
+end
