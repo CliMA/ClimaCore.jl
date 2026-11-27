@@ -7,6 +7,12 @@ main
 - ![][badge-🐛bugfix] On CPUs, the `MatrixFields` solvers no longer allocate the
   factors of a band matrix on the heap when bounds checking is on (e.g., in
   `Pkg.test`).
+- ![][badge-🐛bugfix] On GPUs, the threads of a block synchronize with the
+  barrier that `CG.sync` of CUDA.jl uses for a thread block instead of the
+  aligned barrier of `CUDA.sync_threads`, with which ptxas could compile loops
+  whose lanes reach the barrier after different numbers of iterations into code
+  that reads illegal addresses (e.g., a `foreach_column` of ClimaAtmos on 148
+  levels).
 
 v1.0.9
 -------

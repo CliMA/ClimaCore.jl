@@ -8,7 +8,7 @@ ext = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt)
 @assert !isnothing(ext) # cuda must be loaded to test this extension
 
 # A sub-block wider than a warp has no barrier of its own and uses the
-# block-wide sync_threads, so every block must hold exactly one of them; see
+# block barrier, so every block must hold exactly one of them; see
 # ext.max_subblock_launch_threads. Narrower sub-blocks share blocks of up to 1024
 # threads, since their shared memory is sized by the launch (see
 # ext.scoped_static_array). Either way a block holds whole sub-blocks, the

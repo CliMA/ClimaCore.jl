@@ -83,11 +83,11 @@ end
 # and its limiting factor (num_blocks/num_threads/registers/shared_memory); the
 # block-barrier limit is intentionally ignored. CUDA's occupancy calculator
 # counts the named-barrier slots used by PTX `bar.sync N` (N > 0), `mbarrier`,
-# and similar instructions. ClimaCore uses only `sync_threads()` (PTX
-# `bar.sync 0`, the implicit CTA barrier, which does not consume a named-barrier
-# slot), `sync_warp()` (a warp convergence instruction), and `threadfence()` (a
-# memory fence, not a barrier). None of these affects the named-barrier count,
-# so the limit is irrelevant here.
+# and similar instructions. ClimaCore uses only `barrier_sync(0)` (PTX
+# `barrier.sync 0`, the implicit CTA barrier, which does not consume a
+# named-barrier slot), `sync_warp()` (a warp convergence instruction), and
+# `threadfence()` (a memory fence, not a barrier). None of these affects the
+# named-barrier count, so the limit is irrelevant here.
 # https://gitlab.com/nvidia/headers/cuda-individual/cudart/-/blob/main/cuda_occupancy.h#L1282-1777
 function max_active_blocks(threads_per_block, regs_per_thread, shmem_per_block)
     attrs = device_attributes()

@@ -136,7 +136,12 @@ struct ThisBlock <: ThisCooperativeGroup end
 # As UInt32s, since a signed division by a power of two has to allow for negative values.
 @inline DataLayouts.num_threads(::ThisBlock) = CUDA.blockDim().x % UInt32
 @inline DataLayouts.thread_rank(::ThisBlock) = CUDA.threadIdx().x % UInt32
-@inline DataLayouts.synchronize(::ThisBlock) = CUDA.sync_threads()
+# A block synchronizes with the barrier of CG.sync for a thread block (barrier.sync), not
+# with the aligned barrier of sync_threads (bar.sync). The lanes of a warp can reach the
+# block barrier after different control flow, such as loops over the points of a slice
+# with more points than threads. Before an aligned barrier, ptxas 12.9 and 13.3 (sm_80)
+# can keep values in uniform registers that some lanes overwrite while others read them.
+@inline DataLayouts.synchronize(::ThisBlock) = CUDA.barrier_sync(0)
 
 """
     ThisSubBlock{N, B}()
@@ -217,15 +222,14 @@ DataLayouts.with_register_cap(::ThisSubBlock{N, B}, ::Val{R}) where {N, B, R} =
 # block may hold as many such sub-blocks as its threads allow (the shared memory of
 # every sub-block is sized by the number of sub-blocks a block is launched with; see
 # scoped_static_array). A wider sub-block has no barrier of its own and is synchronized with
-# the block-wide sync_threads instead (see synchronize(::ThisSubBlock) above),
+# the block barrier instead (see synchronize(::ThisSubBlock) above),
 # so a block must hold exactly one of them: two sub-blocks in one block are
 # given consecutive ranks by subscope_indices, which hands rank r the strided
 # subset r:n:num_slices of the loop's slices, and those subsets differ in
-# length by one whenever num_slices is not a multiple of n. The sub-block with
-# the extra slice then
-# reaches that round's barriers after its neighbours have already returned from
-# the kernel, and sync_threads reached by only part of a block is undefined
-# behavior. Giving each wide sub-block a block of its own makes the block-wide
+# length by one whenever num_slices is not a multiple of n. Every barrier of
+# either sub-block would then also wait for the other, and the barriers of the
+# extra slice would be reached by only part of the block, which PTX leaves
+# undefined on sm_6x. Giving each wide sub-block a block of its own makes the block
 # barrier exactly the sub-block's barrier, and makes subscope_rank(scope,
 # ThisBlock()) always one.
 @inline max_subblock_launch_threads(::ThisSubBlock{N}) where {N} =
