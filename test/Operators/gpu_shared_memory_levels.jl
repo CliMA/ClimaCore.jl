@@ -145,6 +145,15 @@ end
 # A broadcast that reads a Field in global memory at neighboring levels caches nothing.
 interp_body!(o, _, xf) = (@. o = ᶜinterp(xf); nothing)
 
+# Broadcasts that write a Field of the loop and then read one of its levels at every point,
+# so that a block barrier orders the write and the reads.
+function level_body!(o, x, y)
+    @. y = 2 * x
+    y1 = Fields.level(y, 1)
+    @. o = x * y1
+    return nothing
+end
+
 # A statement that skips the barrier publishing its result (for a loop that synchronizes
 # once per statement), whose result is not read at other threads' points afterwards.
 function unfinished_body!(o, x, _)
@@ -562,4 +571,32 @@ end
     @test_throws ArgumentError DataLayouts.foreach_column(
         heavy_body!, GPU.o, GPU.x, GPU.y; maxregs = Val(:device),
     )
+end
+
+@testset "block barriers of columns with more points than threads" begin
+    # 148 levels on a sub-block of 128 threads, whose lanes hold one or two points and reach
+    # the block barriers after loops of different lengths (see synchronize(::ThisBlock)).
+    gpu = columns(ClimaComms.context(); zelem = 148)
+    cpu = columns(
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded());
+        zelem = 148,
+    )
+    (ok, subscope) = compare(level_body!, :x, :y; gpu, cpu)
+    @test ok && subscope isa CUDA_EXT.ThisSubBlock{128}
+    kernel = only(
+        TU.recorded_kernels(
+            () -> DataLayouts.foreach_column(level_body!, gpu.o, gpu.x, gpu.y),
+        ),
+    )
+    ptx = sprint() do io
+        CUDA.code_ptx(
+            io,
+            kernel.f,
+            typeof(kernel).parameters[2];
+            kernel = true,
+            always_inline = true,
+        )
+    end
+    @test occursin(r"\bbarrier(\.cta)?\.sync\s", ptx)
+    @test !occursin(r"\bbar(\.cta)?\.sync\b|\bbarrier(\.cta)?\.sync\.aligned\b", ptx)
 end
